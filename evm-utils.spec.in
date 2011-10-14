@@ -1,0 +1,53 @@
+Name:		@PACKAGE_NAME@
+Version:	@PACKAGE_VERSION@
+Release:	1%{?dist}
+Summary:	evm-utils - IMA/EVM support utilities
+Group:		System/Libraries
+License:	LGPLv2
+#URL:		
+Source0:	%{name}-%{version}.tar.gz
+BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
+
+BuildRequires:    autoconf
+BuildRequires:    automake
+BuildRequires:    openssl-devel
+BuildRequires:    libattr-devel
+BuildRequires:    readline-devel
+BuildRequires:    keyutils-libs-devel
+
+%description
+This library provides EVM support utilities.
+
+%prep
+%setup -q
+
+%build
+./autogen.sh
+%configure --prefix=/usr
+make
+
+%install
+rm -rf %{buildroot}
+make DESTDIR=%{buildroot} install
+
+%clean
+rm -rf %{buildroot}
+
+%post
+/sbin/ldconfig
+exit 0
+
+%preun -p /sbin/ldconfig
+
+%postun
+/sbin/ldconfig
+
+%files
+%defattr(-,root,root,-)
+%{_bindir}/*
+%{_libdir}/*
+
+%changelog
+* Wed Jul 20 2011 Dmitry Kasatkin <dmitry.kasatkin@intel.com>
+- Initial package for MeeGo
+

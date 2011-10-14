@@ -1,0 +1,40 @@
+
+1. Generate private key
+
+openssl genrsa -out privkey_evm.pem 1024
+
+2. Generate public key
+
+openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
+
+3. Copy public (+private if to sign on device) key to the device/qemu /etc/keys
+
+scp pubkey_evm.pem mad:/etc/keys
+
+4. Load keys and enable EVM
+
+evm_enable.sh
+
+This should be done at early phase, before mounting root filesystem.
+
+5. Sign EVM and use hash value for IMA - common case
+
+evmctl sign --imahash test.txt
+
+6. Sign IMA and EVM - for immutable files and modules
+
+evmctl sign --imasig test.txt
+
+7. Sign whole filesystem
+
+evm_sign_all.sh
+or
+find / \( -fstype rootfs -o -fstype ext3 -o -fstype ext4 \) ! -path "/lib/modules/*" -type f -uid 0 -exec evmctl sign --imahash '{}' \;
+find /lib/modules ! -name "*.ko" -type f -uid 0 -exec evmctl sign --imahash '{}' \;
+# security.ima needs to have signature for modules
+find /lib/modules -name "*.ko" -type f -uid 0 -exec evmctl sign --imasig '{}' \;
+
+8. Label filesystem in fix mode...
+
+ima_fix_dir.sh <dir>
+
