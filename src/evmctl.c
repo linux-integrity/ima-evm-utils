@@ -48,6 +48,7 @@
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
+#include <openssl/hmac.h>
 
 #define USE_FPRINTF
 
@@ -855,6 +856,140 @@ static int cmd_import(struct command *cmd)
 	return 0;
 }
 
+#define MAX_KEY_SIZE 128
+
+static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *hash)
+{
+	struct stat st;
+	int fd, err;
+	uint32_t generation;
+	HMAC_CTX ctx;
+	unsigned int mdlen;
+	char **xattrname;
+	unsigned char xattr_value[1024];
+	char *key;
+	int keylen;
+	unsigned char evmkey[MAX_KEY_SIZE];
+	
+	key = file2bin(keyfile, &keylen);
+	if (!key) {
+		log_errno("Unable to read a key: %s\n", keyfile);
+		return -1;
+	}
+	
+	if (keylen > sizeof(evmkey)) {
+		log_errno("key is too long\n");
+		return -1;
+	}
+
+	/* EVM key is 128 bytes */
+	memcpy(evmkey, key, keylen);
+	memset(evmkey + keylen, 0, sizeof(evmkey) - keylen);
+	
+	fd = open(file, 0);
+	if (fd < 0) {
+		log_errno("Unable to open %s", file);
+		return -1;
+	}
+	
+	if (fstat(fd, &st)) {
+		log_errno("fstat() failed");
+		return -1;
+	}
+	
+	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
+		log_errno("ioctl() failed");
+		return -1;
+	}
+	
+	close(fd);
+	
+	log_info("generation: %u\n", generation);
+
+	HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
+
+	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
+		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
+		if (err < 0) {
+			log_info("no attr: %s\n", *xattrname);
+			continue;
+		}
+		//log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);
+		log_info("name: %s, size: %d\n", *xattrname, err);
+		log_debug_dump(xattr_value, err);
+		HMAC_Update(&ctx, xattr_value, err);
+	}
+
+	memset(&hmac_misc, 0, sizeof(hmac_misc));
+	hmac_misc.ino = st.st_ino;
+	hmac_misc.generation = generation;
+	hmac_misc.uid = st.st_uid;
+	hmac_misc.gid = st.st_gid;
+	hmac_misc.mode = st.st_mode;
+	
+	HMAC_Update(&ctx, (const unsigned char*)&hmac_misc, sizeof(hmac_misc));
+	HMAC_Final(&ctx, hash, &mdlen);
+	HMAC_CTX_cleanup(&ctx);
+	
+	free(key);
+
+	return 0;
+}
+
+static int hmac_evm(const char *file, const char *key)
+{
+	unsigned char hash[20];
+	unsigned char sig[1024] = "\x02";
+	int err;
+
+	calc_evm_hmac(file, key, hash);
+	
+	log_info("hmac: ");
+	log_dump(hash, sizeof(hash));
+	memcpy(sig + 1, hash, sizeof(hash));
+	err = sizeof(hash);
+	
+	if (set_xattr) {
+		err = setxattr(file, "security.evm", sig, err + 1, 0);
+		if (err < 0) {
+			log_errno("setxattr failed: %s", file);
+			return err;
+		}
+	}
+	
+	return 0;
+}
+
+static int cmd_hmac_evm(struct command *cmd)
+{
+	char *key, *file = g_argv[optind++];
+	int err;
+	
+	if (!file) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return 1;
+	}
+	
+	key = g_argv[optind++];
+	if (!key)
+		key = "/etc/keys/privkey_evm.pem";
+	
+	if (digsig) {
+		err = sign_ima(file, key);
+		if (err)
+			return err;
+	}
+	
+	if (digest) {
+		err = hash_ima(file);
+		if (err)
+			return err;
+	}
+	
+	return hmac_evm(file, "/etc/keys/evm-key-plain");
+}
+
 static void print_usage(struct command *cmd)
 {
 	printf("usage: %s %s\n", cmd->name, cmd->arg ? cmd->arg : "");
@@ -931,6 +1066,7 @@ struct command cmds[] = {
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM.\n" },
 	{"ima_sign", cmd_sign_ima, 0, "file [key]", "Sign file content.\n" },
 	{"ima_hash", cmd_hash_ima, 0, "file", "Hash file content.\n" },
+	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC (for debugging).\n" },
 	{0, 0, 0, NULL}
 };
 
