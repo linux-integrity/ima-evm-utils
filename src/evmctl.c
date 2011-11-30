@@ -376,7 +376,9 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 	struct stat st;
 	int fd, err;
 	uint32_t generation;
-	SHA_CTX ctx;
+	EVP_MD_CTX ctx;
+	const EVP_MD *md;
+	unsigned int mdlen;
 	char **xattrname;
 	char xattr_value[1024];
 	
@@ -400,7 +402,19 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 	
 	log_info("generation: %u\n", generation);
 
-	SHA1_Init(&ctx);
+	OpenSSL_add_all_digests();
+
+	md = EVP_get_digestbyname("sha1");
+	if (!md) {
+		log_errno("EVP_get_digestbyname() failed");
+		return -1;
+	}
+
+	err = EVP_DigestInit(&ctx, md);
+	if (!err) {
+		log_errno("EVP_DigestInit() failed");
+		return -1;
+	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
 		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
@@ -411,7 +425,11 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 		//log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
-		SHA1_Update(&ctx, xattr_value, err);
+		err = EVP_DigestUpdate(&ctx, xattr_value, err);
+		if (!err) {
+			log_errno("EVP_DigestUpdate() failed");
+			return -1;
+		}
 	}
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
@@ -421,8 +439,16 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 	hmac_misc.gid = st.st_gid;
 	hmac_misc.mode = st.st_mode;
 	
-	SHA1_Update(&ctx, (const unsigned char*)&hmac_misc, sizeof(hmac_misc));
-	SHA1_Final(hash, &ctx);
+	err = EVP_DigestUpdate(&ctx, (const unsigned char*)&hmac_misc, sizeof(hmac_misc));
+	if (!err) {
+		log_errno("EVP_DigestUpdate() failed");
+		return -1;
+	}
+	err = EVP_DigestFinal(&ctx, hash, &mdlen);
+	if (!err) {
+		log_errno("EVP_DigestFinal() failed");
+		return -1;
+	}
 	
 	return 0;
 }
