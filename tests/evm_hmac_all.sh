@@ -10,5 +10,5 @@ dir=${1:-/}
 
 echo "Label: $dir"
 
-find $dir \( -fstype rootfs -o -fstype ext3 -o -fstype ext4 \) -type f -uid 0 -exec evmctl hmac --imahash $verbose '{}' \;
+find $dir \( -fstype rootfs -o -fstype ext3 -o -fstype ext4 \)  \( -type f -o -type d \) -uid 0 -exec evmctl hmac --imahash $verbose '{}' \;
 

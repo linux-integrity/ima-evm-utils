@@ -43,6 +43,7 @@
 #include <asm/byteorder.h>
 #include <syslog.h>
 #include <attr/xattr.h>
+#include <dirent.h>
 
 #include <openssl/sha.h>
 #include <openssl/sha.h>
@@ -543,15 +544,106 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 	return mdlen;
 }
 
+struct dirent_list {
+	struct dirent_list *next;
+	struct dirent de;
+};
+
+static int calc_dir_hash(const char *file, uint8_t *hash)
+{
+	EVP_MD_CTX ctx;
+	const EVP_MD *md;
+	int err;
+	unsigned int mdlen;
+	struct dirent *de;
+	DIR *dir;
+	struct dirent_list *head = NULL, *pos, *prev, *cur;
+	uint64_t ino;
+
+	dir = opendir(file);
+	if (!dir) {
+		log_errno("Unable to open %s", file);
+		return -1;
+	}
+	
+	OpenSSL_add_all_digests();
+
+	md = EVP_get_digestbyname(hash_algo);
+	if (!md) {
+		log_errno("EVP_get_digestbyname() failed");
+		return -1;
+	}
+
+	err = EVP_DigestInit(&ctx, md);
+	if (!err) {
+		log_errno("EVP_DigestInit() failed");
+		return -1;
+	}
+
+	while ((de = readdir(dir))) {
+		//printf("entry: ino: %lu, %s\n", de->d_ino, de->d_name);
+		for (prev = NULL, pos = head; pos; prev = pos, pos = pos->next) {
+			if (de->d_ino < pos->de.d_ino)
+				break;
+		}
+		cur = malloc(sizeof(*cur));
+		cur->de = *de;
+		cur->next = pos;
+		if (!head || !prev)
+			head = cur;
+		else
+			prev->next = cur;
+	}
+	
+	for (cur = head; cur; cur = pos) {
+		pos = cur->next;
+		ino = cur->de.d_ino;
+		log_debug("entry: ino: %llu, %s\n", ino, cur->de.d_name);
+		err = EVP_DigestUpdate(&ctx, cur->de.d_name, strlen(cur->de.d_name));
+		if (!err) {
+			log_errno("EVP_DigestUpdate() failed");
+			return -1;
+		}
+		err = EVP_DigestUpdate(&ctx, &ino, sizeof(ino));
+		if (!err) {
+			log_errno("EVP_DigestUpdate() failed");
+			return -1;
+		}
+		free(cur);
+	}
+		
+	err = EVP_DigestFinal(&ctx, hash, &mdlen);
+	if (!err) {
+		log_errno("EVP_DigestFinal() failed");
+		return -1;
+	}
+
+	closedir(dir);
+	
+	return mdlen;
+}
+
 static int hash_ima(const char *file)
 {
 	unsigned char hash[65] = "\x01";// MAX hash size + 1
 	int err;
+	struct stat st;
 
-	err = calc_file_hash(file, hash + 1);
+	/*  Need to know the file length */
+	err = stat(file, &st);
+	if (err < 0)
+		return err;
+
+	if (S_ISDIR(st.st_mode))
+		err = calc_dir_hash(file, hash + 1);
+	else
+		err = calc_file_hash(file, hash + 1);
 	if (err < 0)
 		return err;
 	
+	if (verbose >= LOG_INFO)
+		log_info("hash: ");
+
 	if (!set_xattr || verbose >= LOG_INFO)
 		dump(hash, err + 1);
 
