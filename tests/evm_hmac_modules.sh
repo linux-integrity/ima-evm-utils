@@ -10,6 +10,5 @@ dir=${1:-/lib/modules}
 
 echo "HMAC modules: $dir"
 
-find $dir -name "*.ko" -type f -uid 0 -exec evmctl hmac --imasig $verbose '{}' \;
-find $dir ! -name "*.ko" -type f -uid 0 -exec evmctl hmac --imahash $verbose '{}' \;
+find $dir -name "*.ko" -type f -exec evmctl hmac --imasig $verbose '{}' \;
 

@@ -10,5 +10,5 @@ dir=${1:-/}
 
 echo "Label: $dir"
 
-find $dir \( -fstype rootfs -o -fstype ext3 -o -fstype ext4 \) -type f -uid 0 -exec evmctl sign --imahash $verbose '{}' \;
+find $dir \( -fstype rootfs -o -fstype ext3 -o -fstype ext4 \) -type f -exec evmctl sign --imahash $verbose '{}' \;
 

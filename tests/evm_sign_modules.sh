@@ -10,6 +10,5 @@ dir=${1:-/lib/modules}
 
 echo "Signing modules: $dir"
 
-find $dir -name "*.ko" -type f -uid 0 -exec evmctl sign --imasig $verbose '{}' \;
-find $dir ! -name "*.ko" -type f -uid 0 -exec evmctl sign --imahash $verbose '{}' \;
+find $dir -name "*.ko" -type f -exec evmctl sign --imasig $verbose '{}' \;
 
