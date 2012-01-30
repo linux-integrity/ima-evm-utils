@@ -598,7 +598,7 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 	for (cur = head; cur; cur = pos) {
 		pos = cur->next;
 		ino = cur->de.d_ino;
-		log_debug("entry: ino: %llu, %s\n", ino, cur->de.d_name);
+		log_debug("entry: ino: %llu, %s\n", (unsigned long long)ino, cur->de.d_name);
 		err = EVP_DigestUpdate(&ctx, cur->de.d_name, strlen(cur->de.d_name));
 		if (!err) {
 			log_errno("EVP_DigestUpdate() failed");
@@ -631,8 +631,10 @@ static int hash_ima(const char *file)
 
 	/*  Need to know the file length */
 	err = stat(file, &st);
-	if (err < 0)
+	if (err < 0) {
+		log_errno("stat() failed");
 		return err;
+	}
 
 	if (S_ISDIR(st.st_mode))
 		err = calc_dir_hash(file, hash + 1);
@@ -1155,7 +1157,7 @@ struct command cmds[] = {
 	{"import", cmd_import, 0, "[--bin] inkey keyring", "Import public key (PEM/bin) into the keyring.\n" },
 	{"convert", cmd_convert, 0, "inkey outkey", "Convert PEM public key into IMA/EVM kernel friendly format.\n" },
 	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata.\n" },
-	{"verify", cmd_verify_evm, 0, "file", "Verify EVM.\n" },
+	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n" },
 	{"ima_sign", cmd_sign_ima, 0, "file [key]", "Sign file content.\n" },
 	{"ima_hash", cmd_hash_ima, 0, "file", "Hash file content.\n" },
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC (for debugging).\n" },
