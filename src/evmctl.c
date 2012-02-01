@@ -149,6 +149,7 @@ static int digsig;
 static char *hash_algo = "sha1";
 static int binkey;
 static char *keypass;
+static int sigfile;
 
 struct command cmds[];
 static void print_usage(struct command *cmd);
@@ -679,6 +680,9 @@ static int sign_ima(const char *file, const char *key)
 	if (err < 0)
 		return err;
 
+	if (sigfile)
+		bin2file(file, "sig", sig, err + 1);
+
 	if (xattr) {
 		err = setxattr(file, "security.ima", sig, err + 1, 0);
 		if (err < 0) {
@@ -1150,7 +1154,7 @@ struct command cmds[] = {
 	{"convert", cmd_convert, 0, "inkey outkey", "Convert PEM public key into IMA/EVM kernel friendly format.\n"},
 	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
-	{"ima_sign", cmd_sign_ima, 0, "file [key]", "Sign file content.\n"},
+	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] file [key]", "Sign file content.\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Hash file content.\n"},
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC (for debugging).\n"},
 	{0, 0, 0, NULL}
@@ -1164,6 +1168,7 @@ static struct option opts[] = {
 	{"hashalgo", 1, 0, 'a'},
 	{"bin", 0, 0, 'b'},
 	{"pass", 1, 0, 'p'},
+	{"sigfile", 0, 0, 'f'},
 	{}
 
 };
@@ -1176,7 +1181,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hk:vnsda:bp:", opts, &lind);
+		c = getopt_long(argc, argv, "hk:vnsda:bp:f", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1209,6 +1214,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'p':
 			keypass = optarg;
+			break;
+		case 'f':
+			sigfile = 1;
 			break;
 		case '?':
 			exit(1);

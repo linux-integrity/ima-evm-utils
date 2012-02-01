@@ -43,6 +43,9 @@ find /lib/modules ! -name "*.ko" -type f -uid 0 -exec evmctl sign --imahash '{}'
 # security.ima needs to have signature for modules
 find /lib/modules -name "*.ko" -type f -uid 0 -exec evmctl sign --imasig '{}' \;
 
+# generate signatures in .sig files
+find /lib/modules -name "*.ko" -type f -uid 0 -exec evmctl -n --sigfile ima_sign '{}' \;
+
 8. Label filesystem in fix mode...
 
 ima_fix_dir.sh <dir>
