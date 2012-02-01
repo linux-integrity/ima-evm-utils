@@ -56,8 +56,8 @@
 #define USE_FPRINTF
 
 #ifdef USE_FPRINTF
-#define do_log(level, fmt, args...)	if (level <= verbose) fprintf(stderr, fmt, ##args)
-#define do_log_dump(level, p, len)	if (level <= verbose) do_dump(stderr, p, len)
+#define do_log(level, fmt, args...)	({ if (level <= verbose) fprintf(stderr, fmt, ##args); })
+#define do_log_dump(level, p, len)	({ if (level <= verbose) do_dump(stderr, p, len); })
 #else
 #define do_log(level, fmt, args...)	syslog(level, fmt, ##args)
 #define do_log_dump(p, len)
@@ -107,24 +107,22 @@ enum digest_algo {
 };
 
 struct pubkey_hdr {
-	uint8_t		version;	/* key format version */
-	time_t		timestamp;	/* key made, always 0 for now */
-	uint8_t		algo;
-	uint8_t		nmpi;
-	char		mpi[0];
+	uint8_t version;	/* key format version */
+	time_t timestamp;	/* key made, always 0 for now */
+	uint8_t algo;
+	uint8_t nmpi;
+	char mpi[0];
 } __attribute__ ((packed));
-
 
 struct signature_hdr {
-	uint8_t		version;	/* signature format version */
-	time_t		timestamp;	/* signature made */
-	uint8_t		algo;
-	uint8_t		hash;
-	uint8_t		keyid[8];
-	uint8_t		nmpi;
-	char		mpi[0];
+	uint8_t version;	/* signature format version */
+	time_t timestamp;	/* signature made */
+	uint8_t algo;
+	uint8_t hash;
+	uint8_t keyid[8];
+	uint8_t nmpi;
+	char mpi[0];
 } __attribute__ ((packed));
-
 
 static char *evm_config_xattrnames[] = {
 	"security.selinux",
@@ -135,35 +133,34 @@ static char *evm_config_xattrnames[] = {
 };
 
 struct command {
-	char	*name;
-	int	(*func)(struct command *cmd);
-	int	cmd;
-	char	*arg;
-	char	*msg;	/* extra info message */
+	char *name;
+	int (*func)(struct command *cmd);
+	int cmd;
+	char *arg;
+	char *msg;		/* extra info message */
 };
 
-static int		verbose = LOG_INFO - 1;
-static int		g_argc;
-static char		**g_argv;
-static int		set_xattr = 1;
-static int		digest = 0;
-static int		digsig = 0;
-static char		*hash_algo = "sha1";
-static int		binkey = 0;
-static char		*keypass;
+static int verbose = LOG_INFO - 1;
+static int g_argc;
+static char **g_argv;
+static int set_xattr = 1;
+static int digest;
+static int digsig;
+static char *hash_algo = "sha1";
+static int binkey;
+static char *keypass;
 
-extern struct command	cmds[];
+struct command cmds[];
 static void print_usage(struct command *cmd);
 
 static void do_dump(FILE *fp, const void *ptr, int len)
 {
-        int     i;
-        uint8_t *data = (uint8_t *)ptr;
+	int i;
+	uint8_t *data = (uint8_t *) ptr;
 
-        for (i = 0; i < len; i++) {
-                fprintf(fp, "%02x", data[i]);
-        }
-        fprintf(fp, "\n");
+	for (i = 0; i < len; i++)
+		fprintf(fp, "%02x", data[i]);
+	fprintf(fp, "\n");
 }
 
 static void dump(const void *ptr, int len)
@@ -176,7 +173,7 @@ static inline int get_filesize(const char *filename)
 	struct stat stats;
 	/*  Need to know the file length */
 	stat(filename, &stats);
-	return (int) stats.st_size;
+	return (int)stats.st_size;
 }
 
 static inline int get_fdsize(int fd)
@@ -184,7 +181,7 @@ static inline int get_fdsize(int fd)
 	struct stat stats;
 	/*  Need to know the file length */
 	fstat(fd, &stats);
-	return (int) stats.st_size;
+	return (int)stats.st_size;
 }
 
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
@@ -192,7 +189,7 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 	FILE *fp;
 	char name[strlen(file) + (ext ? strlen(ext) : 0) + 2];
 	int err;
-	
+
 	if (ext)
 		sprintf(name, "%s.%s", file, ext);
 	else
@@ -215,7 +212,7 @@ static char *file2bin(const char *file, int *size)
 	FILE *fp;
 	int len;
 	char *data;
-		
+
 	len = get_filesize(file);
 	fp = fopen(file, "r");
 	if (!fp) {
@@ -226,9 +223,9 @@ static char *file2bin(const char *file, int *size)
 	if (!fread(data, len, 1, fp))
 		len = 0;
 	fclose(fp);
-	
+
 	*size = len;
-	return data;	
+	return data;
 }
 
 /*
@@ -244,24 +241,23 @@ static int key2bin(RSA *key, unsigned char *pub)
 	pkh->timestamp = 0;	/* PEM has no timestamp?? */
 	pkh->algo = PUBKEY_ALGO_RSA;
 	pkh->nmpi = 2;
-	
+
 	offset += sizeof(*pkh);
-	
-	// MPIs
+
 	len = BN_num_bytes(key->n);
 	b = BN_num_bits(key->n);
 	pub[offset++] = b >> 8;
 	pub[offset++] = b & 0xff;
 	BN_bn2bin(key->n, &pub[offset]);
 	offset += len;
-	
+
 	len = BN_num_bytes(key->e);
 	b = BN_num_bits(key->e);
 	pub[offset++] = b >> 8;
 	pub[offset++] = b & 0xff;
 	BN_bn2bin(key->e, &pub[offset]);
 	offset += len;
-	
+
 	return offset;
 }
 
@@ -283,32 +279,31 @@ static int read_key(const char *inkey, unsigned char *pub)
 		log_errno("PEM_read_RSA_PUBKEY() failed");
 		return -1;
 	}
-	
+
 	len = key2bin(key, pub);
-	
+
 	RSA_free(key);
-	
+
 	return len;
 }
-
 
 static void calc_keyid(uint8_t *keyid, char *str, const unsigned char *pkey, int len)
 {
 	uint8_t sha1[SHA_DIGEST_LENGTH];
 	uint64_t id;
-	
+
 	log_debug("pkey:\n");
 	log_debug_dump(pkey, len);
-	SHA1(pkey, len, sha1);	
-	
-	//sha1[12 - 19] is exactly keyid from gpg file
+	SHA1(pkey, len, sha1);
+
+	/* sha1[12 - 19] is exactly keyid from gpg file */
 	memcpy(keyid, sha1 + 12, 8);
 	log_debug("keyid:\n");
 	log_debug_dump(keyid, 8);
-	
-	id = __be64_to_cpup((__be64 *)keyid);
+
+	id = __be64_to_cpup((__be64 *) keyid);
 	sprintf(str, "%llX", (unsigned long long)id);
-	log_info("keyid: %s\n", str);	
+	log_info("keyid: %s\n", str);
 }
 
 static int sign_hash(const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
@@ -322,11 +317,11 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	unsigned char sighash[20];
 	struct signature_hdr *hdr = (struct signature_hdr *)sig;
 	uint16_t *blen;
-	
+
 	log_info("hash: ");
 	log_dump(hash, size);
-	
-	fp = fopen(keyfile, "r");	
+
+	fp = fopen(keyfile, "r");
 	if (!fp) {
 		log_errno("Unable to open keyfile %s", keyfile);
 		return -1;
@@ -343,12 +338,12 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	time(&hdr->timestamp);
 	hdr->algo = PUBKEY_ALGO_RSA;
 	hdr->hash = DIGEST_ALGO_SHA1;
-	
+
 	len = key2bin(key, pub);
 	calc_keyid(hdr->keyid, name, pub, len);
-	
+
 	hdr->nmpi = 1;
-	
+
 	SHA1_Init(&ctx);
 	SHA1_Update(&ctx, hash, size);
 	SHA1_Update(&ctx, hdr, sizeof(*hdr));
@@ -364,16 +359,16 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	}
 
 	len = err;
-	
+
 	/* we add bit length of the signature to make it gnupg compatible */
-	blen = (uint16_t *)(sig + sizeof(*hdr));
+	blen = (uint16_t *) (sig + sizeof(*hdr));
 	*blen = __cpu_to_be16(len << 3);
 	len += sizeof(*hdr) + 2;
 	log_info("evm/ima signature: %d bytes\n", len);
 	if (!set_xattr || verbose >= LOG_INFO)
 		dump(sig, len);
 
-	return len;	
+	return len;
 }
 
 static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *hash)
@@ -386,25 +381,25 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 	unsigned int mdlen;
 	char **xattrname;
 	char xattr_value[1024];
-	
+
 	fd = open(file, 0);
 	if (fd < 0) {
 		log_errno("Unable to open %s", file);
 		return -1;
 	}
-	
+
 	if (fstat(fd, &st)) {
 		log_errno("fstat() failed");
 		return -1;
 	}
-	
+
 	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
 		log_errno("ioctl() failed");
 		return -1;
 	}
-	
+
 	close(fd);
-	
+
 	log_info("generation: %u\n", generation);
 
 	md = EVP_get_digestbyname("sha1");
@@ -425,7 +420,7 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 			log_info("no attr: %s\n", *xattrname);
 			continue;
 		}
-		//log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);
+		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
 		err = EVP_DigestUpdate(&ctx, xattr_value, err);
@@ -441,8 +436,8 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 	hmac_misc.uid = st.st_uid;
 	hmac_misc.gid = st.st_gid;
 	hmac_misc.mode = st.st_mode;
-	
-	err = EVP_DigestUpdate(&ctx, (const unsigned char*)&hmac_misc, sizeof(hmac_misc));
+
+	err = EVP_DigestUpdate(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
 	if (!err) {
 		log_errno("EVP_DigestUpdate() failed");
 		return -1;
@@ -452,7 +447,7 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 		log_errno("EVP_DigestFinal() failed");
 		return -1;
 	}
-	
+
 	return 0;
 }
 
@@ -463,11 +458,11 @@ static int sign_evm(const char *file, const char *key)
 	int err;
 
 	calc_evm_hash(file, key, hash);
-	
+
 	err = sign_hash(hash, sizeof(hash), key, sig + 1);
 	if (err < 0)
 		return err;
-	
+
 	if (set_xattr) {
 		err = setxattr(file, "security.evm", sig, err + 1, 0);
 		if (err < 0) {
@@ -475,7 +470,7 @@ static int sign_evm(const char *file, const char *key)
 			return err;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -483,7 +478,7 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 {
 	EVP_MD_CTX ctx;
 	const EVP_MD *md;
-	uint8_t	*data;
+	uint8_t *data;
 	int err, size, bs = DATA_SIZE;
 	size_t len;
 	unsigned int mdlen;
@@ -494,13 +489,13 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 		log_errno("malloc failed");
 		return -1;
 	}
-		
+
 	fp = fopen(file, "r");
 	if (!fp) {
 		log_errno("Unable to open %s", file);
 		return -1;
 	}
-	
+
 	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
 		log_errno("EVP_get_digestbyname() failed");
@@ -537,9 +532,9 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 	}
 
 	fclose(fp);
-	
+
 	free(data);
-	
+
 	return mdlen;
 }
 
@@ -564,7 +559,7 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		log_errno("Unable to open %s", file);
 		return -1;
 	}
-	
+
 	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
 		log_errno("EVP_get_digestbyname() failed");
@@ -578,7 +573,7 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 	}
 
 	while ((de = readdir(dir))) {
-		//printf("entry: ino: %lu, %s\n", de->d_ino, de->d_name);
+		/*log_debug("entry: ino: %lu, %s\n", de->d_ino, de->d_name);*/
 		for (prev = NULL, pos = head; pos; prev = pos, pos = pos->next) {
 			if (de->d_ino < pos->de.d_ino)
 				break;
@@ -591,7 +586,7 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		else
 			prev->next = cur;
 	}
-	
+
 	for (cur = head; cur; cur = pos) {
 		pos = cur->next;
 		ino = cur->de.d_ino;
@@ -608,7 +603,7 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		}
 		free(cur);
 	}
-		
+
 	err = EVP_DigestFinal(&ctx, hash, &mdlen);
 	if (!err) {
 		log_errno("EVP_DigestFinal() failed");
@@ -616,13 +611,13 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 	}
 
 	closedir(dir);
-	
+
 	return mdlen;
 }
 
 static int hash_ima(const char *file)
 {
-	unsigned char hash[65] = "\x01";// MAX hash size + 1
+	unsigned char hash[65] = "\x01"; /* MAX hash size + 1 */
 	int err;
 	struct stat st;
 
@@ -639,7 +634,7 @@ static int hash_ima(const char *file)
 		err = calc_file_hash(file, hash + 1);
 	if (err < 0)
 		return err;
-	
+
 	if (verbose >= LOG_INFO)
 		log_info("hash: ");
 
@@ -653,7 +648,7 @@ static int hash_ima(const char *file)
 			return err;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -666,7 +661,7 @@ static int cmd_hash_ima(struct command *cmd)
 		print_usage(cmd);
 		return 1;
 	}
-	
+
 	return hash_ima(file);
 }
 
@@ -675,15 +670,15 @@ static int sign_ima(const char *file, const char *key)
 	unsigned char hash[64];
 	unsigned char sig[1024] = "\x03";
 	int err;
-	
+
 	err = calc_file_hash(file, hash);
 	if (err < 0)
 		return err;
-	
+
 	err = sign_hash(hash, err, key, sig + 1);
 	if (err < 0)
 		return err;
-	
+
 	if (set_xattr) {
 		err = setxattr(file, "security.ima", sig, err + 1, 0);
 		if (err < 0) {
@@ -691,55 +686,55 @@ static int sign_ima(const char *file, const char *key)
 			return err;
 		}
 	}
-	
+
 	return 0;
 }
 
 static int cmd_sign_ima(struct command *cmd)
 {
 	char *key, *file = g_argv[optind++];
-	
+
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return 1;
 	}
-	
+
 	key = g_argv[optind++];
 	if (!key)
 		key = "/etc/keys/privkey_evm.pem";
-	
+
 	return sign_ima(file, key);
-	
+
 }
 
 static int cmd_sign_evm(struct command *cmd)
 {
 	char *key, *file = g_argv[optind++];
 	int err;
-	
+
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return 1;
 	}
-	
+
 	key = g_argv[optind++];
 	if (!key)
 		key = "/etc/keys/privkey_evm.pem";
-	
+
 	if (digsig) {
 		err = sign_ima(file, key);
 		if (err)
 			return err;
 	}
-	
+
 	if (digest) {
 		err = hash_ima(file);
 		if (err)
 			return err;
 	}
-	
+
 	return sign_evm(file, key);
 }
 
@@ -752,11 +747,11 @@ static int verify_hash(const unsigned char *hash, int size, unsigned char *sig, 
 	FILE *fp;
 	unsigned char sighash[20];
 	struct signature_hdr *hdr = (struct signature_hdr *)sig;
-	
+
 	log_info("hash: ");
 	log_dump(hash, size);
-	
-	fp = fopen(keyfile, "r");	
+
+	fp = fopen(keyfile, "r");
 	if (!fp) {
 		log_errno("Unable to open keyfile %s", keyfile);
 		return -1;
@@ -783,15 +778,15 @@ static int verify_hash(const unsigned char *hash, int size, unsigned char *sig, 
 	}
 
 	len = err;
-	
+
 	if (len != sizeof(sighash) || memcmp(out, sighash, len) != 0) {
 		log_errno("Verification failed: %d", err);
 		return -1;
 	} else {
-		//log_info("Verification is OK\n");
+		/*log_info("Verification is OK\n");*/
 		printf("Verification is OK\n");
 	}
-	
+
 	return 0;
 }
 
@@ -802,35 +797,35 @@ static int verify_evm(const char *file, const char *key)
 	int err;
 
 	calc_evm_hash(file, key, hash);
-	
+
 	err = getxattr(file, "security.evm", sig, sizeof(sig));
 	if (err < 0) {
 		log_errno("getxattr failed");
 		return err;
 	}
-	
+
 	if (sig[0] != 0x03) {
 		log_errno("security.evm has not signature");
 		return err;
 	}
-	
+
 	return verify_hash(hash, sizeof(hash), sig + 1, err - 1, key);
 }
 
 static int cmd_verify_evm(struct command *cmd)
 {
 	char *key, *file = g_argv[optind++];
-	
+
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return 1;
 	}
-	
+
 	key = g_argv[optind++];
 	if (!key)
 		key = "/etc/keys/pubkey_evm.pem";
-	
+
 	return verify_evm(file, key);
 }
 
@@ -841,24 +836,24 @@ static int cmd_convert(struct command *cmd)
 	char name[20];
 	int len;
 	uint8_t keyid[8];
-	
+
 	inkey = g_argv[optind++];
 	if (!inkey)
 		inkey = "/etc/keys/pubkey_evm.pem";
 	else
 		outkey = g_argv[optind++];
-		
+
 	if (!outkey)
 		outkey = "pubkey_evm.bin";
 
-	log_info("Convert public key %s to %s\n", inkey, outkey);	
+	log_info("Convert public key %s to %s\n", inkey, outkey);
 
 	len = read_key(inkey, pub);
 	if (len < 0)
 		return -1;
-	
+
 	calc_keyid(keyid, name, pub, len);
-	
+
 	bin2file(outkey, name, pub, len);
 
 	return 0;
@@ -871,26 +866,26 @@ static int cmd_import_bin(struct command *cmd)
 	char *key, name[20];
 	key_serial_t id;
 	uint8_t keyid[8];
-	
+
 	inkey = g_argv[optind++];
 	if (!inkey)
 		inkey = "/etc/keys/pubkey_evm.bin";
- 	else
- 		ring = g_argv[optind++];
- 		
- 	if (!ring)
- 		id = KEY_SPEC_USER_KEYRING;
+	else
+		ring = g_argv[optind++];
+
+	if (!ring)
+		id = KEY_SPEC_USER_KEYRING;
 	else
 		id = atoi(ring);
 
 	key = file2bin(inkey, &len);
 	if (!key)
 		return -1;
-	
+
 	calc_keyid(keyid, name, (unsigned char *)key, len);
 
- 	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
-	
+	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
+
 	id = add_key("user", name, key, len, id);
 	if (id < 0) {
 		log_errno("add_key failed");
@@ -899,9 +894,9 @@ static int cmd_import_bin(struct command *cmd)
 
 	log_info("keyid: %d\n", id);
 	printf("%d\n", id);
-	
+
 	free(key);
-	
+
 	return 0;
 }
 
@@ -915,26 +910,26 @@ static int cmd_import(struct command *cmd)
 
 	if (binkey)
 		return cmd_import_bin(cmd);
-	
+
 	inkey = g_argv[optind++];
 	if (!inkey)
 		inkey = "/etc/keys/pubkey_evm.pem";
- 	else
- 		ring = g_argv[optind++];
- 		
- 	if (!ring)
- 		id = KEY_SPEC_USER_KEYRING;
+	else
+		ring = g_argv[optind++];
+
+	if (!ring)
+		id = KEY_SPEC_USER_KEYRING;
 	else
 		id = atoi(ring);
 
 	len = read_key(inkey, key);
 	if (len < 0)
 		return -1;
-	
+
 	calc_keyid(keyid, name, key, len);
-	
- 	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
-	
+
+	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
+
 	id = add_key("user", name, key, len, id);
 	if (id < 0) {
 		log_errno("add_key failed");
@@ -943,7 +938,7 @@ static int cmd_import(struct command *cmd)
 
 	log_info("keyid: %d\n", id);
 	printf("%d\n", id);
-	
+
 	return 0;
 }
 
@@ -961,13 +956,13 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	char *key;
 	int keylen;
 	unsigned char evmkey[MAX_KEY_SIZE];
-	
+
 	key = file2bin(keyfile, &keylen);
 	if (!key) {
 		log_errno("Unable to read a key: %s\n", keyfile);
 		return -1;
 	}
-	
+
 	if (keylen > sizeof(evmkey)) {
 		log_errno("key is too long\n");
 		return -1;
@@ -976,25 +971,25 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	/* EVM key is 128 bytes */
 	memcpy(evmkey, key, keylen);
 	memset(evmkey + keylen, 0, sizeof(evmkey) - keylen);
-	
+
 	fd = open(file, 0);
 	if (fd < 0) {
 		log_errno("Unable to open %s", file);
 		return -1;
 	}
-	
+
 	if (fstat(fd, &st)) {
 		log_errno("fstat() failed");
 		return -1;
 	}
-	
+
 	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
 		log_errno("ioctl() failed");
 		return -1;
 	}
-	
+
 	close(fd);
-	
+
 	log_info("generation: %u\n", generation);
 
 	HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
@@ -1005,7 +1000,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 			log_info("no attr: %s\n", *xattrname);
 			continue;
 		}
-		//log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);
+		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
 		HMAC_Update(&ctx, xattr_value, err);
@@ -1017,11 +1012,11 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	hmac_misc.uid = st.st_uid;
 	hmac_misc.gid = st.st_gid;
 	hmac_misc.mode = st.st_mode;
-	
-	HMAC_Update(&ctx, (const unsigned char*)&hmac_misc, sizeof(hmac_misc));
+
+	HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
 	HMAC_Final(&ctx, hash, &mdlen);
 	HMAC_CTX_cleanup(&ctx);
-	
+
 	free(key);
 
 	return 0;
@@ -1034,12 +1029,12 @@ static int hmac_evm(const char *file, const char *key)
 	int err;
 
 	calc_evm_hmac(file, key, hash);
-	
+
 	log_info("hmac: ");
 	log_dump(hash, sizeof(hash));
 	memcpy(sig + 1, hash, sizeof(hash));
 	err = sizeof(hash);
-	
+
 	if (set_xattr) {
 		err = setxattr(file, "security.evm", sig, err + 1, 0);
 		if (err < 0) {
@@ -1047,7 +1042,7 @@ static int hmac_evm(const char *file, const char *key)
 			return err;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -1055,29 +1050,29 @@ static int cmd_hmac_evm(struct command *cmd)
 {
 	char *key, *file = g_argv[optind++];
 	int err;
-	
+
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return 1;
 	}
-	
+
 	key = g_argv[optind++];
 	if (!key)
 		key = "/etc/keys/privkey_evm.pem";
-	
+
 	if (digsig) {
 		err = sign_ima(file, key);
 		if (err)
 			return err;
 	}
-	
+
 	if (digest) {
 		err = hash_ima(file);
 		if (err)
 			return err;
 	}
-	
+
 	return hmac_evm(file, "/etc/keys/evm-key-plain");
 }
 
@@ -1097,7 +1092,7 @@ static void print_full_usage(struct command *cmd)
 
 static int print_command_usage(struct command *cmds, char *command)
 {
-	struct command	*cmd;
+	struct command *cmd;
 
 	for (cmd = cmds; cmd->name; cmd++) {
 		if (strcmp(cmd->name, command) == 0) {
@@ -1106,13 +1101,13 @@ static int print_command_usage(struct command *cmds, char *command)
 		}
 	}
 	printf("invalid command: %s\n", command);
-	return 	1;
+	return 1;
 }
 
 static void print_all_usage(struct command *cmds)
 {
-	struct command	*cmd;
-	
+	struct command *cmd;
+
 	for (cmd = cmds; cmd->name; cmd++) {
 		if (cmd->arg)
 			printf("%s %s\n", cmd->name, cmd->arg);
@@ -1123,8 +1118,8 @@ static void print_all_usage(struct command *cmds)
 
 static int call_command(struct command *cmds, char *command)
 {
-	struct command	*cmd;
-	
+	struct command *cmd;
+
 	for (cmd = cmds; cmd->name; cmd++) {
 		if (strcasecmp(cmd->name, command) == 0)
 			return cmd->func(cmd);
@@ -1151,17 +1146,17 @@ static void usage(void)
 
 struct command cmds[] = {
 	{"help", cmd_help, 0, "<command>"},
-	{"import", cmd_import, 0, "[--bin] inkey keyring", "Import public key (PEM/bin) into the keyring.\n" },
-	{"convert", cmd_convert, 0, "inkey outkey", "Convert PEM public key into IMA/EVM kernel friendly format.\n" },
-	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata.\n" },
-	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n" },
-	{"ima_sign", cmd_sign_ima, 0, "file [key]", "Sign file content.\n" },
-	{"ima_hash", cmd_hash_ima, 0, "file", "Hash file content.\n" },
-	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC (for debugging).\n" },
+	{"import", cmd_import, 0, "[--bin] inkey keyring", "Import public key (PEM/bin) into the keyring.\n"},
+	{"convert", cmd_convert, 0, "inkey outkey", "Convert PEM public key into IMA/EVM kernel friendly format.\n"},
+	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata.\n"},
+	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
+	{"ima_sign", cmd_sign_ima, 0, "file [key]", "Sign file content.\n"},
+	{"ima_hash", cmd_hash_ima, 0, "file", "Hash file content.\n"},
+	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC (for debugging).\n"},
 	{0, 0, 0, NULL}
 };
 
-static struct option  opts[] = {
+static struct option opts[] = {
 	{"help", 0, 0, 'h'},
 	{"inkey", 1, 0, 'k'},
 	{"imasig", 0, 0, 's'},
@@ -1184,7 +1179,7 @@ int main(int argc, char *argv[])
 		c = getopt_long(argc, argv, "hk:vnsda:bp:", opts, &lind);
 		if (c == -1)
 			break;
-			
+
 		switch (c) {
 		case 'h':
 			usage();
@@ -1203,7 +1198,8 @@ int main(int argc, char *argv[])
 			digsig = 1;
 			break;
 		case 'n':
-			set_xattr = 0; // do not set Extended Attributes... just print signature
+			/* do not set Extended Attributes... just print signature */
+			set_xattr = 0;
 			break;
 		case 'a':
 			hash_algo = optarg;
