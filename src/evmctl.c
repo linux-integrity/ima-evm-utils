@@ -46,10 +46,12 @@
 #include <dirent.h>
 
 #include <openssl/sha.h>
-#include <openssl/sha.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/hmac.h>
+#include <openssl/engine.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
 
 #define USE_FPRINTF
 
@@ -404,8 +406,6 @@ static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *h
 	
 	log_info("generation: %u\n", generation);
 
-	OpenSSL_add_all_digests();
-
 	md = EVP_get_digestbyname("sha1");
 	if (!md) {
 		log_errno("EVP_get_digestbyname() failed");
@@ -500,8 +500,6 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 		return -1;
 	}
 	
-	OpenSSL_add_all_digests();
-
 	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
 		log_errno("EVP_get_digestbyname() failed");
@@ -566,8 +564,6 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		return -1;
 	}
 	
-	OpenSSL_add_all_digests();
-
 	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
 		log_errno("EVP_get_digestbyname() failed");
@@ -1221,10 +1217,19 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	OpenSSL_add_all_algorithms();
+	ERR_load_crypto_strings();
+
 	if (argv[optind] == NULL)
 		usage();
 	else
 		err = call_command(cmds, argv[optind++]);
+
+	if (err)
+		log_err("error: %s\n", ERR_error_string(ERR_get_error(), NULL));
+
+	ERR_free_strings();
+	EVP_cleanup();
 
 	return err;
 }
