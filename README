@@ -1,7 +1,16 @@
 
 1. Generate private key
 
+# plain key
 openssl genrsa -out privkey_evm.pem 1024
+
+# encrypted key
+openssl genrsa -des3 -out privkey_evm.pem 1024
+
+# set password for the key
+openssl rsa -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem -des3
+or
+openssl pkcs8 -topk8 -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem
 
 2. Generate public key
 

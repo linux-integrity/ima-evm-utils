@@ -150,6 +150,7 @@ static int		digest = 0;
 static int		digsig = 0;
 static char		*hash_algo = "sha1";
 static int		binkey = 0;
+static char		*keypass;
 
 extern struct command	cmds[];
 static void print_usage(struct command *cmd);
@@ -330,7 +331,7 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 		log_errno("Unable to open keyfile %s", keyfile);
 		return -1;
 	}
-	key1 = PEM_read_RSAPrivateKey(fp, &key, NULL, NULL);
+	key1 = PEM_read_RSAPrivateKey(fp, &key, NULL, keypass);
 	fclose(fp);
 	if (!key1) {
 		log_errno("RSAPrivateKey() failed");
@@ -1167,6 +1168,7 @@ static struct option  opts[] = {
 	{"imahash", 0, 0, 'd'},
 	{"hashalgo", 1, 0, 'a'},
 	{"bin", 0, 0, 'b'},
+	{"pass", 1, 0, 'p'},
 	{}
 
 };
@@ -1179,7 +1181,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hk:vnsda:b", opts, &lind);
+		c = getopt_long(argc, argv, "hk:vnsda:bp:", opts, &lind);
 		if (c == -1)
 			break;
 			
@@ -1208,6 +1210,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'b':
 			binkey = 1;
+			break;
+		case 'p':
+			keypass = optarg;
 			break;
 		case '?':
 			exit(1);
