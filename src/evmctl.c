@@ -143,7 +143,7 @@ struct command {
 static int verbose = LOG_INFO - 1;
 static int g_argc;
 static char **g_argv;
-static int set_xattr = 1;
+static int xattr = 1;
 static int digest;
 static int digsig;
 static char *hash_algo = "sha1";
@@ -365,7 +365,7 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	*blen = __cpu_to_be16(len << 3);
 	len += sizeof(*hdr) + 2;
 	log_info("evm/ima signature: %d bytes\n", len);
-	if (!set_xattr || verbose >= LOG_INFO)
+	if (!xattr || verbose >= LOG_INFO)
 		dump(sig, len);
 
 	return len;
@@ -463,7 +463,7 @@ static int sign_evm(const char *file, const char *key)
 	if (err < 0)
 		return err;
 
-	if (set_xattr) {
+	if (xattr) {
 		err = setxattr(file, "security.evm", sig, err + 1, 0);
 		if (err < 0) {
 			log_errno("setxattr failed: %s", file);
@@ -638,10 +638,10 @@ static int hash_ima(const char *file)
 	if (verbose >= LOG_INFO)
 		log_info("hash: ");
 
-	if (!set_xattr || verbose >= LOG_INFO)
+	if (!xattr || verbose >= LOG_INFO)
 		dump(hash, err + 1);
 
-	if (set_xattr) {
+	if (xattr) {
 		err = setxattr(file, "security.ima", hash, err + 1, 0);
 		if (err < 0) {
 			log_errno("setxattr failed: %s", file);
@@ -679,7 +679,7 @@ static int sign_ima(const char *file, const char *key)
 	if (err < 0)
 		return err;
 
-	if (set_xattr) {
+	if (xattr) {
 		err = setxattr(file, "security.ima", sig, err + 1, 0);
 		if (err < 0) {
 			log_errno("setxattr failed: %s", file);
@@ -1035,7 +1035,7 @@ static int hmac_evm(const char *file, const char *key)
 	memcpy(sig + 1, hash, sizeof(hash));
 	err = sizeof(hash);
 
-	if (set_xattr) {
+	if (xattr) {
 		err = setxattr(file, "security.evm", sig, err + 1, 0);
 		if (err < 0) {
 			log_errno("setxattr failed: %s", file);
@@ -1199,7 +1199,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'n':
 			/* do not set Extended Attributes... just print signature */
-			set_xattr = 0;
+			xattr = 0;
 			break;
 		case 'a':
 			hash_algo = optarg;
