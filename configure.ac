@@ -33,7 +33,7 @@ AC_CHECK_HEADERS(openssl/conf.h)
 #debug support - yes for a while
 PKG_ARG_ENABLE(debug, "yes", DEBUG, [Enable Debug support])
 if test $pkg_cv_enable_debug = yes; then
-	CFLAGS="-g -O1 -Wall -Wstrict-prototypes -pipe"
+	CFLAGS="$CFLAGS -g -O1 -Wall -Wstrict-prototypes -pipe"
 else
 	CFLAGS="$CFLAGS -Wall -Wstrict-prototypes -pipe -fomit-frame-pointer"
 fi
