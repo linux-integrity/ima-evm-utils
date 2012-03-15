@@ -372,7 +372,7 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	return len;
 }
 
-static int calc_evm_hash(const char *file, const char *keyfile, unsigned char *hash)
+static int calc_evm_hash(const char *file, unsigned char *hash)
 {
 	struct stat st;
 	int fd, err;
@@ -458,7 +458,7 @@ static int sign_evm(const char *file, const char *key)
 	unsigned char sig[1024] = "\x03";
 	int err;
 
-	calc_evm_hash(file, key, hash);
+	calc_evm_hash(file, hash);
 
 	err = sign_hash(hash, sizeof(hash), key, sig + 1);
 	if (err < 0)
@@ -800,7 +800,7 @@ static int verify_evm(const char *file, const char *key)
 	unsigned char sig[1024];
 	int err;
 
-	calc_evm_hash(file, key, hash);
+	calc_evm_hash(file, hash);
 
 	err = getxattr(file, "security.evm", sig, sizeof(sig));
 	if (err < 0) {
