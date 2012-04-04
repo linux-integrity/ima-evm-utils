@@ -996,7 +996,11 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	log_info("generation: %u\n", generation);
 
-	HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
+	err = HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
+	if (!err) {
+		log_errno("HMAC_Init() failed");
+		return -1;
+	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
 		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
@@ -1007,7 +1011,11 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
-		HMAC_Update(&ctx, xattr_value, err);
+		err = HMAC_Update(&ctx, xattr_value, err);
+		if (!err) {
+			log_errno("HMAC_Update() failed");
+			return -1;
+		}
 	}
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
@@ -1017,8 +1025,16 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	hmac_misc.gid = st.st_gid;
 	hmac_misc.mode = st.st_mode;
 
-	HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
-	HMAC_Final(&ctx, hash, &mdlen);
+	err = HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
+	if (!err) {
+		log_errno("HMAC_Update() failed");
+		return -1;
+	}
+	err = HMAC_Final(&ctx, hash, &mdlen);
+	if (!err) {
+		log_errno("HMAC_Final() failed");
+		return -1;
+	}
 	HMAC_CTX_cleanup(&ctx);
 
 	free(key);
