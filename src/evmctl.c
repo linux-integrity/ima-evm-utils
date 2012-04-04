@@ -372,6 +372,18 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	return len;
 }
 
+static int find_xattr(const char *list, int list_size, const char *xattr)
+{
+	int len;
+
+	for (; list_size > 0; len++, list_size -= len, list += len) {
+		len = strlen(list);
+		if (!strcmp(list, xattr))
+			return 1;
+	}
+	return 0;	
+}
+
 static int calc_evm_hash(const char *file, unsigned char *hash)
 {
 	struct stat st;
@@ -382,6 +394,8 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	unsigned int mdlen;
 	char **xattrname;
 	char xattr_value[1024];
+	char list[1024];
+	ssize_t list_size;
 
 	fd = open(file, 0);
 	if (fd < 0) {
@@ -403,6 +417,12 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	log_info("generation: %u\n", generation);
 
+	list_size = llistxattr(file, list, sizeof(list));
+	if (list_size <= 0) {
+		log_errno("llistxattr() failed");
+		return -1;
+	}
+
 	md = EVP_get_digestbyname("sha1");
 	if (!md) {
 		log_errno("EVP_get_digestbyname() failed");
@@ -414,11 +434,15 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		log_errno("EVP_DigestInit() failed");
 		return -1;
 	}
-
+	
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
 		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
 		if (err < 0) {
-			log_info("no attr: %s\n", *xattrname);
+			log_info("no xattr: %s\n", *xattrname);
+			continue;
+		}
+		if (!find_xattr(list, list_size, *xattrname)) {
+			log_info("skipping xattr: %s\n", *xattrname);
 			continue;
 		}
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
@@ -960,6 +984,8 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	char *key;
 	int keylen;
 	unsigned char evmkey[MAX_KEY_SIZE];
+	char list[1024];
+	ssize_t list_size;
 
 	key = file2bin(keyfile, &keylen);
 	if (!key) {
@@ -996,6 +1022,12 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	log_info("generation: %u\n", generation);
 
+	list_size = llistxattr(file, list, sizeof(list));
+	if (list_size <= 0) {
+		log_errno("llistxattr() failed");
+		return -1;
+	}
+
 	err = HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
 	if (!err) {
 		log_errno("HMAC_Init() failed");
@@ -1005,7 +1037,11 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
 		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
 		if (err < 0) {
-			log_info("no attr: %s\n", *xattrname);
+			log_info("no xattr: %s\n", *xattrname);
+			continue;
+		}
+		if (!find_xattr(list, list_size, *xattrname)) {
+			log_info("skipping xattr: %s\n", *xattrname);
 			continue;
 		}
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
