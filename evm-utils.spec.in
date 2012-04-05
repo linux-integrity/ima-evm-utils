@@ -16,7 +16,7 @@ BuildRequires:    readline-devel
 BuildRequires:    keyutils-libs-devel
 
 %description
-This library provides EVM support utilities.
+This package provide IMA/EVM control utility
 
 %prep
 %setup -q
