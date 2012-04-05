@@ -1,7 +1,7 @@
 Name:		@PACKAGE_NAME@
 Version:	@PACKAGE_VERSION@
 Release:	1%{?dist}
-Summary:	evm-utils - IMA/EVM support utilities
+Summary:	@PACKAGE_NAME@ - IMA/EVM control utility
 Group:		System/Libraries
 License:	LGPLv2
 #URL:		
@@ -12,7 +12,6 @@ BuildRequires:    autoconf
 BuildRequires:    automake
 BuildRequires:    openssl-devel
 BuildRequires:    libattr-devel
-BuildRequires:    readline-devel
 BuildRequires:    keyutils-libs-devel
 
 %description
@@ -48,6 +47,6 @@ exit 0
 %{_libdir}/*
 
 %changelog
-* Wed Jul 20 2011 Dmitry Kasatkin <dmitry.kasatkin@intel.com>
-- Initial package for MeeGo
+* Thu Apr 05 2012 Dmitry Kasatkin <dmitry.kasatkin@intel.com>
+- Initial RPM spec file
 

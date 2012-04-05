@@ -1,7 +1,7 @@
 # autoconf script
 
 AC_PREREQ([2.65])
-AC_INIT(evm-utils, 0.1, dmitry.kasatkin@intel.com)
+AC_INIT(ima-evm-utils, 0.2, dmitry.kasatkin@intel.com)
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -47,7 +47,7 @@ fi
 AC_CONFIG_FILES([Makefile
 		src/Makefile
 		tests/Makefile
-		evm-utils.spec
+		ima-evm-utils.spec
 		])
 AC_OUTPUT
 

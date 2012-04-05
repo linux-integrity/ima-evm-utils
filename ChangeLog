@@ -1,3 +1,12 @@
+2012-04-05  Dmitry Kasatkin  <dmitry.kasatkin@intel.com>
+
+	version 0.2
+	* added RPM & TAR building makefile rules
+	* renamed evm-utils to ima-evm-utils
+	* added command options description
+	* updated error handling
+	* refactored redundant code
+
 2012-04-02  Dmitry Kasatkin  <dmitry.kasatkin@intel.com>
 
 	version 0.1.0
