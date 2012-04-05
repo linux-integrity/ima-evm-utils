@@ -2,7 +2,7 @@
  * evm-utils - IMA/EVM support utilities
  *
  * Copyright (C) 2011 Nokia Corporation
- * Copyright (C) 2011 Intel Corporation
+ * Copyright (C) 2011, 2012 Intel Corporation
  *
  * Authors:
  * Dmitry Kasatkin <dmitry.kasatkin@nokia.com>
@@ -381,7 +381,7 @@ static int find_xattr(const char *list, int list_size, const char *xattr)
 		if (!strcmp(list, xattr))
 			return 1;
 	}
-	return 0;	
+	return 0;
 }
 
 static int calc_evm_hash(const char *file, unsigned char *hash)
@@ -434,7 +434,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		log_err("EVP_DigestInit() failed\n");
 		return 1;
 	}
-	
+
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
 		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
 		if (err < 0) {
@@ -944,7 +944,7 @@ static int cmd_import(struct command *cmd)
 
 	if (binkey)
 		free(key);
-	
+
 	return 0;
 }
 
@@ -1127,8 +1127,7 @@ static void print_full_usage(struct command *cmd)
 	if (cmd->name)
 		printf("usage: %s %s\n", cmd->name, cmd->arg ? cmd->arg : "");
 	if (cmd->msg)
-		printf("description:\n%s", cmd->msg);
-
+		printf("%s", cmd->msg);
 }
 
 static int print_command_usage(struct command *cmds, char *command)
@@ -1182,20 +1181,35 @@ static int cmd_help(struct command *cmd)
 
 static void usage(void)
 {
-	printf("Usage: evmctl <command> [parameters..]\n");
+	printf("Usage: evmctl [-v] <command> [OPTIONS]\n");
 
 	print_all_usage(cmds);
+
+	printf(
+		"\n"
+		"  -a, --hashalgo     sha1 (default), sha224, sha256, sha384, sha512\n"
+		"  -s, --imasig       also make IMA signature\n"
+		"  -d, --imahash      also make IMA hash\n"
+		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
+		"  -b, --bin          signing key is in binary format\n"
+		"  -p, --pass         password for encrypted signing key\n"
+		"  -n                 print result to stdout instead of setting xattr\n"
+		"  -v                 increase verbosity level\n"
+		"  -h, --help         display this help and exit\n"
+		"\n");
 }
 
 struct command cmds[] = {
 	{"help", cmd_help, 0, "<command>"},
-	{"import", cmd_import, 0, "[--bin] inkey keyring", "Import public key (PEM/bin) into the keyring.\n"},
+	{"import", cmd_import, 0, "[--bin] pubkey keyring", "Import public key (PEM/bin) into the keyring.\n"},
 	{"convert", cmd_convert, 0, "inkey outkey", "Convert PEM public key into IMA/EVM kernel friendly format.\n"},
-	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata.\n"},
+	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] [--pass password] file [key]", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
-	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] file [key]", "Sign file content.\n"},
-	{"ima_hash", cmd_hash_ima, 0, "file", "Hash file content.\n"},
-	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC (for debugging).\n"},
+	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--pass password] file [key]", "Make file content signature.\n"},
+	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
+#ifdef DEBUG
+	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
+#endif
 	{0, 0, 0, NULL}
 };
 
