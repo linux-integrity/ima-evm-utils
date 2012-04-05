@@ -208,11 +208,11 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 	return err;
 }
 
-static char *file2bin(const char *file, int *size)
+static unsigned char *file2bin(const char *file, int *size)
 {
 	FILE *fp;
 	int len;
-	char *data;
+	unsigned char *data;
 
 	len = get_filesize(file);
 	fp = fopen(file, "r");
@@ -897,62 +897,21 @@ static int cmd_convert(struct command *cmd)
 	return 0;
 }
 
-static int cmd_import_bin(struct command *cmd)
-{
-	int len;
-	char *inkey, *ring = NULL;
-	char *key, name[20];
-	key_serial_t id;
-	uint8_t keyid[8];
-
-	inkey = g_argv[optind++];
-	if (!inkey)
-		inkey = "/etc/keys/pubkey_evm.bin";
-	else
-		ring = g_argv[optind++];
-
-	if (!ring)
-		id = KEY_SPEC_USER_KEYRING;
-	else
-		id = atoi(ring);
-
-	key = file2bin(inkey, &len);
-	if (!key)
-		return -1;
-
-	calc_keyid(keyid, name, (unsigned char *)key, len);
-
-	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
-
-	id = add_key("user", name, key, len, id);
-	if (id < 0) {
-		log_err("add_key failed\n");
-		return -1;
-	}
-
-	log_info("keyid: %d\n", id);
-	printf("%d\n", id);
-
-	free(key);
-
-	return 0;
-}
-
 static int cmd_import(struct command *cmd)
 {
 	char *inkey, *ring = NULL;
-	unsigned char key[1024];
+	unsigned char _key[1024], *key = _key;
 	int id, len;
 	char name[20];
 	uint8_t keyid[8];
 
-	if (binkey)
-		return cmd_import_bin(cmd);
-
 	inkey = g_argv[optind++];
-	if (!inkey)
-		inkey = "/etc/keys/pubkey_evm.pem";
-	else
+	if (!inkey) {
+		if (binkey)
+			inkey = "/etc/keys/pubkey_evm.bin";
+		else
+			inkey = "/etc/keys/pubkey_evm.pem";
+	} else
 		ring = g_argv[optind++];
 
 	if (!ring)
@@ -960,9 +919,15 @@ static int cmd_import(struct command *cmd)
 	else
 		id = atoi(ring);
 
-	len = read_key(inkey, key);
-	if (len < 0)
-		return -1;
+	if (binkey) {
+		key = file2bin(inkey, &len);
+		if (!key)
+			return -1;
+	} else {
+		len = read_key(inkey, key);
+		if (len < 0)
+			return -1;
+	}
 
 	calc_keyid(keyid, name, key, len);
 
@@ -977,6 +942,9 @@ static int cmd_import(struct command *cmd)
 	log_info("keyid: %d\n", id);
 	printf("%d\n", id);
 
+	if (binkey)
+		free(key);
+	
 	return 0;
 }
 
@@ -991,7 +959,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	unsigned int mdlen;
 	char **xattrname;
 	unsigned char xattr_value[1024];
-	char *key;
+	unsigned char *key;
 	int keylen;
 	unsigned char evmkey[MAX_KEY_SIZE];
 	char list[1024];
