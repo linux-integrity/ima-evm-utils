@@ -74,7 +74,7 @@
 #define log_dump(p, len)		do_log_dump(LOG_INFO, p, len)
 #define log_info(fmt, args...)		do_log(LOG_INFO, fmt, ##args)
 #define log_err(fmt, args...)		do_log(LOG_ERR, fmt, ##args)
-#define log_errno(fmt, args...)		do_log(LOG_ERR, fmt ": %s (%d)\n", ##args, strerror(errno), errno)
+#define log_errno(fmt, args...)		do_log(LOG_ERR, fmt ": errno: %s (%d)\n", ##args, strerror(errno), errno)
 
 #define	DATA_SIZE	4096
 #define SHA1_HASH_LEN   20
@@ -200,7 +200,7 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 
 	fp = fopen(name, "w");
 	if (!fp) {
-		log_errno("Unable to open %s for writing", name);
+		log_err("Unable to open %s for writing\n", name);
 		return -1;
 	}
 	err = fwrite(data, len, 1, fp);
@@ -217,7 +217,7 @@ static char *file2bin(const char *file, int *size)
 	len = get_filesize(file);
 	fp = fopen(file, "r");
 	if (!fp) {
-		log_errno("Unable to open %s", file);
+		log_err("Unable to open %s\n", file);
 		return NULL;
 	}
 	data = malloc(len);
@@ -270,14 +270,14 @@ static int read_key(const char *inkey, unsigned char *pub)
 
 	fp = fopen(inkey, "r");
 	if (!fp) {
-		log_errno("read key failed from file %s", inkey);
+		log_err("read key failed from file %s\n", inkey);
 		return -1;
 	}
 
 	key1 = PEM_read_RSA_PUBKEY(fp, &key, NULL, NULL);
 	fclose(fp);
 	if (!key1) {
-		log_errno("PEM_read_RSA_PUBKEY() failed");
+		log_err("PEM_read_RSA_PUBKEY() failed\n");
 		return -1;
 	}
 
@@ -324,14 +324,14 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 
 	fp = fopen(keyfile, "r");
 	if (!fp) {
-		log_errno("Unable to open keyfile %s", keyfile);
+		log_err("Unable to open keyfile %s\n", keyfile);
 		return -1;
 	}
 	key1 = PEM_read_RSAPrivateKey(fp, &key, NULL, keypass);
 	fclose(fp);
 	if (!key1) {
-		log_errno("RSAPrivateKey() failed");
-		return -1;
+		log_err("PEM_read_RSAPrivateKey() failed\n");
+		return 1;
 	}
 
 	/* now create a new hash */
@@ -355,8 +355,8 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	err = RSA_private_encrypt(sizeof(sighash), sighash, sig + sizeof(*hdr) + 2, key, RSA_PKCS1_PADDING);
 	RSA_free(key);
 	if (err < 0) {
-		log_errno("RSA_private_encrypt() failed: %d", err);
-		return -1;
+		log_err("RSA_private_encrypt() failed: %d\n", err);
+		return 1;
 	}
 
 	len = err;
@@ -399,17 +399,17 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	fd = open(file, 0);
 	if (fd < 0) {
-		log_errno("Unable to open %s", file);
+		log_err("Unable to open %s\n", file);
 		return -1;
 	}
 
 	if (fstat(fd, &st)) {
-		log_errno("fstat() failed");
+		log_err("fstat() failed\n");
 		return -1;
 	}
 
 	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
-		log_errno("ioctl() failed");
+		log_err("ioctl() failed\n");
 		return -1;
 	}
 
@@ -419,20 +419,20 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	list_size = llistxattr(file, list, sizeof(list));
 	if (list_size <= 0) {
-		log_errno("llistxattr() failed");
+		log_err("llistxattr() failed\n");
 		return -1;
 	}
 
 	md = EVP_get_digestbyname("sha1");
 	if (!md) {
-		log_errno("EVP_get_digestbyname() failed");
-		return -1;
+		log_err("EVP_get_digestbyname() failed\n");
+		return 1;
 	}
 
 	err = EVP_DigestInit(&ctx, md);
 	if (!err) {
-		log_errno("EVP_DigestInit() failed");
-		return -1;
+		log_err("EVP_DigestInit() failed\n");
+		return 1;
 	}
 	
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
@@ -450,8 +450,8 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		log_debug_dump(xattr_value, err);
 		err = EVP_DigestUpdate(&ctx, xattr_value, err);
 		if (!err) {
-			log_errno("EVP_DigestUpdate() failed");
-			return -1;
+			log_err("EVP_DigestUpdate() failed\n");
+			return 1;
 		}
 	}
 
@@ -464,34 +464,36 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	err = EVP_DigestUpdate(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
 	if (!err) {
-		log_errno("EVP_DigestUpdate() failed");
-		return -1;
+		log_err("EVP_DigestUpdate() failed\n");
+		return 1;
 	}
 	err = EVP_DigestFinal(&ctx, hash, &mdlen);
 	if (!err) {
-		log_errno("EVP_DigestFinal() failed");
-		return -1;
+		log_err("EVP_DigestFinal() failed\n");
+		return 1;
 	}
 
-	return 0;
+	return mdlen;
 }
 
 static int sign_evm(const char *file, const char *key)
 {
 	unsigned char hash[20];
 	unsigned char sig[1024] = "\x03";
-	int err;
+	int len, err;
 
-	calc_evm_hash(file, hash);
+	len = calc_evm_hash(file, hash);
+	if (len <= 1)
+		return len;
 
-	err = sign_hash(hash, sizeof(hash), key, sig + 1);
-	if (err < 0)
-		return err;
+	len = sign_hash(hash, len, key, sig + 1);
+	if (len <= 1)
+		return len;
 
 	if (xattr) {
-		err = setxattr(file, "security.evm", sig, err + 1, 0);
+		err = setxattr(file, "security.evm", sig, len + 1, 0);
 		if (err < 0) {
-			log_errno("setxattr failed: %s", file);
+			log_err("setxattr failed: %s\n", file);
 			return err;
 		}
 	}
@@ -511,26 +513,26 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 
 	data = malloc(bs);
 	if (!data) {
-		log_errno("malloc failed");
+		log_err("malloc failed\n");
 		return -1;
 	}
 
 	fp = fopen(file, "r");
 	if (!fp) {
-		log_errno("Unable to open %s", file);
+		log_err("Unable to open %s\n", file);
 		return -1;
 	}
 
 	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
-		log_errno("EVP_get_digestbyname() failed");
-		return -1;
+		log_err("EVP_get_digestbyname() failed\n");
+		return 1;
 	}
 
 	err = EVP_DigestInit(&ctx, md);
 	if (!err) {
-		log_errno("EVP_DigestInit() failed");
-		return -1;
+		log_err("EVP_DigestInit() failed\n");
+		return 1;
 	}
 
 	for (size = get_fdsize(fileno(fp)); size; size -= len) {
@@ -538,22 +540,22 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 		err = fread(data, len, 1, fp);
 		if (!err) {
 			if (ferror(fp)) {
-				log_errno("fread() error\n");
+				log_err("fread() error\n\n");
 				return -1;
 			}
 			break;
 		}
 		err = EVP_DigestUpdate(&ctx, data, len);
 		if (!err) {
-			log_errno("EVP_DigestUpdate() failed");
-			return -1;
+			log_err("EVP_DigestUpdate() failed\n");
+			return 1;
 		}
 	}
 
 	err = EVP_DigestFinal(&ctx, hash, &mdlen);
 	if (!err) {
-		log_errno("EVP_DigestFinal() failed");
-		return -1;
+		log_err("EVP_DigestFinal() failed\n");
+		return 1;
 	}
 
 	fclose(fp);
@@ -581,20 +583,20 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 
 	dir = opendir(file);
 	if (!dir) {
-		log_errno("Unable to open %s", file);
+		log_err("Unable to open %s\n", file);
 		return -1;
 	}
 
 	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
-		log_errno("EVP_get_digestbyname() failed");
-		return -1;
+		log_err("EVP_get_digestbyname() failed\n");
+		return 1;
 	}
 
 	err = EVP_DigestInit(&ctx, md);
 	if (!err) {
-		log_errno("EVP_DigestInit() failed");
-		return -1;
+		log_err("EVP_DigestInit() failed\n");
+		return 1;
 	}
 
 	while ((de = readdir(dir))) {
@@ -618,21 +620,21 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		log_debug("entry: ino: %llu, %s\n", (unsigned long long)ino, cur->de.d_name);
 		err = EVP_DigestUpdate(&ctx, cur->de.d_name, strlen(cur->de.d_name));
 		if (!err) {
-			log_errno("EVP_DigestUpdate() failed");
-			return -1;
+			log_err("EVP_DigestUpdate() failed\n");
+			return 1;
 		}
 		err = EVP_DigestUpdate(&ctx, &ino, sizeof(ino));
 		if (!err) {
-			log_errno("EVP_DigestUpdate() failed");
-			return -1;
+			log_err("EVP_DigestUpdate() failed\n");
+			return 1;
 		}
 		free(cur);
 	}
 
 	err = EVP_DigestFinal(&ctx, hash, &mdlen);
 	if (!err) {
-		log_errno("EVP_DigestFinal() failed");
-		return -1;
+		log_err("EVP_DigestFinal() failed\n");
+		return 1;
 	}
 
 	closedir(dir);
@@ -643,33 +645,33 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 static int hash_ima(const char *file)
 {
 	unsigned char hash[65] = "\x01"; /* MAX hash size + 1 */
-	int err;
+	int len, err;
 	struct stat st;
 
 	/*  Need to know the file length */
 	err = stat(file, &st);
 	if (err < 0) {
-		log_errno("stat() failed");
+		log_err("stat() failed\n");
 		return err;
 	}
 
 	if (S_ISDIR(st.st_mode))
-		err = calc_dir_hash(file, hash + 1);
+		len = calc_dir_hash(file, hash + 1);
 	else
-		err = calc_file_hash(file, hash + 1);
-	if (err < 0)
-		return err;
+		len = calc_file_hash(file, hash + 1);
+	if (len <= 1)
+		return len;
 
 	if (verbose >= LOG_INFO)
 		log_info("hash: ");
 
 	if (!xattr || verbose >= LOG_INFO)
-		dump(hash, err + 1);
+		dump(hash, len + 1);
 
 	if (xattr) {
-		err = setxattr(file, "security.ima", hash, err + 1, 0);
+		err = setxattr(file, "security.ima", hash, len + 1, 0);
 		if (err < 0) {
-			log_errno("setxattr failed: %s", file);
+			log_err("setxattr failed: %s\n", file);
 			return err;
 		}
 	}
@@ -684,7 +686,7 @@ static int cmd_hash_ima(struct command *cmd)
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
-		return 1;
+		return -1;
 	}
 
 	return hash_ima(file);
@@ -694,23 +696,23 @@ static int sign_ima(const char *file, const char *key)
 {
 	unsigned char hash[64];
 	unsigned char sig[1024] = "\x03";
-	int err;
+	int len, err;
 
-	err = calc_file_hash(file, hash);
-	if (err < 0)
-		return err;
+	len = calc_file_hash(file, hash);
+	if (len <= 1)
+		return len;
 
-	err = sign_hash(hash, err, key, sig + 1);
-	if (err < 0)
-		return err;
+	len = sign_hash(hash, len, key, sig + 1);
+	if (len <= 1)
+		return len;
 
 	if (sigfile)
-		bin2file(file, "sig", sig, err + 1);
+		bin2file(file, "sig", sig, len + 1);
 
 	if (xattr) {
-		err = setxattr(file, "security.ima", sig, err + 1, 0);
+		err = setxattr(file, "security.ima", sig, len + 1, 0);
 		if (err < 0) {
-			log_errno("setxattr failed: %s", file);
+			log_err("setxattr failed: %s\n", file);
 			return err;
 		}
 	}
@@ -725,7 +727,7 @@ static int cmd_sign_ima(struct command *cmd)
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
-		return 1;
+		return -1;
 	}
 
 	key = g_argv[optind++];
@@ -744,7 +746,13 @@ static int cmd_sign_evm(struct command *cmd)
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
-		return 1;
+		return -1;
+	}
+
+	if (!digsig && !digest) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
 	}
 
 	key = g_argv[optind++];
@@ -781,14 +789,14 @@ static int verify_hash(const unsigned char *hash, int size, unsigned char *sig, 
 
 	fp = fopen(keyfile, "r");
 	if (!fp) {
-		log_errno("Unable to open keyfile %s", keyfile);
+		log_err("Unable to open keyfile %s\n", keyfile);
 		return -1;
 	}
 	key1 = PEM_read_RSA_PUBKEY(fp, &key, NULL, NULL);
 	fclose(fp);
 	if (!key1) {
-		log_errno("PEM_read_RSA_PUBKEY() failed");
-		return -1;
+		log_err("PEM_read_RSA_PUBKEY() failed\n");
+		return 1;
 	}
 
 	SHA1_Init(&ctx);
@@ -801,14 +809,14 @@ static int verify_hash(const unsigned char *hash, int size, unsigned char *sig, 
 	err = RSA_public_decrypt(siglen - sizeof(*hdr) - 2, sig + sizeof(*hdr) + 2, out, key, RSA_PKCS1_PADDING);
 	RSA_free(key);
 	if (err < 0) {
-		log_errno("RSA_public_decrypt() failed: %d", err);
-		return -1;
+		log_err("RSA_public_decrypt() failed: %d\n", err);
+		return 1;
 	}
 
 	len = err;
 
 	if (len != sizeof(sighash) || memcmp(out, sighash, len) != 0) {
-		log_errno("Verification failed: %d", err);
+		log_err("Verification failed: %d\n", err);
 		return -1;
 	} else {
 		/*log_info("Verification is OK\n");*/
@@ -822,22 +830,24 @@ static int verify_evm(const char *file, const char *key)
 {
 	unsigned char hash[20];
 	unsigned char sig[1024];
-	int err;
+	int len;
 
-	calc_evm_hash(file, hash);
+	len = calc_evm_hash(file, hash);
+	if (len <= 1)
+		return len;
 
-	err = getxattr(file, "security.evm", sig, sizeof(sig));
-	if (err < 0) {
-		log_errno("getxattr failed");
-		return err;
+	len = getxattr(file, "security.evm", sig, sizeof(sig));
+	if (len < 0) {
+		log_err("getxattr failed\n");
+		return len;
 	}
 
 	if (sig[0] != 0x03) {
-		log_errno("security.evm has not signature");
-		return err;
+		log_err("security.evm has not signature\n");
+		return -1;
 	}
 
-	return verify_hash(hash, sizeof(hash), sig + 1, err - 1, key);
+	return verify_hash(hash, sizeof(hash), sig + 1, len - 1, key);
 }
 
 static int cmd_verify_evm(struct command *cmd)
@@ -847,7 +857,7 @@ static int cmd_verify_evm(struct command *cmd)
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
-		return 1;
+		return -1;
 	}
 
 	key = g_argv[optind++];
@@ -916,7 +926,7 @@ static int cmd_import_bin(struct command *cmd)
 
 	id = add_key("user", name, key, len, id);
 	if (id < 0) {
-		log_errno("add_key failed");
+		log_err("add_key failed\n");
 		return -1;
 	}
 
@@ -960,7 +970,7 @@ static int cmd_import(struct command *cmd)
 
 	id = add_key("user", name, key, len, id);
 	if (id < 0) {
-		log_errno("add_key failed");
+		log_err("add_key failed\n");
 		return -1;
 	}
 
@@ -989,12 +999,12 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	key = file2bin(keyfile, &keylen);
 	if (!key) {
-		log_errno("Unable to read a key: %s\n", keyfile);
+		log_err("Unable to read a key: %s\n\n", keyfile);
 		return -1;
 	}
 
 	if (keylen > sizeof(evmkey)) {
-		log_errno("key is too long\n");
+		log_err("key is too long\n");
 		return -1;
 	}
 
@@ -1004,17 +1014,17 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	fd = open(file, 0);
 	if (fd < 0) {
-		log_errno("Unable to open %s", file);
+		log_err("Unable to open %s\n", file);
 		return -1;
 	}
 
 	if (fstat(fd, &st)) {
-		log_errno("fstat() failed");
+		log_err("fstat() failed\n");
 		return -1;
 	}
 
 	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
-		log_errno("ioctl() failed");
+		log_err("ioctl() failed\n");
 		return -1;
 	}
 
@@ -1024,14 +1034,14 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	list_size = llistxattr(file, list, sizeof(list));
 	if (list_size <= 0) {
-		log_errno("llistxattr() failed");
+		log_err("llistxattr() failed\n");
 		return -1;
 	}
 
 	err = HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
 	if (!err) {
-		log_errno("HMAC_Init() failed");
-		return -1;
+		log_err("HMAC_Init() failed\n");
+		return 1;
 	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
@@ -1049,8 +1059,8 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		log_debug_dump(xattr_value, err);
 		err = HMAC_Update(&ctx, xattr_value, err);
 		if (!err) {
-			log_errno("HMAC_Update() failed");
-			return -1;
+			log_err("HMAC_Update() failed\n");
+			return 1;
 		}
 	}
 
@@ -1063,38 +1073,39 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	err = HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
 	if (!err) {
-		log_errno("HMAC_Update() failed");
-		return -1;
+		log_err("HMAC_Update() failed\n");
+		return 1;
 	}
 	err = HMAC_Final(&ctx, hash, &mdlen);
 	if (!err) {
-		log_errno("HMAC_Final() failed");
-		return -1;
+		log_err("HMAC_Final() failed\n");
+		return 1;
 	}
 	HMAC_CTX_cleanup(&ctx);
 
 	free(key);
 
-	return 0;
+	return mdlen;
 }
 
 static int hmac_evm(const char *file, const char *key)
 {
 	unsigned char hash[20];
 	unsigned char sig[1024] = "\x02";
-	int err;
+	int len, err;
 
-	calc_evm_hmac(file, key, hash);
+	len = calc_evm_hmac(file, key, hash);
+	if (len <= 1)
+		return len;
 
 	log_info("hmac: ");
-	log_dump(hash, sizeof(hash));
-	memcpy(sig + 1, hash, sizeof(hash));
-	err = sizeof(hash);
+	log_dump(hash, len);
+	memcpy(sig + 1, hash, len);
 
 	if (xattr) {
-		err = setxattr(file, "security.evm", sig, err + 1, 0);
+		err = setxattr(file, "security.evm", sig, len + 1, 0);
 		if (err < 0) {
-			log_errno("setxattr failed: %s", file);
+			log_err("setxattr failed: %s\n", file);
 			return err;
 		}
 	}
@@ -1110,7 +1121,13 @@ static int cmd_hmac_evm(struct command *cmd)
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
-		return 1;
+		return -1;
+	}
+
+	if (!digsig && !digest) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
 	}
 
 	key = g_argv[optind++];
@@ -1157,18 +1174,20 @@ static int print_command_usage(struct command *cmds, char *command)
 		}
 	}
 	printf("invalid command: %s\n", command);
-	return 1;
+	return -1;
 }
 
 static void print_all_usage(struct command *cmds)
 {
 	struct command *cmd;
 
+	printf("commands:\n");
+
 	for (cmd = cmds; cmd->name; cmd++) {
 		if (cmd->arg)
-			printf("%s %s\n", cmd->name, cmd->arg);
+			printf(" %s %s\n", cmd->name, cmd->arg);
 		else if (cmd->msg)
-			printf("%s", cmd->msg);
+			printf(" %s", cmd->msg);
 	}
 }
 
@@ -1286,8 +1305,17 @@ int main(int argc, char *argv[])
 	else
 		err = call_command(cmds, argv[optind++]);
 
-	if (err)
-		log_err("error: %s\n", ERR_error_string(ERR_get_error(), NULL));
+	if (err) {
+		unsigned long err;
+		if (errno)
+			log_err("errno: %s (%d)\n", strerror(errno), errno);
+		for (;;) {
+			err = ERR_get_error();
+			if (!err)
+				break;
+			log_err("%s\n", ERR_error_string(err, NULL));
+		}
+	}
 
 	ERR_free_strings();
 	EVP_cleanup();
