@@ -1201,7 +1201,6 @@ struct command cmds[] = {
 
 static struct option opts[] = {
 	{"help", 0, 0, 'h'},
-	{"inkey", 1, 0, 'k'},
 	{"imasig", 0, 0, 's'},
 	{"imahash", 0, 0, 'd'},
 	{"hashalgo", 1, 0, 'a'},
@@ -1220,7 +1219,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hk:vnsda:bp:f", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:bp:f", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1228,9 +1227,6 @@ int main(int argc, char *argv[])
 		case 'h':
 			usage();
 			exit(0);
-			break;
-		case 'k':
-			printf("inkey: %s\n", optarg);
 			break;
 		case 'v':
 			verbose++;
