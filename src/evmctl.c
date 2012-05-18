@@ -597,6 +597,28 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 	return 0;
 }
 
+static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
+{
+	int err;
+	char buf[1024];
+
+	err = readlink(path, buf, sizeof(buf));
+	if (err <= 0)
+		return -1;
+
+	log_info("link: %s -> %.*s\n", path, err, buf);
+	return !EVP_DigestUpdate(ctx, buf, err);
+}
+
+static int add_dev_hash(struct stat *st, EVP_MD_CTX *ctx)
+{
+	uint32_t dev = st->st_rdev;
+	unsigned major = (dev & 0xfff00) >> 8;
+	unsigned minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
+	log_info("device: %u:%u\n", major, minor);
+	return !EVP_DigestUpdate(ctx, &dev, sizeof(dev));
+}
+
 static int calc_hash(const char *file, uint8_t *hash)
 {
 	struct stat st;
@@ -606,7 +628,7 @@ static int calc_hash(const char *file, uint8_t *hash)
 	int err;
 
 	/*  Need to know the file length */
-	err = stat(file, &st);
+	err = lstat(file, &st);
 	if (err < 0) {
 		log_err("stat() failed\n");
 		return err;
@@ -630,6 +652,13 @@ static int calc_hash(const char *file, uint8_t *hash)
 		break;
 	case S_IFDIR:
 		err = add_dir_hash(file, &ctx);
+		break;
+	case S_IFLNK:
+		err = add_link_hash(file, &ctx);
+		break;
+	case S_IFIFO: case S_IFSOCK:
+	case S_IFCHR: case S_IFBLK:
+		err = add_dev_hash(&st, &ctx);
 		break;
 	default:
 		log_errno("Unsupported file type");
