@@ -418,7 +418,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	log_info("generation: %u\n", generation);
 
 	list_size = llistxattr(file, list, sizeof(list));
-	if (list_size <= 0) {
+	if (list_size < 0) {
 		log_err("llistxattr() failed\n");
 		return -1;
 	}
