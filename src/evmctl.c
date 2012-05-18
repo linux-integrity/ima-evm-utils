@@ -1289,14 +1289,14 @@ int main(int argc, char *argv[])
 		err = call_command(cmds, argv[optind++]);
 
 	if (err) {
-		unsigned long err;
+		unsigned long error;
 		if (errno)
 			log_err("errno: %s (%d)\n", strerror(errno), errno);
 		for (;;) {
-			err = ERR_get_error();
-			if (!err)
+			error = ERR_get_error();
+			if (!error)
 				break;
-			log_err("%s\n", ERR_error_string(err, NULL));
+			log_err("%s\n", ERR_error_string(error, NULL));
 		}
 	}
 
