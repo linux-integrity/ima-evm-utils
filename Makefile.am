@@ -11,7 +11,6 @@ pkgname = $(PACKAGE_NAME)-$(PACKAGE_VERSION)
 tarname = $(pkgname).tar.gz
 
 $(tarname):
-	git tag v$(PACKAGE_VERSION)
 	git archive --format=tar --prefix=$(pkgname)/ v$(PACKAGE_VERSION) $(FILES) | gzip >$@
 
 tar: $(tarname)
