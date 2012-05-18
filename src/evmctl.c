@@ -390,7 +390,6 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	int fd, err;
 	uint32_t generation;
 	EVP_MD_CTX ctx;
-	const EVP_MD *md;
 	unsigned int mdlen;
 	char **xattrname;
 	char xattr_value[1024];
@@ -423,13 +422,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return -1;
 	}
 
-	md = EVP_get_digestbyname("sha1");
-	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
-		return 1;
-	}
-
-	err = EVP_DigestInit(&ctx, md);
+	err = EVP_DigestInit(&ctx, EVP_sha1());
 	if (!err) {
 		log_err("EVP_DigestInit() failed\n");
 		return 1;
