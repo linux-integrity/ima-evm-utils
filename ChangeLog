@@ -1,3 +1,16 @@
+2012-05-18  Dmitry Kasatkin  <dmitry.kasatkin@intel.com>
+
+	version 0.3
+	* llistxattr returns 0 if there are no xattrs and it is valid
+	* Added entry type to directory hash calculation
+	* inline block variable renamed
+	* Remove forced tag creation
+	* Use libexec for programs and scripts
+	* Some files updated
+	* Do not search for algorithm as it is known
+	* Refactored to remove redundant hash initialization code
+	* Added hash calculation for special files
+
 2012-04-05  Dmitry Kasatkin  <dmitry.kasatkin@intel.com>
 
 	version 0.2

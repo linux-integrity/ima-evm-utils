@@ -1,7 +1,7 @@
 # autoconf script
 
 AC_PREREQ([2.65])
-AC_INIT(ima-evm-utils, 0.2, dmitry.kasatkin@intel.com)
+AC_INIT(ima-evm-utils, 0.3, dmitry.kasatkin@intel.com)
 AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
