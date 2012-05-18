@@ -494,14 +494,11 @@ static int sign_evm(const char *file, const char *key)
 	return 0;
 }
 
-static int calc_file_hash(const char *file, uint8_t *hash)
+static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 {
-	EVP_MD_CTX ctx;
-	const EVP_MD *md;
 	uint8_t *data;
 	int err, size, bs = DATA_SIZE;
 	size_t len;
-	unsigned int mdlen;
 	FILE *fp;
 
 	data = malloc(bs);
@@ -516,18 +513,6 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 		return -1;
 	}
 
-	md = EVP_get_digestbyname(hash_algo);
-	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
-		return 1;
-	}
-
-	err = EVP_DigestInit(&ctx, md);
-	if (!err) {
-		log_err("EVP_DigestInit() failed\n");
-		return 1;
-	}
-
 	for (size = get_fdsize(fileno(fp)); size; size -= len) {
 		len = MIN(size, bs);
 		err = fread(data, len, 1, fp);
@@ -538,24 +523,17 @@ static int calc_file_hash(const char *file, uint8_t *hash)
 			}
 			break;
 		}
-		err = EVP_DigestUpdate(&ctx, data, len);
+		err = EVP_DigestUpdate(ctx, data, len);
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
 		}
 	}
 
-	err = EVP_DigestFinal(&ctx, hash, &mdlen);
-	if (!err) {
-		log_err("EVP_DigestFinal() failed\n");
-		return 1;
-	}
-
 	fclose(fp);
-
 	free(data);
 
-	return mdlen;
+	return 0;
 }
 
 struct dirent_list {
@@ -563,12 +541,9 @@ struct dirent_list {
 	struct dirent de;
 };
 
-static int calc_dir_hash(const char *file, uint8_t *hash)
+static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 {
-	EVP_MD_CTX ctx;
-	const EVP_MD *md;
 	int err;
-	unsigned int mdlen;
 	struct dirent *de;
 	DIR *dir;
 	struct dirent_list *head = NULL, *pos, *prev, *cur;
@@ -578,18 +553,6 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 	if (!dir) {
 		log_err("Unable to open %s\n", file);
 		return -1;
-	}
-
-	md = EVP_get_digestbyname(hash_algo);
-	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
-		return 1;
-	}
-
-	err = EVP_DigestInit(&ctx, md);
-	if (!err) {
-		log_err("EVP_DigestInit() failed\n");
-		return 1;
 	}
 
 	while ((de = readdir(dir))) {
@@ -611,17 +574,17 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		pos = cur->next;
 		ino = cur->de.d_ino;
 		log_debug("entry: ino: %llu, %s\n", (unsigned long long)ino, cur->de.d_name);
-		err = EVP_DigestUpdate(&ctx, cur->de.d_name, strlen(cur->de.d_name));
+		err = EVP_DigestUpdate(ctx, cur->de.d_name, strlen(cur->de.d_name));
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
 		}
-		err = EVP_DigestUpdate(&ctx, &ino, sizeof(ino));
+		err = EVP_DigestUpdate(ctx, &ino, sizeof(ino));
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
 		}
-		err = EVP_DigestUpdate(&ctx, &cur->de.d_type, sizeof(cur->de.d_type));
+		err = EVP_DigestUpdate(ctx, &cur->de.d_type, sizeof(cur->de.d_type));
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
@@ -629,22 +592,18 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 		free(cur);
 	}
 
-	err = EVP_DigestFinal(&ctx, hash, &mdlen);
-	if (!err) {
-		log_err("EVP_DigestFinal() failed\n");
-		return 1;
-	}
-
 	closedir(dir);
 
-	return mdlen;
+	return 0;
 }
 
-static int hash_ima(const char *file)
+static int calc_hash(const char *file, uint8_t *hash)
 {
-	unsigned char hash[65] = "\x01"; /* MAX hash size + 1 */
-	int len, err;
 	struct stat st;
+	EVP_MD_CTX ctx;
+	const EVP_MD *md;
+	unsigned int mdlen;
+	int err;
 
 	/*  Need to know the file length */
 	err = stat(file, &st);
@@ -653,10 +612,48 @@ static int hash_ima(const char *file)
 		return err;
 	}
 
-	if (S_ISDIR(st.st_mode))
-		len = calc_dir_hash(file, hash + 1);
-	else
-		len = calc_file_hash(file, hash + 1);
+	md = EVP_get_digestbyname(hash_algo);
+	if (!md) {
+		log_err("EVP_get_digestbyname() failed\n");
+		return 1;
+	}
+
+	err = EVP_DigestInit(&ctx, md);
+	if (!err) {
+		log_err("EVP_DigestInit() failed\n");
+		return 1;
+	}
+
+	switch (st.st_mode & S_IFMT) {
+	case S_IFREG:
+		err = add_file_hash(file, &ctx);
+		break;
+	case S_IFDIR:
+		err = add_dir_hash(file, &ctx);
+		break;
+	default:
+		log_errno("Unsupported file type");
+		return -1;
+	}
+
+	if (err)
+		return err;
+
+	err = EVP_DigestFinal(&ctx, hash, &mdlen);
+	if (!err) {
+		log_err("EVP_DigestFinal() failed\n");
+		return 1;
+	}
+
+	return mdlen;
+}
+
+static int hash_ima(const char *file)
+{
+	unsigned char hash[65] = "\x01"; /* MAX hash size + 1 */
+	int len, err;
+
+	len = calc_hash(file, hash + 1);
 	if (len <= 1)
 		return len;
 
@@ -696,7 +693,7 @@ static int sign_ima(const char *file, const char *key)
 	unsigned char sig[1024] = "\x03";
 	int len, err;
 
-	len = calc_file_hash(file, hash);
+	len = calc_hash(file, hash);
 	if (len <= 1)
 		return len;
 
