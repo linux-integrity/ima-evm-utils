@@ -628,6 +628,11 @@ static int calc_dir_hash(const char *file, uint8_t *hash)
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
 		}
+		err = EVP_DigestUpdate(&ctx, &cur->de.d_type, sizeof(cur->de.d_type));
+		if (!err) {
+			log_err("EVP_DigestUpdate() failed\n");
+			return 1;
+		}
 		free(cur);
 	}
 
