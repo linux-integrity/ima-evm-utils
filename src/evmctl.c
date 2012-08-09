@@ -151,6 +151,7 @@ static char *hash_algo = "sha1";
 static int binkey;
 static char *keypass;
 static int sigfile;
+static int modsig;
 
 struct command cmds[];
 static void print_usage(struct command *cmd);
@@ -721,6 +722,7 @@ static int sign_ima(const char *file, const char *key)
 {
 	unsigned char hash[64];
 	unsigned char sig[1024] = "\x03";
+	char magic[] = "This Is A Crypto Signed Module";
 	int len, err;
 
 	len = calc_hash(file, hash);
@@ -731,11 +733,24 @@ static int sign_ima(const char *file, const char *key)
 	if (len <= 1)
 		return len;
 
+	/* add header */
+	len++;
+
+	if (modsig) {
+		/* add signature length */
+		*(uint16_t *)(sig + len) = __cpu_to_be16(len - 1);
+		len += sizeof(uint16_t);
+		memcpy(sig + len, magic, sizeof(magic) - 1);
+		len += sizeof(magic) - 1;
+		bin2file(file, "sig", sig + 1, len - 1);
+		return 0;
+	}
+
 	if (sigfile)
-		bin2file(file, "sig", sig, len + 1);
+		bin2file(file, "sig", sig, len);
 
 	if (xattr) {
-		err = setxattr(file, "security.ima", sig, len + 1, 0);
+		err = setxattr(file, "security.ima", sig, len, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -1216,6 +1231,7 @@ static void usage(void)
 		"  -s, --imasig       also make IMA signature\n"
 		"  -d, --imahash      also make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
+		"  -m, --modsig       store module signature in .sig file instead of xattr\n"
 		"  -b, --bin          signing key is in binary format\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
@@ -1230,7 +1246,7 @@ struct command cmds[] = {
 	{"convert", cmd_convert, 0, "inkey outkey", "Convert PEM public key into IMA/EVM kernel friendly format.\n"},
 	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] [--pass password] file [key]", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
-	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--pass password] file [key]", "Make file content signature.\n"},
+	{"ima_sign", cmd_sign_ima, 0, "[--sigfile | --modsig] [--pass password] file [key]", "Make file content signature.\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
@@ -1246,6 +1262,7 @@ static struct option opts[] = {
 	{"bin", 0, 0, 'b'},
 	{"pass", 1, 0, 'p'},
 	{"sigfile", 0, 0, 'f'},
+	{"modsig", 0, 0, 'm'},
 	{}
 
 };
@@ -1292,6 +1309,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			sigfile = 1;
+			xattr = 0;
+			break;
+		case 'm':
+			modsig = 1;
+			xattr = 0;
 			break;
 		case '?':
 			exit(1);
