@@ -144,6 +144,7 @@ static int verbose = LOG_INFO - 1;
 static int g_argc;
 static char **g_argv;
 static int xattr = 1;
+static int sigdump;
 static int digest;
 static int digsig;
 static char *hash_algo = "sha1";
@@ -366,7 +367,7 @@ static int sign_hash(const unsigned char *hash, int size, const char *keyfile, u
 	*blen = __cpu_to_be16(len << 3);
 	len += sizeof(*hdr) + 2;
 	log_info("evm/ima signature: %d bytes\n", len);
-	if (!xattr || verbose >= LOG_INFO)
+	if (sigdump || verbose >= LOG_INFO)
 		dump(sig, len);
 
 	return len;
@@ -689,7 +690,7 @@ static int hash_ima(const char *file)
 	if (verbose >= LOG_INFO)
 		log_info("hash: ");
 
-	if (!xattr || verbose >= LOG_INFO)
+	if (sigdump || verbose >= LOG_INFO)
 		dump(hash, len + 1);
 
 	if (xattr) {
@@ -1278,6 +1279,7 @@ int main(int argc, char *argv[])
 		case 'n':
 			/* do not set Extended Attributes... just print signature */
 			xattr = 0;
+			sigdump = 1;
 			break;
 		case 'a':
 			hash_algo = optarg;
