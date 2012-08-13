@@ -210,16 +210,24 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 	return err;
 }
 
-static unsigned char *file2bin(const char *file, int *size)
+static unsigned char *file2bin(const char *file, const char *ext, int *size)
 {
 	FILE *fp;
 	int len;
 	unsigned char *data;
+	char name[strlen(file) + (ext ? strlen(ext) : 0) + 2];
 
-	len = get_filesize(file);
-	fp = fopen(file, "r");
+	if (ext)
+		sprintf(name, "%s.%s", file, ext);
+	else
+		sprintf(name, "%s", file);
+
+	log_info("Reading to %s\n", name);
+
+	len = get_filesize(name);
+	fp = fopen(name, "r");
 	if (!fp) {
-		log_err("Unable to open %s\n", file);
+		log_err("Unable to open %s\n", name);
 		return NULL;
 	}
 	data = malloc(len);
@@ -907,6 +915,56 @@ static int cmd_verify_evm(struct command *cmd)
 	return verify_evm(file, key);
 }
 
+static int verify_ima(const char *file, const char *key)
+{
+	unsigned char hash[20];
+	unsigned char sig[1024];
+	int len;
+
+	len = calc_hash(file, hash);
+	if (len <= 1)
+		return len;
+
+	if (xattr) {
+		len = getxattr(file, "security.ima", sig, sizeof(sig));
+		if (len < 0) {
+			log_err("getxattr failed\n");
+			return len;
+		}
+	}
+
+	if (sigfile) {
+		void *tmp;
+		tmp = file2bin(file, "sig", &len);
+		memcpy(sig, tmp, len);
+		free(tmp);
+	}
+
+	if (sig[0] != 0x03) {
+		log_err("security.ima has no signature\n");
+		return -1;
+	}
+
+	return verify_hash(hash, sizeof(hash), sig + 1, len - 1, key);
+}
+
+static int cmd_verify_ima(struct command *cmd)
+{
+	char *key, *file = g_argv[optind++];
+
+	if (!file) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	key = g_argv[optind++];
+	if (!key)
+		key = "/etc/keys/pubkey_evm.pem";
+
+	return verify_ima(file, key);
+}
+
 static int cmd_convert(struct command *cmd)
 {
 	char *inkey, *outkey = NULL;
@@ -960,7 +1018,7 @@ static int cmd_import(struct command *cmd)
 		id = atoi(ring);
 
 	if (binkey) {
-		key = file2bin(inkey, &len);
+		key = file2bin(inkey, NULL, &len);
 		if (!key)
 			return -1;
 	} else {
@@ -1005,7 +1063,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	char list[1024];
 	ssize_t list_size;
 
-	key = file2bin(keyfile, &keylen);
+	key = file2bin(keyfile, NULL, &keylen);
 	if (!key) {
 		log_err("Unable to read a key: %s\n\n", keyfile);
 		return -1;
@@ -1247,6 +1305,7 @@ struct command cmds[] = {
 	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] [--pass password] file [key]", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
 	{"ima_sign", cmd_sign_ima, 0, "[--sigfile | --modsig] [--pass password] file [key]", "Make file content signature.\n"},
+	{"ima_verify", cmd_verify_ima, 0, "file  [key]", "Verify IMA signature (for debugging).\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file [key]", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
