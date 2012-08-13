@@ -747,7 +747,7 @@ static int sign_ima(const char *file, const char *key)
 	}
 
 	if (sigfile)
-		bin2file(file, "sig", sig, len);
+		bin2file(file, "sig", sig + 1, len - 1);
 
 	if (xattr) {
 		err = setxattr(file, "security.ima", sig, len, 0);
