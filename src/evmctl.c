@@ -546,18 +546,13 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 	return 0;
 }
 
-struct dirent_list {
-	struct dirent_list *next;
-	struct dirent de;
-};
-
 static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 {
 	int err;
 	struct dirent *de;
 	DIR *dir;
-	struct dirent_list *head = NULL, *pos, *prev, *cur;
-	uint64_t ino;
+	unsigned long long ino, off;
+	unsigned int type;
 
 	dir = opendir(file);
 	if (!dir) {
@@ -566,40 +561,19 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 	}
 
 	while ((de = readdir(dir))) {
-		/*log_debug("entry: ino: %lu, %s\n", de->d_ino, de->d_name);*/
-		for (prev = NULL, pos = head; pos; prev = pos, pos = pos->next) {
-			if (de->d_ino < pos->de.d_ino)
-				break;
-		}
-		cur = malloc(sizeof(*cur));
-		cur->de = *de;
-		cur->next = pos;
-		if (!head || !prev)
-			head = cur;
-		else
-			prev->next = cur;
-	}
-
-	for (cur = head; cur; cur = pos) {
-		pos = cur->next;
-		ino = cur->de.d_ino;
-		log_debug("entry: ino: %llu, %s\n", (unsigned long long)ino, cur->de.d_name);
-		err = EVP_DigestUpdate(ctx, cur->de.d_name, strlen(cur->de.d_name));
+		ino = de->d_ino;
+		off = de->d_off;
+		type = de->d_type;
+		log_debug("entry: %s, ino: %llu, type: %u, off: %llu, reclen: %hu\n",
+			  de->d_name, ino, type, off, de->d_reclen);
+		err = EVP_DigestUpdate(ctx, de->d_name, strlen(de->d_name));
+		/*err |= EVP_DigestUpdate(ctx, &off, sizeof(off));*/
+		err |= EVP_DigestUpdate(ctx, &ino, sizeof(ino));
+		err |= EVP_DigestUpdate(ctx, &type, sizeof(type));
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
 		}
-		err = EVP_DigestUpdate(ctx, &ino, sizeof(ino));
-		if (!err) {
-			log_err("EVP_DigestUpdate() failed\n");
-			return 1;
-		}
-		err = EVP_DigestUpdate(ctx, &cur->de.d_type, sizeof(cur->de.d_type));
-		if (!err) {
-			log_err("EVP_DigestUpdate() failed\n");
-			return 1;
-		}
-		free(cur);
 	}
 
 	closedir(dir);
