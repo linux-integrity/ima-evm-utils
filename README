@@ -1,52 +1,79 @@
+ima-evm-utils - IMA/EVM signing utility
+=========================================
 
-1. Generate private key
+Contents:
 
-# plain key
-openssl genrsa -out privkey_evm.pem 1024
+   1. Key generation
+   2. Initialization
+   3. Signing
 
-# encrypted key
-openssl genrsa -des3 -out privkey_evm.pem 1024
 
-# set password for the key
-openssl rsa -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem -des3
-or
-openssl pkcs8 -topk8 -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem
+Key generation
+--------------
 
-2. Generate public key
+Generate private key in plain text format
 
-openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
+    $ openssl genrsa -out privkey_evm.pem 1024
 
-3. Copy public (+private if to sign on device) key to the device/qemu /etc/keys
+Generate encrypted private key
 
-scp pubkey_evm.pem mad:/etc/keys
+    $ openssl genrsa -des3 -out privkey_evm.pem 1024
 
-4. Load keys and enable EVM
+Make encrypted private key from unencrypted
 
-evm_enable.sh
+    $ openssl rsa -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem -des3
 
-This should be done at early phase, before mounting root filesystem.
+Get public key
 
-5. Sign EVM and use hash value for IMA - common case
+    $ openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
 
-evmctl sign --imahash test.txt
+Copy keys to /etc/keys
 
-6. Sign IMA and EVM - for immutable files and modules
+    $ cp pubkey_evm.pem /etc/keys
+    $ scp pubkey_evm.pem target:/etc/keys
 
-evmctl sign --imasig test.txt
 
-7. Sign whole filesystem
+Initialization
+--------------
 
-evm_sign_all.sh
-or
-find / \( -fstype rootfs -o -fstype ext3 -o -fstype ext4 \) ! -path "/lib/modules/*" -type f -uid 0 -exec evmctl sign --imahash '{}' \;
-find /lib/modules ! -name "*.ko" -type f -uid 0 -exec evmctl sign --imahash '{}' \;
-# security.ima needs to have signature for modules
-find /lib/modules -name "*.ko" -type f -uid 0 -exec evmctl sign --imasig '{}' \;
+IMA/EVM initialization should be normally done from initial RAM file system
+before mounting root filesystem.
 
-# generate signatures in .sig files
-find /lib/modules -name "*.ko" -type f -uid 0 -exec evmctl -n --sigfile ima_sign '{}' \;
+Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
 
-8. Label filesystem in fix mode...
+    # import EVM HMAC key
+    keyctl clear @u
+    keyctl add user kmk "testing123" @u
+    keyctl add encrypted evm-key "load `cat /etc/keys/evm-key`" @u
 
-ima_fix_dir.sh <dir>
+    # import IMA public key
+    ima_id=`keyctl newring _ima @u`
+    evmctl import /etc/keys/pubkey_evm.pem $ima_id
+
+    # import EVM public key
+    evm_id=`keyctl newring _evm @u`
+    evmctl import /etc/keys/pubkey_evm.pem $evm_id
+
+    # enable EVM
+    echo "1" > /sys/kernel/security/evm
+
+
+Signing
+-------
+
+Sign file with EVM signature and use hash value for IMA - common case
+
+    $ evmctl sign --imahash test.txt
+
+Sign file with both IMA and EVM signatures - for immutable files
+
+    $ evmctl sign --imasig test.txt
+
+Label whole filesystem with EVM signatures
+
+    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign --imahash '{}' \;
+
+Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs
+
+    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec sh -c "< '{}'" \;
 
