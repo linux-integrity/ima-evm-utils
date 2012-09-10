@@ -1,4 +1,4 @@
-SUBDIRS = src tests
+SUBDIRS = src
 
 #EXTRA_DIST = LEGAL acinclude.m4 include
 

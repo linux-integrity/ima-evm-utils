@@ -46,7 +46,6 @@ fi
 
 AC_CONFIG_FILES([Makefile
 		src/Makefile
-		tests/Makefile
 		ima-evm-utils.spec
 		])
 AC_OUTPUT
