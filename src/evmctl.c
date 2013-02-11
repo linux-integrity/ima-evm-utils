@@ -44,6 +44,7 @@
 #include <syslog.h>
 #include <attr/xattr.h>
 #include <dirent.h>
+#include <ctype.h>
 
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
@@ -152,6 +153,7 @@ static int binkey;
 static char *keypass;
 static int sigfile;
 static int modsig;
+static char *uuid_str;
 
 struct command cmds[];
 static void print_usage(struct command *cmd);
@@ -309,7 +311,7 @@ static void calc_keyid(uint8_t *keyid, char *str, const unsigned char *pkey, int
 
 	/* sha1[12 - 19] is exactly keyid from gpg file */
 	memcpy(keyid, sha1 + 12, 8);
-	log_debug("keyid:\n");
+	log_debug("keyid: ");
 	log_debug_dump(keyid, 8);
 
 	id = __be64_to_cpup((__be64 *) keyid);
@@ -394,6 +396,75 @@ static int find_xattr(const char *list, int list_size, const char *xattr)
 	return 0;
 }
 
+static int hex_to_bin(char ch)
+{
+	if ((ch >= '0') && (ch <= '9'))
+		return ch - '0';
+	ch = tolower(ch);
+	if ((ch >= 'a') && (ch <= 'f'))
+		return ch - 'a' + 10;
+	return -1;
+}
+
+static void pack_uuid(const char *uuid_str, char *to)
+{
+	int i;
+	for (i = 0; i < 16; ++i) {
+		*to++ = (hex_to_bin(*uuid_str) << 4) |
+			(hex_to_bin(*(uuid_str + 1)));
+		uuid_str += 2;
+		switch (i) {
+		case 3:
+		case 5:
+		case 7:
+		case 9:
+			uuid_str++;
+			continue;
+		}
+	}
+}
+
+static int get_uuid(struct stat *st, char *uuid)
+{
+	uint32_t dev;
+	unsigned minor, major;
+	char path[PATH_MAX], _uuid[37];
+	FILE *fp;
+	size_t len;
+
+	if (uuid_str[0] != '-') {
+		pack_uuid(uuid_str, uuid);
+		return 0;
+	}
+
+	dev = st->st_dev;
+	major = (dev & 0xfff00) >> 8;
+	minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
+
+	log_debug("dev: %u:%u\n", major, minor);
+	sprintf(path, "blkid -s UUID -o value /dev/block/%u:%u", major, minor);
+
+	fp = popen(path, "r");
+	if (!fp) {
+		log_err("popen() failed\n");
+		return -1;
+	}
+
+	len = fread(_uuid, 1, sizeof(_uuid), fp);
+	pclose(fp);
+	if (len != sizeof(_uuid)) {
+		log_err("fread() failed\n");
+		return -1;
+	}
+
+	pack_uuid(_uuid, uuid);
+
+	log_info("uuid: ");
+	log_dump(uuid, 16);
+
+	return 0;
+}
+
 static int calc_evm_hash(const char *file, unsigned char *hash)
 {
 	struct stat st;
@@ -405,6 +476,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	char xattr_value[1024];
 	char list[1024];
 	ssize_t list_size;
+	char uuid[16];
 
 	fd = open(file, 0);
 	if (fd < 0) {
@@ -470,6 +542,19 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		log_err("EVP_DigestUpdate() failed\n");
 		return 1;
 	}
+
+	if (uuid_str) {
+		err = get_uuid(&st, uuid);
+		if (err)
+			return -1;
+
+		err = EVP_DigestUpdate(&ctx, (const unsigned char *)uuid, sizeof(uuid));
+		if (!err) {
+			log_err("EVP_DigestUpdate() failed\n");
+			return 1;
+		}
+	}
+
 	err = EVP_DigestFinal(&ctx, hash, &mdlen);
 	if (!err) {
 		log_err("EVP_DigestFinal() failed\n");
@@ -1296,6 +1381,7 @@ static struct option opts[] = {
 	{"pass", 1, 0, 'p'},
 	{"sigfile", 0, 0, 'f'},
 	{"modsig", 0, 0, 'm'},
+	{"uuid", 1, 0, 'u'},
 	{}
 
 };
@@ -1308,7 +1394,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:bp:f", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:bp:fu:", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1347,6 +1433,9 @@ int main(int argc, char *argv[])
 		case 'm':
 			modsig = 1;
 			xattr = 0;
+			break;
+		case 'u':
+			uuid_str = optarg;
 			break;
 		case '?':
 			exit(1);

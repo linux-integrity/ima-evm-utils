@@ -3,10 +3,20 @@ ima-evm-utils - IMA/EVM signing utility
 
 Contents:
 
-   1. Key generation
-   2. Initialization
-   3. Signing
 
+   1. Key and signature formats
+   2. Key generation
+   3. Initialization
+   4. Signing
+
+
+Key and signature formats
+-------------------------
+
+EVM support (v2) in latest version of the kernel adds the file system UUID to
+the HMAC calculation. It is controlled by the CONFIG_EVM_HMAC_VERSION and
+version 2 is enabled by default. To include the UUID to the signature calculation,
+it is necessary to provide '--uuid -' or '-u -' parameter to the 'sign' command.
 
 Key generation
 --------------
@@ -61,17 +71,19 @@ Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
 Signing
 -------
 
+Signing for using new the EVM HMAC format is done using '-u -' or '--uuid -' parameter.
+
 Sign file with EVM signature and use hash value for IMA - common case
 
-    $ evmctl sign --imahash test.txt
+    $ evmctl sign [-u -] --imahash test.txt
 
 Sign file with both IMA and EVM signatures - for immutable files
 
-    $ evmctl sign --imasig test.txt
+    $ evmctl sign [-u -] --imasig test.txt
 
 Label whole filesystem with EVM signatures
 
-    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign --imahash '{}' \;
+    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u -] --imahash '{}' \;
 
 Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs
 
