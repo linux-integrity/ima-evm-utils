@@ -3,7 +3,6 @@ ima-evm-utils - IMA/EVM signing utility
 
 Contents:
 
-
    1. Key and signature formats
    2. Key generation
    3. Initialization
@@ -17,6 +16,12 @@ EVM support (v2) in latest version of the kernel adds the file system UUID to
 the HMAC calculation. It is controlled by the CONFIG_EVM_HMAC_VERSION and
 version 2 is enabled by default. To include the UUID to the signature calculation,
 it is necessary to provide '--uuid -' or '-u -' parameter to the 'sign' command.
+
+Latest kernel got IMA/EVM support for using X509 certificates and asymmetric key
+support for verifying digital signatures. The new command line parameter
+'-x' or '--x509' was added to the evmctl to enable using of X509 certificates
+and new signature format.
+
 
 Key generation
 --------------
@@ -33,6 +38,36 @@ Make encrypted private key from unencrypted
 
     $ openssl rsa -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem -des3
 
+Generate self-signed X509 certificate and private key for using kernel asymmetric
+keys support
+
+	$ openssl req -new -nodes -utf8 -sha1 -days 36500 -batch \
+	      -x509 -config x509_evm.genkey \
+	      -outform DER -out x509_evm.der -keyout privkey_evm.pem
+
+Configuration file x509_evm.genkey:
+
+	# Begining of the file
+	[ req ]
+	default_bits = 1024
+	distinguished_name = req_distinguished_name
+	prompt = no
+	string_mask = utf8only
+	x509_extensions = myexts
+
+	[ req_distinguished_name ]
+	O = Magrathea
+	CN = Glacier signing key
+	emailAddress = slartibartfast@magrathea.h2g2
+
+	[ myexts ]
+	basicConstraints=critical,CA:FALSE
+	keyUsage=digitalSignature
+	subjectKeyIdentifier=hash
+	authorityKeyIdentifier=keyid
+	# EOF
+
+
 Get public key
 
     $ openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
@@ -41,6 +76,10 @@ Copy keys to /etc/keys
 
     $ cp pubkey_evm.pem /etc/keys
     $ scp pubkey_evm.pem target:/etc/keys
+
+or
+    $ cp x509_evm.pem /etc/keys
+    $ scp x509_evm.pem target:/etc/keys
 
 
 Initialization
@@ -68,22 +107,37 @@ Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
     echo "1" > /sys/kernel/security/evm
 
 
+Import X509 certificate into the kernel keyring (since kernel 3.9?)
+
+    $ evmctl -x import /etc/keys/x509_evm.der `keyctl search @u keyring _ima`
+    $ evmctl -x import /etc/keys/x509_evm.der `keyctl search @u keyring _evm`
+
+
 Signing
 -------
 
+Default public key: /etc/keys/pubkey_evm.pem
+Default private key: /etc/keys/privkey_evm.pem
+Default X509 certificate: /etc/keys/x509_evm.der
+
+Signing for using X509 certificates is done using '-x' or '--x509' parameter.
 Signing for using new the EVM HMAC format is done using '-u -' or '--uuid -' parameter.
 
 Sign file with EVM signature and use hash value for IMA - common case
 
-    $ evmctl sign [-u -] --imahash test.txt
+    $ evmctl sign [-u -] [-x] --imahash test.txt
 
 Sign file with both IMA and EVM signatures - for immutable files
 
-    $ evmctl sign [-u -] --imasig test.txt
+    $ evmctl sign [-u -] [-x] --imasig test.txt
+
+Sign file with IMA signature - for immutable files
+
+    $ evmctl ima_sign [-x] test.txt
 
 Label whole filesystem with EVM signatures
 
-    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u -] --imahash '{}' \;
+    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u -] [-x] --imahash '{}' \;
 
 Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs
 
