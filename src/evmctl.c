@@ -1141,7 +1141,7 @@ static int verify_hash_v2(const unsigned char *hash, int size, unsigned char *si
 	if (!key)
 		return 1;
 
-	err = RSA_public_decrypt(siglen - sizeof(*hdr) - 2, sig + sizeof(*hdr) + 2, out, key, RSA_PKCS1_PADDING);
+	err = RSA_public_decrypt(siglen - sizeof(*hdr), sig + sizeof(*hdr), out, key, RSA_PKCS1_PADDING);
 	RSA_free(key);
 	if (err < 0) {
 		log_err("RSA_public_decrypt() failed: %d\n", err);
