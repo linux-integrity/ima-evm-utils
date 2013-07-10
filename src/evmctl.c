@@ -1232,7 +1232,8 @@ static int verify_ima(const char *file, const char *key)
 	if (sigfile) {
 		void *tmp;
 		tmp = file2bin(file, "sig", &len);
-		memcpy(sig, tmp, len);
+		sig[0] = 0x03;
+		memcpy(sig+1, tmp, len++);
 		free(tmp);
 	}
 
