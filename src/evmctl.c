@@ -1213,13 +1213,13 @@ static int cmd_verify_evm(struct command *cmd)
 
 static int verify_ima(const char *file, const char *key)
 {
-	unsigned char hash[20];
+	unsigned char hash[64];
 	unsigned char sig[1024];
-	int len;
+	int len, hashlen;
 
-	len = calc_hash(file, hash);
-	if (len <= 1)
-		return len;
+	hashlen = calc_hash(file, hash);
+	if (hashlen <= 1)
+		return hashlen;
 
 	if (xattr) {
 		len = getxattr(file, "security.ima", sig, sizeof(sig));
@@ -1242,7 +1242,7 @@ static int verify_ima(const char *file, const char *key)
 		return -1;
 	}
 
-	return verify_hash(hash, sizeof(hash), sig + 1, len - 1, key);
+	return verify_hash(hash, hashlen, sig + 1, len - 1, key);
 }
 
 static int cmd_verify_ima(struct command *cmd)
