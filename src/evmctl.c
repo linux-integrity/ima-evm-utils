@@ -244,7 +244,7 @@ static int xattr = 1;
 static int sigdump;
 static int digest;
 static int digsig;
-static char *hash_algo = "sha1";
+static const char *hash_algo = "sha1";
 static char *keypass;
 static int sigfile;
 static int modsig;
@@ -1228,15 +1228,39 @@ static int cmd_verify_evm(struct command *cmd)
 	return verify_evm(file, key);
 }
 
+static uint8_t get_hash_algo_from_sig(unsigned char *sig)
+{
+	uint8_t hashalgo;
+
+	if (sig[0] == 1) {
+		hashalgo = ((struct signature_hdr *)sig)->hash;
+
+		if (hashalgo >= DIGEST_ALGO_MAX)
+			return -1;
+
+		switch (hashalgo) {
+		case DIGEST_ALGO_SHA1:
+			return PKEY_HASH_SHA1;
+		case DIGEST_ALGO_SHA256:
+			return PKEY_HASH_SHA256;
+		default:
+			return -1;
+		}
+	} else if (sig[0] == 2) {
+		hashalgo = ((struct signature_v2_hdr *)sig)->hash_algo;
+		if (hashalgo >= PKEY_HASH__LAST)
+			return -1;
+		return hashalgo;
+	} else
+		return -1;
+}
+
 static int verify_ima(const char *file, const char *key)
 {
 	unsigned char hash[64];
 	unsigned char sig[1024];
 	int len, hashlen;
-
-	hashlen = calc_hash(file, hash);
-	if (hashlen <= 1)
-		return hashlen;
+	int sig_hash_algo;
 
 	if (xattr) {
 		len = getxattr(file, "security.ima", sig, sizeof(sig));
@@ -1258,6 +1282,19 @@ static int verify_ima(const char *file, const char *key)
 		log_err("security.ima has no signature\n");
 		return -1;
 	}
+
+	sig_hash_algo = get_hash_algo_from_sig(sig + 1);
+	if (sig_hash_algo < 0) {
+		log_err("Invalid signature\n");
+		return -1;
+	}
+
+	/* Use hash algorithm as retrieved from signature */
+	hash_algo = pkey_hash_algo[sig_hash_algo];
+
+	hashlen = calc_hash(file, hash);
+	if (hashlen <= 1)
+		return hashlen;
 
 	return verify_hash(hash, hashlen, sig + 1, len - 1, key);
 }
