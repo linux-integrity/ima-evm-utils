@@ -476,9 +476,20 @@ static RSA *read_priv_key(const char *keyfile)
 	return key;
 }
 
-static int sign_hash_v1(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+int get_hash_algo_v1(const char *algo)
 {
-	int err, len;
+
+	if (!strcmp(algo, "sha1"))
+		return DIGEST_ALGO_SHA1;
+	else if (!strcmp(algo, "sha256"))
+		return DIGEST_ALGO_SHA256;
+
+	return -1;
+}
+
+static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+{
+	int err, len, hashalgo_idx;
 	SHA_CTX ctx;
 	unsigned char pub[1024];
 	RSA *key;
@@ -498,7 +509,13 @@ static int sign_hash_v1(const char *algo, const unsigned char *hash, int size, c
 	hdr->version = 1;
 	hdr->timestamp = time(NULL);
 	hdr->algo = PUBKEY_ALGO_RSA;
-	hdr->hash = DIGEST_ALGO_SHA1;
+	hashalgo_idx = get_hash_algo_v1(hashalgo);
+	if (hashalgo_idx < 0) {
+		log_err("Signature version 1 does not support hash algo %s\n",
+			hashalgo);
+		return -1;
+	}
+	hdr->hash = (uint8_t) hashalgo_idx;
 
 	len = key2bin(key, pub);
 	calc_keyid_v1(hdr->keyid, name, pub, len);
