@@ -256,6 +256,7 @@ static int sigfile;
 static int modsig;
 static char *uuid_str;
 static int x509;
+static int user_sig_type;
 static char *keyfile;
 
 typedef int (*sign_hash_fn_t)(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig);
@@ -1306,6 +1307,17 @@ static int verify_ima(const char *file)
 	if (hashlen <= 1)
 		return hashlen;
 
+	/* Get signature type from sig header if user did not enforce it */
+	if (!user_sig_type) {
+		if (sig[1] == DIGSIG_VERSION_1)
+			verify_hash = verify_hash_v1;
+		else if (sig[1] == DIGSIG_VERSION_2) {
+			verify_hash = verify_hash_v2;
+			/* Read pubkey from x509 cert */
+			x509 = 1;
+		}
+	}
+
 	/* Determine what key to use for verification*/
 	key = keyfile ? : x509 ?
 			"/etc/keys/x509_evm.der" :
@@ -1719,6 +1731,7 @@ int main(int argc, char *argv[])
 			x509 = 1;
 			sign_hash = sign_hash_v2;
 			verify_hash = verify_hash_v2;
+			user_sig_type = 1;
 			break;
 		case 'k':
 			keyfile = optarg;
