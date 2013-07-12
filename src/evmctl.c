@@ -1044,7 +1044,7 @@ static int sign_ima(const char *file, const char *key)
 	}
 
 	if (sigfile)
-		bin2file(file, "sig", sig + 1, len - 1);
+		bin2file(file, "sig", sig, len);
 
 	if (xattr) {
 		err = setxattr(file, "security.ima", sig, len, 0);
@@ -1281,8 +1281,7 @@ static int verify_ima(const char *file)
 	if (sigfile) {
 		void *tmp;
 		tmp = file2bin(file, "sig", &len);
-		sig[0] = 0x03;
-		memcpy(sig+1, tmp, len++);
+		memcpy(sig, tmp, len);
 		free(tmp);
 	}
 
