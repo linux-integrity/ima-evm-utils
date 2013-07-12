@@ -108,6 +108,11 @@ enum digest_algo {
 	DIGEST_ALGO_MAX
 };
 
+enum digsig_version {
+	DIGSIG_VERSION_1 = 1,
+	DIGSIG_VERSION_2
+};
+
 struct pubkey_hdr {
 	uint8_t version;	/* key format version */
 	uint32_t timestamp;	/* key made, always 0 for now */
@@ -507,7 +512,7 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int siz
 		return -1;
 
 	/* now create a new hash */
-	hdr->version = 1;
+	hdr->version = (uint8_t) DIGSIG_VERSION_1;
 	hdr->timestamp = time(NULL);
 	hdr->algo = PUBKEY_ALGO_RSA;
 	hashalgo_idx = get_hash_algo_v1(hashalgo);
@@ -577,7 +582,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash, int size, c
 	if (!key)
 		return -1;
 
-	hdr->version = 2;
+	hdr->version = (uint8_t) DIGSIG_VERSION_2;
 	hdr->hash_algo = get_hash_algo(algo);
 
 	calc_keyid_v2(&hdr->keyid, name, key);
