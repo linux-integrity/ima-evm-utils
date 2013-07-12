@@ -245,6 +245,7 @@ static int sigdump;
 static int digest;
 static int digsig;
 static const char *hash_algo = "sha1";
+static int user_hash_algo;
 static char *keypass;
 static int sigfile;
 static int modsig;
@@ -1228,7 +1229,7 @@ static int cmd_verify_evm(struct command *cmd)
 	return verify_evm(file, key);
 }
 
-static uint8_t get_hash_algo_from_sig(unsigned char *sig)
+static int get_hash_algo_from_sig(unsigned char *sig)
 {
 	uint8_t hashalgo;
 
@@ -1283,14 +1284,17 @@ static int verify_ima(const char *file, const char *key)
 		return -1;
 	}
 
-	sig_hash_algo = get_hash_algo_from_sig(sig + 1);
-	if (sig_hash_algo < 0) {
-		log_err("Invalid signature\n");
-		return -1;
-	}
+	/* If user specified an hash algo on command line, let it override */
+	if (!user_hash_algo) {
+		sig_hash_algo = get_hash_algo_from_sig(sig + 1);
+		if (sig_hash_algo < 0) {
+			log_err("Invalid signature\n");
+			return -1;
+		}
 
-	/* Use hash algorithm as retrieved from signature */
-	hash_algo = pkey_hash_algo[sig_hash_algo];
+		/* Use hash algorithm as retrieved from signature */
+		hash_algo = pkey_hash_algo[sig_hash_algo];
+	}
 
 	hashlen = calc_hash(file, hash);
 	if (hashlen <= 1)
@@ -1688,6 +1692,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'a':
 			hash_algo = optarg;
+			user_hash_algo = 1;
 			break;
 		case 'p':
 			keypass = optarg;
