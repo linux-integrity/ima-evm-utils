@@ -1261,12 +1261,13 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 		return -1;
 }
 
-static int verify_ima(const char *file, const char *key)
+static int verify_ima(const char *file)
 {
 	unsigned char hash[64];
 	unsigned char sig[1024];
 	int len, hashlen;
 	int sig_hash_algo;
+	char *key;
 
 	if (xattr) {
 		len = getxattr(file, "security.ima", sig, sizeof(sig));
@@ -1305,12 +1306,17 @@ static int verify_ima(const char *file, const char *key)
 	if (hashlen <= 1)
 		return hashlen;
 
+	/* Determine what key to use for verification*/
+	key = keyfile ? : x509 ?
+			"/etc/keys/x509_evm.der" :
+			"/etc/keys/pubkey_evm.pem";
+
 	return verify_hash(hash, hashlen, sig + 1, len - 1, key);
 }
 
 static int cmd_verify_ima(struct command *cmd)
 {
-	char *key, *file = g_argv[optind++];
+	char *file = g_argv[optind++];
 
 	if (!file) {
 		log_err("Parameters missing\n");
@@ -1318,11 +1324,7 @@ static int cmd_verify_ima(struct command *cmd)
 		return -1;
 	}
 
-	key = keyfile ? : x509 ?
-			"/etc/keys/x509_evm.der" :
-			"/etc/keys/pubkey_evm.pem";
-
-	return verify_ima(file, key);
+	return verify_ima(file);
 }
 
 static int cmd_import(struct command *cmd)
