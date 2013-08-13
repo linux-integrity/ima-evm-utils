@@ -1090,12 +1090,6 @@ static int cmd_sign_evm(struct command *cmd)
 		return -1;
 	}
 
-	if (!digsig && !digest) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
-
 	key = keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
@@ -1539,12 +1533,6 @@ static int cmd_hmac_evm(struct command *cmd)
 	int err;
 
 	if (!file) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
-
-	if (!digsig && !digest) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return -1;
