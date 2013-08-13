@@ -636,10 +636,16 @@ static int hex_to_bin(char ch)
 	return -1;
 }
 
-static void pack_uuid(const char *uuid_str, char *to)
+static int pack_uuid(const char *uuid_str, char *uuid)
 {
 	int i;
+	char *to = uuid;
+
 	for (i = 0; i < 16; ++i) {
+		if (!uuid_str[0] || !uuid_str[1]) {
+			log_err("wrong UUID format\n");
+			return -1;
+		}
 		*to++ = (hex_to_bin(*uuid_str) << 4) |
 			(hex_to_bin(*(uuid_str + 1)));
 		uuid_str += 2;
@@ -648,10 +654,17 @@ static void pack_uuid(const char *uuid_str, char *to)
 		case 5:
 		case 7:
 		case 9:
+			if (*uuid_str != '-') {
+				log_err("wrong UUID format\n");
+				return -1;
+			}
 			uuid_str++;
 			continue;
 		}
 	}
+	log_info("uuid: ");
+	log_dump(uuid, 16);
+	return 0;
 }
 
 static int get_uuid(struct stat *st, char *uuid)
@@ -662,10 +675,8 @@ static int get_uuid(struct stat *st, char *uuid)
 	FILE *fp;
 	size_t len;
 
-	if (uuid_str[0] != '-') {
-		pack_uuid(uuid_str, uuid);
-		return 0;
-	}
+	if (uuid_str[0] != '-')
+		return pack_uuid(uuid_str, uuid);
 
 	dev = st->st_dev;
 	major = (dev & 0xfff00) >> 8;
@@ -687,12 +698,7 @@ static int get_uuid(struct stat *st, char *uuid)
 		return -1;
 	}
 
-	pack_uuid(_uuid, uuid);
-
-	log_info("uuid: ");
-	log_dump(uuid, 16);
-
-	return 0;
+	return pack_uuid(_uuid, uuid);
 }
 
 static int calc_evm_hash(const char *file, unsigned char *hash)
