@@ -1639,6 +1639,7 @@ static void usage(void)
 		"  -x, --x509         signing key is in x509 DER format (signing v2 for using asymmetric keys)\n"
 		"  -k, --key          path to signing key (default keys are /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"  -p, --pass         password for encrypted signing key\n"
+		"  -u, --uuid         use file system UUID in HMAC calculation (EVM v2)\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
@@ -1667,7 +1668,7 @@ static struct option opts[] = {
 	{"pass", 1, 0, 'p'},
 	{"sigfile", 0, 0, 'f'},
 	{"modsig", 0, 0, 'm'},
-	{"uuid", 1, 0, 'u'},
+	{"uuid", 2, 0, 'u'},
 	{"x509", 0, 0, 'x'},
 	{"key", 1, 0, 'k'},
 	{}
@@ -1685,7 +1686,7 @@ int main(int argc, char *argv[])
 	verify_hash = verify_hash_v1;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p:fu:xk:", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1724,7 +1725,7 @@ int main(int argc, char *argv[])
 			xattr = 0;
 			break;
 		case 'u':
-			uuid_str = optarg;
+			uuid_str = optarg ?: "-";
 			break;
 		case 'x':
 			x509 = 1;

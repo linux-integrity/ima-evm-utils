@@ -15,7 +15,8 @@ Key and signature formats
 EVM support (v2) in latest version of the kernel adds the file system UUID to
 the HMAC calculation. It is controlled by the CONFIG_EVM_HMAC_VERSION and
 version 2 is enabled by default. To include the UUID to the signature calculation,
-it is necessary to provide '--uuid -' or '-u -' parameter to the 'sign' command.
+it is necessary to provide '--uuid' or '-u' parameter to the 'sign' command.
+UUID can be provided on command line in form of '-uUUID' or '--uuid=UUID'.
 
 Latest kernel got IMA/EVM support for using X509 certificates and asymmetric key
 support for verifying digital signatures. The new command line parameter
@@ -121,15 +122,15 @@ Default private key: /etc/keys/privkey_evm.pem
 Default X509 certificate: /etc/keys/x509_evm.der
 
 Signing for using X509 certificates is done using '-x' or '--x509' parameter.
-Signing for using new the EVM HMAC format is done using '-u -' or '--uuid -' parameter.
+Signing for using new the EVM HMAC format is done using '-u' or '--uuid' parameter.
 
 Sign file with EVM signature and use hash value for IMA - common case
 
-    $ evmctl sign [-u -] [-x] --imahash test.txt
+    $ evmctl sign [-u] [-x] --imahash test.txt
 
 Sign file with both IMA and EVM signatures - for immutable files
 
-    $ evmctl sign [-u -] [-x] --imasig test.txt
+    $ evmctl sign [-u] [-x] --imasig test.txt
 
 Sign file with IMA signature - for immutable files
 
@@ -137,7 +138,7 @@ Sign file with IMA signature - for immutable files
 
 Label whole filesystem with EVM signatures
 
-    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u -] [-x] --imahash '{}' \;
+    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u] [-x] --imahash '{}' \;
 
 Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs
 
