@@ -1342,10 +1342,10 @@ static int cmd_import(struct command *cmd)
 {
 	char *inkey, *ring = NULL;
 	unsigned char _pub[1024], *pub = _pub;
-	int id, len, err = -1;
+	int id, len, err = 0;
 	char name[20];
 	uint8_t keyid[8];
-	RSA *key = NULL;
+	RSA *key;
 
 	inkey = g_argv[optind++];
 	if (!inkey) {
@@ -1361,7 +1361,7 @@ static int cmd_import(struct command *cmd)
 
 	key = read_pub_key(inkey);
 	if (!key)
-		goto out;
+		return 1;
 
 	if (x509) {
 		pub = file2bin(inkey, NULL, &len);
@@ -1378,19 +1378,15 @@ static int cmd_import(struct command *cmd)
 	id = add_key(x509 ? "asymmetric" : "user", x509 ? NULL : name, pub, len, id);
 	if (id < 0) {
 		log_err("add_key failed\n");
-		goto out;
+		err = id;
+	} else {
+		log_info("keyid: %d\n", id);
+		printf("%d\n", id);
 	}
-
-	log_info("keyid: %d\n", id);
-	printf("%d\n", id);
-
-	err = 0;
-out:
-	if (key)
-		RSA_free(key);
 	if (x509)
 		free(pub);
-
+out:
+	RSA_free(key);
 	return err;
 }
 
