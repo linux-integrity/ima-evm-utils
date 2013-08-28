@@ -496,7 +496,7 @@ int get_hash_algo_v1(const char *algo)
 
 static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
 {
-	int err, len, hashalgo_idx;
+	int len = -1, hashalgo_idx;
 	SHA_CTX ctx;
 	unsigned char pub[1024];
 	RSA *key;
@@ -520,7 +520,7 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int siz
 	if (hashalgo_idx < 0) {
 		log_err("Signature version 1 does not support hash algo %s\n",
 			hashalgo);
-		return -1;
+		goto out;
 	}
 	hdr->hash = (uint8_t) hashalgo_idx;
 
@@ -536,14 +536,11 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int siz
 	log_info("sighash: ");
 	log_dump(sighash, sizeof(sighash));
 
-	err = RSA_private_encrypt(sizeof(sighash), sighash, sig + sizeof(*hdr) + 2, key, RSA_PKCS1_PADDING);
-	RSA_free(key);
-	if (err < 0) {
-		log_err("RSA_private_encrypt() failed: %d\n", err);
-		return 1;
+	len = RSA_private_encrypt(sizeof(sighash), sighash, sig + sizeof(*hdr) + 2, key, RSA_PKCS1_PADDING);
+	if (len < 0) {
+		log_err("RSA_private_encrypt() failed: %d\n", len);
+		goto out;
 	}
-
-	len = err;
 
 	/* we add bit length of the signature to make it gnupg compatible */
 	blen = (uint16_t *) (sig + sizeof(*hdr));
@@ -552,7 +549,8 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int siz
 	log_info("evm/ima signature: %d bytes\n", len);
 	if (sigdump || verbose >= LOG_INFO)
 		dump(sig, len);
-
+out:
+	RSA_free(key);
 	return len;
 }
 
@@ -570,7 +568,7 @@ uint8_t get_hash_algo(const char *algo)
 static int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
 {
 	struct signature_v2_hdr *hdr = (struct signature_v2_hdr *)sig;
-	int len;
+	int len = -1;
 	RSA *key;
 	char name[20];
 	unsigned char *buf;
@@ -592,16 +590,15 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash, int size, c
 
 	buf = malloc(size + asn1->size);
 	if (!buf)
-		return -1;
+		goto out;
 
 	memcpy(buf, asn1->data, asn1->size);
 	memcpy(buf + asn1->size, hash, size);
 	len = RSA_private_encrypt(size + asn1->size, buf, hdr->sig,
 				  key, RSA_PKCS1_PADDING);
-	RSA_free(key);
 	if (len < 0) {
 		log_err("RSA_private_encrypt() failed: %d\n", len);
-		return -1;
+		goto out;
 	}
 
 	/* we add bit length of the signature to make it gnupg compatible */
@@ -610,7 +607,10 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash, int size, c
 	log_info("evm/ima signature: %d bytes\n", len);
 	if (sigdump || verbose >= LOG_INFO)
 		dump(sig, len);
-
+out:
+	if (buf)
+		free(buf);
+	RSA_free(key);
 	return len;
 }
 
@@ -1395,7 +1395,7 @@ out:
 static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *hash)
 {
 	struct stat st;
-	int fd, err;
+	int fd, err = -1;
 	uint32_t generation;
 	HMAC_CTX ctx;
 	unsigned int mdlen;
@@ -1415,7 +1415,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	if (keylen > sizeof(evmkey)) {
 		log_err("key is too long\n");
-		return -1;
+		goto out;
 	}
 
 	/* EVM key is 128 bytes */
@@ -1425,17 +1425,17 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	fd = open(file, 0);
 	if (fd < 0) {
 		log_err("Unable to open %s\n", file);
-		return -1;
+		goto out;
 	}
 
 	if (fstat(fd, &st)) {
 		log_err("fstat() failed\n");
-		return -1;
+		goto out;
 	}
 
 	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
 		log_err("ioctl() failed\n");
-		return -1;
+		goto out;
 	}
 
 	close(fd);
@@ -1445,13 +1445,13 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	list_size = llistxattr(file, list, sizeof(list));
 	if (list_size <= 0) {
 		log_err("llistxattr() failed\n");
-		return -1;
+		goto out;
 	}
 
-	err = HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
-	if (!err) {
+	err = !HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
+	if (err) {
 		log_err("HMAC_Init() failed\n");
-		return 1;
+		goto out;
 	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
@@ -1467,10 +1467,10 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
-		err = HMAC_Update(&ctx, xattr_value, err);
-		if (!err) {
+		err = !HMAC_Update(&ctx, xattr_value, err);
+		if (err) {
 			log_err("HMAC_Update() failed\n");
-			return 1;
+			goto out_ctx_cleanup;
 		}
 	}
 
@@ -1481,21 +1481,19 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	hmac_misc.gid = st.st_gid;
 	hmac_misc.mode = st.st_mode;
 
-	err = HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
-	if (!err) {
+	err = !HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
+	if (err) {
 		log_err("HMAC_Update() failed\n");
-		return 1;
+		goto out_ctx_cleanup;
 	}
-	err = HMAC_Final(&ctx, hash, &mdlen);
-	if (!err) {
+	err = !HMAC_Final(&ctx, hash, &mdlen);
+	if (err)
 		log_err("HMAC_Final() failed\n");
-		return 1;
-	}
+out_ctx_cleanup:
 	HMAC_CTX_cleanup(&ctx);
-
+out:
 	free(key);
-
-	return mdlen;
+	return err ?: mdlen;
 }
 
 static int hmac_evm(const char *file, const char *key)
