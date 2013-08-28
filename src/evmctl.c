@@ -1,12 +1,14 @@
 /*
- * evm-utils - IMA/EVM support utilities
+ * ima-evm-utils - IMA/EVM support utilities
  *
  * Copyright (C) 2011 Nokia Corporation
  * Copyright (C) 2011,2012,2013 Intel Corporation
+ * Copyright (C) 2013 Samsung Electronics
  *
  * Authors:
  * Dmitry Kasatkin <dmitry.kasatkin@nokia.com>
  *                 <dmitry.kasatkin@intel.com>
+ *                 <d.kasatkin@samsung.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License

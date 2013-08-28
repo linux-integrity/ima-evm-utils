@@ -1,3 +1,13 @@
+2013-08-28  Dmitry Kasatkin <d.kasatkin@samsung.com>
+
+	version 0.6
+	* support for asymmetric crypto keys and new signature format (v2)
+	* fixes to set correct hash algo for digital signature v1
+	* uuid support for EVM
+	* signature verification support
+	* test scripts removed
+	* README updates
+
 2012-05-18  Dmitry Kasatkin  <dmitry.kasatkin@intel.com>
 
 	version 0.3
