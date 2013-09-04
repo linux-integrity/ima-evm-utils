@@ -3,7 +3,7 @@ Version:	@PACKAGE_VERSION@
 Release:	1%{?dist}
 Summary:	@PACKAGE_NAME@ - IMA/EVM control utility
 Group:		System/Libraries
-License:	LGPLv2
+License:	GPLv2
 #URL:		
 Source0:	%{name}-%{version}.tar.gz
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
