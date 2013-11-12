@@ -92,6 +92,8 @@
 #define FS_IOC32_GETFLAGS	_IOR('f', 1, int)
 #define FS_IOC32_SETFLAGS	_IOW('f', 2, int)
 
+#define __packed __attribute__((packed))
+
 struct h_misc {
 	unsigned long ino;
 	uint32_t generation;
@@ -122,7 +124,7 @@ struct pubkey_hdr {
 	uint8_t algo;
 	uint8_t nmpi;
 	char mpi[0];
-} __attribute__ ((packed));
+} __packed;
 
 struct signature_hdr {
 	uint8_t version;	/* signature format version */
@@ -132,7 +134,7 @@ struct signature_hdr {
 	uint8_t keyid[8];
 	uint8_t nmpi;
 	char mpi[0];
-} __attribute__ ((packed));
+} __packed;
 
 enum pkey_hash_algo {
 	PKEY_HASH_MD4,
@@ -166,7 +168,7 @@ struct signature_v2_hdr {
 	uint32_t keyid;		/* IMA key identifier - not X509/PGP specific*/
 	uint16_t sig_size;	/* signature size */
 	uint8_t sig[0];		/* signature payload */
-} __attribute__ ((packed));
+} __packed;
 
 
 /*
