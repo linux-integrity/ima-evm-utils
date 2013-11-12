@@ -45,6 +45,7 @@
 #include <attr/xattr.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
@@ -59,7 +60,7 @@
 
 #ifdef USE_FPRINTF
 #define do_log(level, fmt, args...)	({ if (level <= verbose) fprintf(stderr, fmt, ##args); })
-#define do_log_dump(level, p, len)	({ if (level <= verbose) do_dump(stderr, p, len); })
+#define do_log_dump(level, p, len, cr)	({ if (level <= verbose) do_dump(stderr, p, len, cr); })
 #else
 #define do_log(level, fmt, args...)	syslog(level, fmt, ##args)
 #define do_log_dump(p, len)
@@ -67,13 +68,15 @@
 
 #ifdef DEBUG
 #define log_debug(fmt, args...)		do_log(LOG_DEBUG, "%s:%d " fmt, __func__ , __LINE__ , ##args)
-#define log_debug_dump(p, len)		do_log_dump(LOG_DEBUG, p, len)
+#define log_debug_dump(p, len)		do_log_dump(LOG_DEBUG, p, len, true)
+#define log_debug_dump_n(p, len)	do_log_dump(LOG_DEBUG, p, len, false)
 #else
 #define log_debug(fmt, args...)
 #define log_debug_dump(p, len)
 #endif
 
-#define log_dump(p, len)		do_log_dump(LOG_INFO, p, len)
+#define log_dump(p, len)		do_log_dump(LOG_INFO, p, len, true)
+#define log_dump_n(p, len)		do_log_dump(LOG_INFO, p, len, false)
 #define log_info(fmt, args...)		do_log(LOG_INFO, fmt, ##args)
 #define log_err(fmt, args...)		do_log(LOG_ERR, fmt, ##args)
 #define log_errno(fmt, args...)		do_log(LOG_ERR, fmt ": errno: %s (%d)\n", ##args, strerror(errno), errno)
@@ -270,19 +273,20 @@ static verify_hash_fn_t verify_hash;
 struct command cmds[];
 static void print_usage(struct command *cmd);
 
-static void do_dump(FILE *fp, const void *ptr, int len)
+static void do_dump(FILE *fp, const void *ptr, int len, bool cr)
 {
 	int i;
 	uint8_t *data = (uint8_t *) ptr;
 
 	for (i = 0; i < len; i++)
 		fprintf(fp, "%02x", data[i]);
-	fprintf(fp, "\n");
+	if (cr)
+		fprintf(fp, "\n");
 }
 
 static void dump(const void *ptr, int len)
 {
-	do_dump(stdout, ptr, len);
+	do_dump(stdout, ptr, len, true);
 }
 
 static inline int get_filesize(const char *filename)
