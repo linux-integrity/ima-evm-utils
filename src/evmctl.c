@@ -642,6 +642,25 @@ static int hex_to_bin(char ch)
 	return -1;
 }
 
+static int hex2bin(uint8_t *dst, const char *src, size_t count)
+{
+	int hi, lo;
+
+	while (count--) {
+		if (*src == ' ')
+			src++;
+
+		hi = hex_to_bin(*src++);
+		lo = hex_to_bin(*src++);
+
+		if ((hi < 0) || (lo < 0))
+			return -1;
+
+		*dst++ = (hi << 4) | lo;
+	}
+	return 0;
+}
+
 static int pack_uuid(const char *uuid_str, char *uuid)
 {
 	int i;
@@ -1561,6 +1580,241 @@ static int cmd_hmac_evm(struct command *cmd)
 	return hmac_evm(file, "/etc/keys/evm-key-plain");
 }
 
+static char *pcrs = "/sys/class/misc/tpm0/device/pcrs";
+
+static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
+{
+	FILE *fp;
+	char *p, pcr_str[7], buf[70]; /* length of the TPM string */
+
+	sprintf(pcr_str, "PCR-%d", idx);
+
+	fp = fopen(pcrs, "r");
+	if (!fp) {
+		log_err("Unable to open %s\n", pcrs);
+		return -1;
+	}
+
+	for (;;) {
+		p = fgets(buf, sizeof(buf), fp);
+		if (!p)
+			break;
+		if (!strncmp(p, pcr_str, 6)) {
+			hex2bin(pcr, p + 7, len);
+			return 0;
+		}
+	}
+	fclose(fp);
+	return -1;
+}
+
+#define TCG_EVENT_NAME_LEN_MAX	255
+
+struct template_entry {
+	struct {
+		uint32_t pcr;
+		uint8_t digest[SHA_DIGEST_LENGTH];
+		uint32_t name_len;
+	} header  __packed;
+	char name[TCG_EVENT_NAME_LEN_MAX + 1];
+	int template_len;
+	uint8_t *template;
+	int template_buf_len;
+};
+
+static uint8_t zero[SHA_DIGEST_LENGTH];
+static uint8_t fox[SHA_DIGEST_LENGTH];
+
+int validate = 1;
+
+void ima_extend_pcr(uint8_t *pcr, uint8_t *digest, int length)
+{
+	SHA_CTX ctx;
+
+	SHA1_Init(&ctx);
+	SHA1_Update(&ctx, pcr, length);
+	if (validate && !memcmp(digest, zero, length))
+		SHA1_Update(&ctx, fox, length);
+	else
+		SHA1_Update(&ctx, digest, length);
+	SHA1_Final(pcr, &ctx);
+}
+
+static int ima_verify_tamplate_hash(struct template_entry *entry)
+{
+	uint8_t digest[SHA_DIGEST_LENGTH];
+
+	if (!memcmp(zero, entry->header.digest, sizeof(zero)))
+		return 0;
+
+	SHA1(entry->template, entry->template_len, digest);
+
+	if (memcmp(digest, entry->header.digest, sizeof(digest))) {
+		log_err("template hash error\n");
+		return 1;
+	}
+
+	return 0;
+}
+
+void ima_show(struct template_entry *entry)
+{
+	log_debug("ima, digest: ");
+	log_debug_dump(entry->header.digest, sizeof(entry->header.digest));
+}
+
+void ima_ng_show(struct template_entry *entry)
+{
+	uint8_t *fieldp = entry->template;
+	uint32_t field_len;
+	int total_len = entry->template_len, digest_len, len, sig_len;
+	uint8_t *digest, *sig = NULL;
+	char *algo, *path;
+
+	/* get binary digest */
+	field_len = *(uint8_t *)fieldp;
+	fieldp += sizeof(field_len);
+	total_len -= sizeof(field_len);
+
+	algo = (char *)fieldp;
+	len = strlen(algo) + 1;
+	digest_len = field_len - len;
+	digest = fieldp + len;
+
+	/* move to next field */
+	fieldp += field_len;
+	total_len -= field_len;
+
+	/* get path */
+	field_len = *(uint8_t *)fieldp;
+	fieldp += sizeof(field_len);
+	total_len -= sizeof(field_len);
+
+	path = (char *)fieldp;
+
+	/* move to next field */
+	fieldp += field_len;
+	total_len -= field_len;
+
+	if (!strcmp(entry->name, "ima-sig")) {
+		/* get signature */
+		field_len = *(uint8_t *)fieldp;
+		fieldp += sizeof(field_len);
+		total_len -= sizeof(field_len);
+
+		if (field_len) {
+			sig = fieldp;
+			sig_len = field_len;
+
+			/* move to next field */
+			fieldp += field_len;
+			total_len -= field_len;
+		}
+	}
+
+	/* ascii_runtime_measurements */
+	log_info("%d ", entry->header.pcr);
+	log_dump_n(entry->header.digest, sizeof(entry->header.digest));
+	log_info(" %s %s", entry->name, algo);
+	log_dump_n(digest, digest_len);
+	log_info(" %s", path);
+
+	if (sig) {
+		log_info(" ");
+		log_dump(sig, sig_len);
+		verify_signature(path, sig, sig_len);
+	} else
+		log_info("\n");
+
+	if (total_len)
+		log_err("Remain unprocessed data: %d\n", total_len);
+}
+
+static int ima_measurement(const char *file)
+{
+	uint8_t pcr[SHA_DIGEST_LENGTH] = {0,};
+	uint8_t pcr10[SHA_DIGEST_LENGTH];
+	struct template_entry entry = { .template = 0 };
+	FILE *fp;
+	int err;
+
+	memset(fox, 0xff, SHA_DIGEST_LENGTH);
+
+	log_debug("Initial PCR value: ");
+	log_debug_dump(pcr, sizeof(pcr));
+
+	fp = fopen(file, "rb");
+	if (!fp) {
+		log_err("Unable to open measurement file\n");
+		return -1;
+	}
+
+	while ((err = fread(&entry.header, sizeof(entry.header), 1, fp))) {
+		ima_extend_pcr(pcr, entry.header.digest, SHA_DIGEST_LENGTH);
+
+		if (!fread(entry.name, entry.header.name_len, 1, fp)) {
+			log_err("Unable to read template name\n");
+			return -1;
+		}
+
+		entry.name[entry.header.name_len] = '\0';
+
+		if (!fread(&entry.template_len, sizeof(entry.template_len), 1, fp)) {
+			log_err("Unable to read template length\n");
+			return -1;
+		}
+
+		if (entry.template_buf_len < entry.template_len) {
+			free(entry.template);
+			entry.template_buf_len = entry.template_len;
+			entry.template = malloc(entry.template_len);
+		}
+
+		if (!fread(entry.template, entry.template_len, 1, fp)) {
+			log_err("Unable to read template\n");
+			return -1;
+		}
+
+		if (validate)
+			ima_verify_tamplate_hash(&entry);
+
+		if (!strcmp(entry.name, "ima"))
+			ima_show(&entry);
+		else
+			ima_ng_show(&entry);
+	}
+
+	fclose(fp);
+
+	tpm_pcr_read(10, pcr10, sizeof(pcr10));
+
+	log_info("PCRAgg: ");
+	log_dump(pcr, sizeof(pcr));
+
+	log_info("PCR-10: ");
+	log_dump(pcr10, sizeof(pcr10));
+
+	if (memcmp(pcr, pcr10, sizeof(pcr))) {
+		log_err("PCRAgg does not match PCR-10\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int cmd_ima_measurement(struct command *cmd)
+{
+	char *file = g_argv[optind++];
+
+	if (!file) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	return ima_measurement(file);
+}
+
 static void print_usage(struct command *cmd)
 {
 	printf("usage: %s %s\n", cmd->name, cmd->arg ? cmd->arg : "");
@@ -1654,6 +1908,7 @@ struct command cmds[] = {
 	{"ima_sign", cmd_sign_ima, 0, "[--sigfile | --modsig] [--key key] [--pass password] file", "Make file content signature.\n"},
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
