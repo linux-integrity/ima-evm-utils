@@ -1262,28 +1262,11 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 		return -1;
 }
 
-static int verify_ima(const char *file)
+static int verify_signature(const char *file, unsigned char *sig, int siglen)
 {
 	unsigned char hash[64];
-	unsigned char sig[1024];
-	int len, hashlen;
-	int sig_hash_algo;
+	int hashlen, sig_hash_algo;
 	char *key;
-
-	if (xattr) {
-		len = getxattr(file, "security.ima", sig, sizeof(sig));
-		if (len < 0) {
-			log_err("getxattr failed\n");
-			return len;
-		}
-	}
-
-	if (sigfile) {
-		void *tmp;
-		tmp = file2bin(file, "sig", &len);
-		memcpy(sig, tmp, len);
-		free(tmp);
-	}
 
 	if (sig[0] != 0x03) {
 		log_err("security.ima has no signature\n");
@@ -1322,7 +1305,30 @@ static int verify_ima(const char *file)
 			"/etc/keys/x509_evm.der" :
 			"/etc/keys/pubkey_evm.pem";
 
-	return verify_hash(hash, hashlen, sig + 1, len - 1, key);
+	return verify_hash(hash, hashlen, sig + 1, siglen - 1, key);
+}
+
+static int verify_ima(const char *file)
+{
+	unsigned char sig[1024];
+	int len;
+
+	if (xattr) {
+		len = getxattr(file, "security.ima", sig, sizeof(sig));
+		if (len < 0) {
+			log_err("getxattr failed\n");
+			return len;
+		}
+	}
+
+	if (sigfile) {
+		void *tmp;
+		tmp = file2bin(file, "sig", &len);
+		memcpy(sig, tmp, len);
+		free(tmp);
+	}
+
+	return verify_signature(file, sig, len);
 }
 
 static int cmd_verify_ima(struct command *cmd)
