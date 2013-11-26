@@ -49,7 +49,7 @@ fi
 
 AC_CONFIG_FILES([Makefile
 		src/Makefile
-		ima-evm-utils.spec
+		packaging/ima-evm-utils.spec
 		])
 AC_OUTPUT
 
