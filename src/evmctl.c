@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2011 Nokia Corporation
  * Copyright (C) 2011,2012,2013 Intel Corporation
- * Copyright (C) 2013 Samsung Electronics
+ * Copyright (C) 2013,2014 Samsung Electronics
  *
  * Authors:
  * Dmitry Kasatkin <dmitry.kasatkin@nokia.com>
@@ -263,6 +263,7 @@ static char *uuid_str;
 static int x509;
 static int user_sig_type;
 static char *keyfile;
+static char *de_type;
 
 typedef int (*sign_hash_fn_t)(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig);
 
@@ -1580,6 +1581,154 @@ static int cmd_hmac_evm(struct command *cmd)
 	return hmac_evm(file, "/etc/keys/evm-key-plain");
 }
 
+typedef int (*find_cb_t)(const char *path);
+
+static int ima_fix(const char *path)
+{
+	int fd, size, len, ima = 0, evm = 0;
+	char buf[1024], *list = buf;
+
+	log_info("%s\n", path);
+
+	if (xattr) {
+		/* re-measuring takes a time
+		 * in some cases we can skip labeling if xattrs exists
+		 */
+		size = llistxattr(path, list, sizeof(buf));
+		if (size < 0) {
+			log_errno("llistxattr() failed: %s\n", path);
+			return -1;
+		}
+		for (; size > 0; len++, size -= len, list += len) {
+			len = strlen(list);
+			if (!strcmp(list, "security.ima"))
+				ima = 1;
+			else if (!strcmp(list, "security.evm"))
+				evm = 1;
+		}
+		if (ima && evm)
+			return 0;
+	}
+
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		log_errno("%s open failed", path);
+		return -1;
+	}
+
+	close(fd);
+
+	return 0;
+}
+
+#define REG_MASK	(1 << DT_REG)
+#define DIR_MASK	(1 << DT_DIR)
+#define LNK_MASK	(1 << DT_LNK)
+#define CHR_MASK	(1 << DT_CHR)
+#define BLK_MASK	(1 << DT_BLK)
+
+static dev_t fs_dev;
+
+static int find(const char *path, int dts, find_cb_t func)
+{
+	struct dirent *de;
+	DIR *dir;
+
+	if (fs_dev) {
+		struct stat st;
+		int err = lstat(path, &st);
+		if (err < 0) {
+			log_err("stat() failed\n");
+			return err;
+		}
+		if (st.st_dev != fs_dev)
+			return 0;
+	}
+
+	dir = opendir(path);
+	if (!dir) {
+		log_err("Unable to open %s\n", path);
+		return -1;
+	}
+
+	if (fchdir(dirfd(dir))) {
+		log_err("Unable to chdir %s\n", path);
+		return -1;
+	}
+
+	while ((de = readdir(dir))) {
+		if (!strcmp(de->d_name, "..") || !strcmp(de->d_name, "."))
+			continue;
+		log_debug("path: %s, type: %u\n", de->d_name, de->d_type);
+		if (de->d_type == DT_DIR)
+			find(de->d_name, dts, func);
+		else if (dts & (1 << de->d_type))
+			func(de->d_name);
+	}
+
+	if (chdir("..")) {
+		log_err("Unable to chdir %s\n", path);
+		return -1;
+	}
+
+	if (dts & DIR_MASK)
+		func(path);
+
+	closedir(dir);
+
+	return 0;
+}
+
+static int cmd_ima_fix(struct command *cmd)
+{
+	char *path = g_argv[optind++];
+	int err, dts = REG_MASK; /* only regular files by default */
+	struct stat st;
+
+	if (!path) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	xattr = 0; /* do not check xattrs, fix everything */
+
+	if (de_type) {
+		int i;
+
+		dts = 0;
+		for (i = 0; de_type[i]; i++) {
+			switch (de_type[i]) {
+			case 'f':
+				dts |= REG_MASK; break;
+			case 'd':
+				dts |= DIR_MASK; break;
+			case 's':
+				dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
+			case 'x':
+				/* check xattrs */
+				xattr = 1; break;
+			case 'm':
+				/* stay within the same filesystem*/
+				err = lstat(path, &st);
+				if (err < 0) {
+					log_err("stat() failed\n");
+					return err;
+				}
+				fs_dev = st.st_dev; /* filesystem to start from */
+				break;
+			}
+		}
+	}
+
+	err = find(path, dts, ima_fix);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+
 static char *pcrs = "/sys/class/misc/tpm0/device/pcrs";
 
 static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
@@ -1894,6 +2043,9 @@ static void usage(void)
 		"  -k, --key          path to signing key (default keys are /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -u, --uuid         use file system UUID in HMAC calculation (EVM v2)\n"
+		"  -t, --type         file types to fix 'fdsxm' (f - file, d - directory, s - block/char/symlink)\n"
+		"                     x - skip fixing if both ima and evm xattrs exist (caution: they may be wrong)\n"
+		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
@@ -1909,6 +2061,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
+	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
@@ -1926,6 +2079,7 @@ static struct option opts[] = {
 	{"uuid", 2, 0, 'u'},
 	{"x509", 0, 0, 'x'},
 	{"key", 1, 0, 'k'},
+	{"type", 1, 0, 't'},
 	{}
 
 };
@@ -1941,7 +2095,7 @@ int main(int argc, char *argv[])
 	verify_hash = verify_hash_v1;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1990,6 +2144,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'k':
 			keyfile = optarg;
+			break;
+		case 't':
+			de_type = optarg;
 			break;
 		case '?':
 			exit(1);
