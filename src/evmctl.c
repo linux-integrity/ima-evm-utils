@@ -773,7 +773,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
-		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
+		err = lgetxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
 		if (err < 0) {
 			log_info("no xattr: %s\n", *xattrname);
 			continue;
@@ -1230,7 +1230,7 @@ static int verify_evm(const char *file, const char *key)
 	if (len <= 1)
 		return len;
 
-	len = getxattr(file, "security.evm", sig, sizeof(sig));
+	len = lgetxattr(file, "security.evm", sig, sizeof(sig));
 	if (len < 0) {
 		log_err("getxattr failed\n");
 		return len;
@@ -1340,7 +1340,7 @@ static int verify_ima(const char *file)
 	int len;
 
 	if (xattr) {
-		len = getxattr(file, "security.ima", sig, sizeof(sig));
+		len = lgetxattr(file, "security.ima", sig, sizeof(sig));
 		if (len < 0) {
 			log_err("getxattr failed\n");
 			return len;
@@ -1487,7 +1487,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
-		err = getxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
+		err = lgetxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
 		if (err < 0) {
 			log_info("no xattr: %s\n", *xattrname);
 			continue;
