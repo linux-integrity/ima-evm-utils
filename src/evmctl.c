@@ -264,6 +264,16 @@ static int x509;
 static int user_sig_type;
 static char *keyfile;
 static char *de_type;
+static dev_t fs_dev;
+
+typedef int (*find_cb_t)(const char *path);
+static int find(const char *path, int dts, find_cb_t func);
+
+#define REG_MASK	(1 << DT_REG)
+#define DIR_MASK	(1 << DT_DIR)
+#define LNK_MASK	(1 << DT_LNK)
+#define CHR_MASK	(1 << DT_CHR)
+#define BLK_MASK	(1 << DT_BLK)
 
 typedef int (*sign_hash_fn_t)(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig);
 
@@ -1585,8 +1595,6 @@ static int cmd_hmac_evm(struct command *cmd)
 	return hmac_evm(file, "/etc/keys/evm-key-plain");
 }
 
-typedef int (*find_cb_t)(const char *path);
-
 static int ima_fix(const char *path)
 {
 	int fd, size, len, ima = 0, evm = 0;
@@ -1624,14 +1632,6 @@ static int ima_fix(const char *path)
 
 	return 0;
 }
-
-#define REG_MASK	(1 << DT_REG)
-#define DIR_MASK	(1 << DT_DIR)
-#define LNK_MASK	(1 << DT_LNK)
-#define CHR_MASK	(1 << DT_CHR)
-#define BLK_MASK	(1 << DT_BLK)
-
-static dev_t fs_dev;
 
 static int find(const char *path, int dts, find_cb_t func)
 {
