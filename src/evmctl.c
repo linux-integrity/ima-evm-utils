@@ -841,7 +841,7 @@ static int sign_evm(const char *file, const char *key)
 		return len;
 
 	if (xattr) {
-		err = setxattr(file, "security.evm", sig, len + 1, 0);
+		err = lsetxattr(file, "security.evm", sig, len + 1, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -1024,7 +1024,7 @@ static int hash_ima(const char *file)
 		dump(hash, len + 1);
 
 	if (xattr) {
-		err = setxattr(file, "security.ima", hash, len + 1, 0);
+		err = lsetxattr(file, "security.ima", hash, len + 1, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -1079,7 +1079,7 @@ static int sign_ima(const char *file, const char *key)
 		bin2file(file, "sig", sig, len);
 
 	if (xattr) {
-		err = setxattr(file, "security.ima", sig, len, 0);
+		err = lsetxattr(file, "security.ima", sig, len, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -1543,7 +1543,7 @@ static int hmac_evm(const char *file, const char *key)
 	memcpy(sig + 1, hash, len);
 
 	if (xattr) {
-		err = setxattr(file, "security.evm", sig, len + 1, 0);
+		err = lsetxattr(file, "security.evm", sig, len + 1, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
