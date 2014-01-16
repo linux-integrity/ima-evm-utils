@@ -264,6 +264,7 @@ static int x509;
 static int user_sig_type;
 static char *keyfile;
 static char *de_type;
+static int recursive;
 static dev_t fs_dev;
 
 typedef int (*find_cb_t)(const char *path);
@@ -1117,16 +1118,10 @@ static int cmd_sign_ima(struct command *cmd)
 
 }
 
-static int cmd_sign_evm(struct command *cmd)
+static int sign_evm_path(const char *file)
 {
-	char *key, *file = g_argv[optind++];
+	char *key;
 	int err;
-
-	if (!file) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
 
 	key = keyfile ? : "/etc/keys/privkey_evm.pem";
 
@@ -1143,6 +1138,52 @@ static int cmd_sign_evm(struct command *cmd)
 	}
 
 	return sign_evm(file, key);
+}
+
+static int cmd_sign_evm(struct command *cmd)
+{
+	char *path = g_argv[optind++];
+	int err, dts = REG_MASK; /* only regular files by default */
+	struct stat st;
+
+	if (!path) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	if (recursive) {
+		if (de_type) {
+			int i;
+
+			dts = 0;
+			for (i = 0; de_type[i]; i++) {
+				switch (de_type[i]) {
+				case 'f':
+					dts |= REG_MASK; break;
+				case 'd':
+					dts |= DIR_MASK; break;
+				case 's':
+					dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
+				case 'm':
+					/* stay within the same filesystem*/
+					err = lstat(path, &st);
+					if (err < 0) {
+						log_err("stat() failed\n");
+						return err;
+					}
+					fs_dev = st.st_dev; /* filesystem to start from */
+					break;
+				}
+			}
+		}
+
+		err = find(path, dts, sign_evm_path);
+	} else {
+		err = sign_evm_path(path);
+	}
+
+	return err;
 }
 
 static int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile)
@@ -2051,6 +2092,7 @@ static void usage(void)
 		"                     x - skip fixing if both ima and evm xattrs exist (caution: they may be wrong)\n"
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
+		"  -r, --recursive    recurse into directories (sign)\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
@@ -2059,7 +2101,7 @@ static void usage(void)
 struct command cmds[] = {
 	{"help", cmd_help, 0, "<command>"},
 	{"import", cmd_import, 0, "[--x509] pubkey keyring", "Import public key into the keyring.\n"},
-	{"sign", cmd_sign_evm, 0, "[--imahash | --imasig ] [--key key] [--pass password] file", "Sign file metadata.\n"},
+	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass password] file", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
 	{"ima_sign", cmd_sign_ima, 0, "[--sigfile | --modsig] [--key key] [--pass password] file", "Make file content signature.\n"},
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
@@ -2084,6 +2126,7 @@ static struct option opts[] = {
 	{"x509", 0, 0, 'x'},
 	{"key", 1, 0, 'k'},
 	{"type", 1, 0, 't'},
+	{"recursive", 0, 0, 'r'},
 	{}
 
 };
@@ -2099,7 +2142,7 @@ int main(int argc, char *argv[])
 	verify_hash = verify_hash_v1;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:r", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -2151,6 +2194,9 @@ int main(int argc, char *argv[])
 			break;
 		case 't':
 			de_type = optarg;
+			break;
+		case 'r':
+			recursive = 1;
 			break;
 		case '?':
 			exit(1);
