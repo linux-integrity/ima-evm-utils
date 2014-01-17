@@ -1102,6 +1102,34 @@ static int sign_ima(const char *file, const char *key)
 	return 0;
 }
 
+static int get_file_type(const char *path, const char *search_type)
+{
+	int err, dts = 0, i;
+	struct stat st;
+
+	for (i = 0; search_type[i]; i++) {
+		switch (search_type[i]) {
+		case 'f':
+			dts |= REG_MASK; break;
+		case 'd':
+			dts |= DIR_MASK; break;
+		case 's':
+			dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
+		case 'm':
+			/* stay within the same filesystem*/
+			err = lstat(path, &st);
+			if (err < 0) {
+				log_err("stat() failed\n");
+				return err;
+			}
+			fs_dev = st.st_dev; /* filesystem to start from */
+			break;
+		}
+	}
+
+	return dts;
+}
+
 static int cmd_sign_ima(struct command *cmd)
 {
 	char *key, *file = g_argv[optind++];
@@ -1144,7 +1172,6 @@ static int cmd_sign_evm(struct command *cmd)
 {
 	char *path = g_argv[optind++];
 	int err, dts = REG_MASK; /* only regular files by default */
-	struct stat st;
 
 	if (!path) {
 		log_err("Parameters missing\n");
@@ -1154,30 +1181,10 @@ static int cmd_sign_evm(struct command *cmd)
 
 	if (recursive) {
 		if (de_type) {
-			int i;
-
-			dts = 0;
-			for (i = 0; de_type[i]; i++) {
-				switch (de_type[i]) {
-				case 'f':
-					dts |= REG_MASK; break;
-				case 'd':
-					dts |= DIR_MASK; break;
-				case 's':
-					dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
-				case 'm':
-					/* stay within the same filesystem*/
-					err = lstat(path, &st);
-					if (err < 0) {
-						log_err("stat() failed\n");
-						return err;
-					}
-					fs_dev = st.st_dev; /* filesystem to start from */
-					break;
-				}
-			}
+			dts = get_file_type(path, de_type);
+			if (dts < 0)
+				return dts;
 		}
-
 		err = find(path, dts, sign_evm_path);
 	} else {
 		err = sign_evm_path(path);
