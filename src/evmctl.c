@@ -1130,9 +1130,19 @@ static int get_file_type(const char *path, const char *search_type)
 	return dts;
 }
 
+static int sign_ima_file(const char *file)
+{
+	char *key;
+
+	key = keyfile ? : "/etc/keys/privkey_evm.pem";
+
+	return sign_ima(file, key);
+}
+
 static int cmd_sign_ima(struct command *cmd)
 {
-	char *key, *file = g_argv[optind++];
+	char *file = g_argv[optind++];
+	int err, dts = REG_MASK; /* only regular files by default */
 
 	if (!file) {
 		log_err("Parameters missing\n");
@@ -1140,10 +1150,18 @@ static int cmd_sign_ima(struct command *cmd)
 		return -1;
 	}
 
-	key = keyfile ? : "/etc/keys/privkey_evm.pem";
+	if (recursive) {
+		if (search_type) {
+			dts = get_file_type(file, search_type);
+			if (dts < 0)
+				return dts;
+		}
+		err = find(file, dts, sign_ima_file);
+	} else {
+		err = sign_ima_file(file);
+	}
 
-	return sign_ima(file, key);
-
+	return err;
 }
 
 static int sign_evm_path(const char *file)
