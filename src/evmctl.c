@@ -263,7 +263,7 @@ static char *uuid_str;
 static int x509;
 static int user_sig_type;
 static char *keyfile;
-static char *de_type;
+static char *search_type;
 static int recursive;
 static dev_t fs_dev;
 
@@ -1180,8 +1180,8 @@ static int cmd_sign_evm(struct command *cmd)
 	}
 
 	if (recursive) {
-		if (de_type) {
-			dts = get_file_type(path, de_type);
+		if (search_type) {
+			dts = get_file_type(path, search_type);
 			if (dts < 0)
 				return dts;
 		}
@@ -1745,12 +1745,12 @@ static int cmd_ima_fix(struct command *cmd)
 
 	xattr = 0; /* do not check xattrs, fix everything */
 
-	if (de_type) {
+	if (search_type) {
 		int i;
 
 		dts = 0;
-		for (i = 0; de_type[i]; i++) {
-			switch (de_type[i]) {
+		for (i = 0; search_type[i]; i++) {
+			switch (search_type[i]) {
 			case 'f':
 				dts |= REG_MASK; break;
 			case 'd':
@@ -2200,7 +2200,7 @@ int main(int argc, char *argv[])
 			keyfile = optarg;
 			break;
 		case 't':
-			de_type = optarg;
+			search_type = optarg;
 			break;
 		case 'r':
 			recursive = 1;
