@@ -1429,8 +1429,8 @@ out:
 static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *hash)
 {
 	struct stat st;
-	int fd, err = -1;
-	uint32_t generation;
+	int err = -1;
+	uint32_t generation = 0;
 	HMAC_CTX ctx;
 	unsigned int mdlen;
 	char **xattrname;
@@ -1456,23 +1456,25 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	memcpy(evmkey, key, keylen);
 	memset(evmkey + keylen, 0, sizeof(evmkey) - keylen);
 
-	fd = open(file, 0);
-	if (fd < 0) {
-		log_err("Unable to open %s\n", file);
+	if (lstat(file, &st)) {
+		log_err("lstat() failed\n");
 		goto out;
 	}
 
-	if (fstat(fd, &st)) {
-		log_err("fstat() failed\n");
-		goto out;
+	if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) {
+		/* we cannot at the momement to get generation of special files..
+		 * kernel API does not support it */
+		int fd = open(file, 0);
+		if (fd < 0) {
+			log_err("Unable to open %s\n", file);
+			goto out;
+		}
+		if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
+			log_err("ioctl() failed\n");
+			goto out;
+		}
+		close(fd);
 	}
-
-	if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
-		log_err("ioctl() failed\n");
-		goto out;
-	}
-
-	close(fd);
 
 	log_info("generation: %u\n", generation);
 
