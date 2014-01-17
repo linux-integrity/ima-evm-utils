@@ -2,7 +2,7 @@
 
 AC_PREREQ([2.65])
 AC_INIT(ima-evm-utils, 0.6, d.kasatkin@samsung.com)
-AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
+AM_INIT_AUTOMAKE
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
  
