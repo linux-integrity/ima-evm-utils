@@ -41,195 +41,11 @@
 #include <signal.h>
 #include <keyutils.h>
 #include <asm/byteorder.h>
-#include <syslog.h>
-#include <attr/xattr.h>
-#include <dirent.h>
 #include <ctype.h>
-#include <stdbool.h>
-
-#include <openssl/sha.h>
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/hmac.h>
-#include <openssl/engine.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
-#include <openssl/x509.h>
 
 #define USE_FPRINTF
 
-#ifdef USE_FPRINTF
-#define do_log(level, fmt, args...)	({ if (level <= verbose) fprintf(stderr, fmt, ##args); })
-#define do_log_dump(level, p, len, cr)	({ if (level <= verbose) do_dump(stderr, p, len, cr); })
-#else
-#define do_log(level, fmt, args...)	syslog(level, fmt, ##args)
-#define do_log_dump(p, len)
-#endif
-
-#ifdef DEBUG
-#define log_debug(fmt, args...)		do_log(LOG_DEBUG, "%s:%d " fmt, __func__ , __LINE__ , ##args)
-#define log_debug_dump(p, len)		do_log_dump(LOG_DEBUG, p, len, true)
-#define log_debug_dump_n(p, len)	do_log_dump(LOG_DEBUG, p, len, false)
-#else
-#define log_debug(fmt, args...)
-#define log_debug_dump(p, len)
-#endif
-
-#define log_dump(p, len)		do_log_dump(LOG_INFO, p, len, true)
-#define log_dump_n(p, len)		do_log_dump(LOG_INFO, p, len, false)
-#define log_info(fmt, args...)		do_log(LOG_INFO, fmt, ##args)
-#define log_err(fmt, args...)		do_log(LOG_ERR, fmt, ##args)
-#define log_errno(fmt, args...)		do_log(LOG_ERR, fmt ": errno: %s (%d)\n", ##args, strerror(errno), errno)
-
-#define	DATA_SIZE	4096
-#define SHA1_HASH_LEN   20
-
-#define	EXT2_IOC_GETVERSION	_IOR('v', 1, long)
-#define	EXT34_IOC_GETVERSION	_IOR('f', 3, long)
-
-#define	FS_IOC_GETFLAGS		_IOR('f', 1, long)
-#define	FS_IOC_SETFLAGS		_IOW('f', 2, long)
-#define FS_IOC32_GETFLAGS	_IOR('f', 1, int)
-#define FS_IOC32_SETFLAGS	_IOW('f', 2, int)
-
-#define __packed __attribute__((packed))
-
-struct h_misc {
-	unsigned long ino;
-	uint32_t generation;
-	uid_t uid;
-	gid_t gid;
-	unsigned short mode;
-} hmac_misc;
-
-enum pubkey_algo {
-	PUBKEY_ALGO_RSA,
-	PUBKEY_ALGO_MAX,
-};
-
-enum digest_algo {
-	DIGEST_ALGO_SHA1,
-	DIGEST_ALGO_SHA256,
-	DIGEST_ALGO_MAX
-};
-
-enum digsig_version {
-	DIGSIG_VERSION_1 = 1,
-	DIGSIG_VERSION_2
-};
-
-struct pubkey_hdr {
-	uint8_t version;	/* key format version */
-	uint32_t timestamp;	/* key made, always 0 for now */
-	uint8_t algo;
-	uint8_t nmpi;
-	char mpi[0];
-} __packed;
-
-struct signature_hdr {
-	uint8_t version;	/* signature format version */
-	uint32_t timestamp;	/* signature made */
-	uint8_t algo;
-	uint8_t hash;
-	uint8_t keyid[8];
-	uint8_t nmpi;
-	char mpi[0];
-} __packed;
-
-enum pkey_hash_algo {
-	PKEY_HASH_MD4,
-	PKEY_HASH_MD5,
-	PKEY_HASH_SHA1,
-	PKEY_HASH_RIPE_MD_160,
-	PKEY_HASH_SHA256,
-	PKEY_HASH_SHA384,
-	PKEY_HASH_SHA512,
-	PKEY_HASH_SHA224,
-	PKEY_HASH__LAST
-};
-
-const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
-	[PKEY_HASH_MD4]		= "md4",
-	[PKEY_HASH_MD5]		= "md5",
-	[PKEY_HASH_SHA1]	= "sha1",
-	[PKEY_HASH_RIPE_MD_160]	= "rmd160",
-	[PKEY_HASH_SHA256]	= "sha256",
-	[PKEY_HASH_SHA384]	= "sha384",
-	[PKEY_HASH_SHA512]	= "sha512",
-	[PKEY_HASH_SHA224]	= "sha224",
-};
-
-/*
- * signature format v2 - for using with asymmetric keys
- */
-struct signature_v2_hdr {
-	uint8_t version;	/* signature format version */
-	uint8_t	hash_algo;	/* Digest algorithm [enum pkey_hash_algo] */
-	uint32_t keyid;		/* IMA key identifier - not X509/PGP specific*/
-	uint16_t sig_size;	/* signature size */
-	uint8_t sig[0];		/* signature payload */
-} __packed;
-
-
-/*
- * Hash algorithm OIDs plus ASN.1 DER wrappings [RFC4880 sec 5.2.2].
- */
-static const uint8_t RSA_digest_info_MD5[] = {
-	0x30, 0x20, 0x30, 0x0C, 0x06, 0x08,
-	0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x02, 0x05, /* OID */
-	0x05, 0x00, 0x04, 0x10
-};
-
-static const uint8_t RSA_digest_info_SHA1[] = {
-	0x30, 0x21, 0x30, 0x09, 0x06, 0x05,
-	0x2B, 0x0E, 0x03, 0x02, 0x1A,
-	0x05, 0x00, 0x04, 0x14
-};
-
-static const uint8_t RSA_digest_info_RIPE_MD_160[] = {
-	0x30, 0x21, 0x30, 0x09, 0x06, 0x05,
-	0x2B, 0x24, 0x03, 0x02, 0x01,
-	0x05, 0x00, 0x04, 0x14
-};
-
-static const uint8_t RSA_digest_info_SHA224[] = {
-	0x30, 0x2d, 0x30, 0x0d, 0x06, 0x09,
-	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04,
-	0x05, 0x00, 0x04, 0x1C
-};
-
-static const uint8_t RSA_digest_info_SHA256[] = {
-	0x30, 0x31, 0x30, 0x0d, 0x06, 0x09,
-	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
-	0x05, 0x00, 0x04, 0x20
-};
-
-static const uint8_t RSA_digest_info_SHA384[] = {
-	0x30, 0x41, 0x30, 0x0d, 0x06, 0x09,
-	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02,
-	0x05, 0x00, 0x04, 0x30
-};
-
-static const uint8_t RSA_digest_info_SHA512[] = {
-	0x30, 0x51, 0x30, 0x0d, 0x06, 0x09,
-	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03,
-	0x05, 0x00, 0x04, 0x40
-};
-
-static const struct RSA_ASN1_template {
-	const uint8_t *data;
-	size_t size;
-} RSA_ASN1_templates[PKEY_HASH__LAST] = {
-#define _(X) { RSA_digest_info_##X, sizeof(RSA_digest_info_##X) }
-	[PKEY_HASH_MD5]		= _(MD5),
-	[PKEY_HASH_SHA1]	= _(SHA1),
-	[PKEY_HASH_RIPE_MD_160]	= _(RIPE_MD_160),
-	[PKEY_HASH_SHA256]	= _(SHA256),
-	[PKEY_HASH_SHA384]	= _(SHA384),
-	[PKEY_HASH_SHA512]	= _(SHA512),
-	[PKEY_HASH_SHA224]	= _(SHA224),
-#undef _
-};
+#include <libevm.h>
 
 static char *evm_config_xattrnames[] = {
 	"security.selinux",
@@ -247,22 +63,16 @@ struct command {
 	char *msg;		/* extra info message */
 };
 
-static int verbose = LOG_INFO - 1;
 static int g_argc;
 static char **g_argv;
 static int xattr = 1;
 static int sigdump;
 static int digest;
 static int digsig;
-static const char *hash_algo = "sha1";
-static int user_hash_algo;
 static char *keypass;
 static int sigfile;
 static int modsig;
 static char *uuid_str;
-static int x509;
-static int user_sig_type;
-static char *keyfile;
 static char *search_type;
 static int recursive;
 static dev_t fs_dev;
@@ -280,44 +90,8 @@ typedef int (*sign_hash_fn_t)(const char *algo, const unsigned char *hash, int s
 
 static sign_hash_fn_t sign_hash;
 
-typedef int (*verify_hash_fn_t)(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile);
-
-static verify_hash_fn_t verify_hash;
-
 struct command cmds[];
 static void print_usage(struct command *cmd);
-
-static void do_dump(FILE *fp, const void *ptr, int len, bool cr)
-{
-	int i;
-	uint8_t *data = (uint8_t *) ptr;
-
-	for (i = 0; i < len; i++)
-		fprintf(fp, "%02x", data[i]);
-	if (cr)
-		fprintf(fp, "\n");
-}
-
-static void dump(const void *ptr, int len)
-{
-	do_dump(stdout, ptr, len, true);
-}
-
-static inline int get_filesize(const char *filename)
-{
-	struct stat stats;
-	/*  Need to know the file length */
-	stat(filename, &stats);
-	return (int)stats.st_size;
-}
-
-static inline int get_fdsize(int fd)
-{
-	struct stat stats;
-	/*  Need to know the file length */
-	fstat(fd, &stats);
-	return (int)stats.st_size;
-}
 
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
 {
@@ -404,47 +178,6 @@ static int key2bin(RSA *key, unsigned char *pub)
 	return offset;
 }
 
-static RSA *read_pub_key(const char *keyfile)
-{
-	FILE *fp;
-	RSA *key = NULL;
-	X509 *crt = NULL;
-	EVP_PKEY *pkey = NULL;
-
-	fp = fopen(keyfile, "r");
-	if (!fp) {
-		log_err("Unable to open keyfile %s\n", keyfile);
-		return NULL;
-	}
-
-	if (x509) {
-		crt = d2i_X509_fp(fp, NULL);
-		if (!crt) {
-			log_err("d2i_X509_fp() failed\n");
-			goto out;
-		}
-		pkey = X509_extract_key(crt);
-		if (!pkey) {
-			log_err("X509_extract_key() failed\n");
-			goto out;
-		}
-		key = EVP_PKEY_get1_RSA(pkey);
-	} else {
-		key = PEM_read_RSA_PUBKEY(fp, NULL, NULL, NULL);
-	}
-
-	if (!key)
-		log_err("PEM_read_RSA_PUBKEY() failed\n");
-
-out:
-	if (pkey)
-		EVP_PKEY_free(pkey);
-	if (crt)
-		X509_free(crt);
-	fclose(fp);
-	return key;
-}
-
 static void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len)
 {
 	uint8_t sha1[SHA_DIGEST_LENGTH];
@@ -501,7 +234,7 @@ static RSA *read_priv_key(const char *keyfile)
 	return key;
 }
 
-int get_hash_algo_v1(const char *algo)
+static int get_hash_algo_v1(const char *algo)
 {
 
 	if (!strcmp(algo, "sha1"))
@@ -565,22 +298,11 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int siz
 	*blen = __cpu_to_be16(len << 3);
 	len += sizeof(*hdr) + 2;
 	log_info("evm/ima signature: %d bytes\n", len);
-	if (sigdump || verbose >= LOG_INFO)
+	if (sigdump || params.verbose >= LOG_INFO)
 		dump(sig, len);
 out:
 	RSA_free(key);
 	return len;
-}
-
-uint8_t get_hash_algo(const char *algo)
-{
-	int i;
-
-	for (i = 0; i < PKEY_HASH__LAST; i++)
-		if (!strcmp(algo, pkey_hash_algo[i]))
-			return i;
-
-	return PKEY_HASH_SHA1;
 }
 
 static int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
@@ -623,7 +345,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash, int size, c
 	hdr->sig_size = __cpu_to_be16(len);
 	len += sizeof(*hdr);
 	log_info("evm/ima signature: %d bytes\n", len);
-	if (sigdump || verbose >= LOG_INFO)
+	if (sigdump || params.verbose >= LOG_INFO)
 		dump(sig, len);
 out:
 	if (buf)
@@ -864,176 +586,19 @@ static int sign_evm(const char *file, const char *key)
 	return 0;
 }
 
-static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
-{
-	uint8_t *data;
-	int err, size, bs = DATA_SIZE;
-	size_t len;
-	FILE *fp;
-
-	data = malloc(bs);
-	if (!data) {
-		log_err("malloc failed\n");
-		return -1;
-	}
-
-	fp = fopen(file, "r");
-	if (!fp) {
-		log_err("Unable to open %s\n", file);
-		return -1;
-	}
-
-	for (size = get_fdsize(fileno(fp)); size; size -= len) {
-		len = MIN(size, bs);
-		err = fread(data, len, 1, fp);
-		if (!err) {
-			if (ferror(fp)) {
-				log_err("fread() error\n\n");
-				return -1;
-			}
-			break;
-		}
-		err = EVP_DigestUpdate(ctx, data, len);
-		if (!err) {
-			log_err("EVP_DigestUpdate() failed\n");
-			return 1;
-		}
-	}
-
-	fclose(fp);
-	free(data);
-
-	return 0;
-}
-
-static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
-{
-	int err;
-	struct dirent *de;
-	DIR *dir;
-	unsigned long long ino, off;
-	unsigned int type;
-
-	dir = opendir(file);
-	if (!dir) {
-		log_err("Unable to open %s\n", file);
-		return -1;
-	}
-
-	while ((de = readdir(dir))) {
-		ino = de->d_ino;
-		off = de->d_off;
-		type = de->d_type;
-		log_debug("entry: %s, ino: %llu, type: %u, off: %llu, reclen: %hu\n",
-			  de->d_name, ino, type, off, de->d_reclen);
-		err = EVP_DigestUpdate(ctx, de->d_name, strlen(de->d_name));
-		/*err |= EVP_DigestUpdate(ctx, &off, sizeof(off));*/
-		err |= EVP_DigestUpdate(ctx, &ino, sizeof(ino));
-		err |= EVP_DigestUpdate(ctx, &type, sizeof(type));
-		if (!err) {
-			log_err("EVP_DigestUpdate() failed\n");
-			return 1;
-		}
-	}
-
-	closedir(dir);
-
-	return 0;
-}
-
-static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
-{
-	int err;
-	char buf[1024];
-
-	err = readlink(path, buf, sizeof(buf));
-	if (err <= 0)
-		return -1;
-
-	log_info("link: %s -> %.*s\n", path, err, buf);
-	return !EVP_DigestUpdate(ctx, buf, err);
-}
-
-static int add_dev_hash(struct stat *st, EVP_MD_CTX *ctx)
-{
-	uint32_t dev = st->st_rdev;
-	unsigned major = (dev & 0xfff00) >> 8;
-	unsigned minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
-	log_info("device: %u:%u\n", major, minor);
-	return !EVP_DigestUpdate(ctx, &dev, sizeof(dev));
-}
-
-static int calc_hash(const char *file, uint8_t *hash)
-{
-	struct stat st;
-	EVP_MD_CTX ctx;
-	const EVP_MD *md;
-	unsigned int mdlen;
-	int err;
-
-	/*  Need to know the file length */
-	err = lstat(file, &st);
-	if (err < 0) {
-		log_err("stat() failed\n");
-		return err;
-	}
-
-	md = EVP_get_digestbyname(hash_algo);
-	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
-		return 1;
-	}
-
-	err = EVP_DigestInit(&ctx, md);
-	if (!err) {
-		log_err("EVP_DigestInit() failed\n");
-		return 1;
-	}
-
-	switch (st.st_mode & S_IFMT) {
-	case S_IFREG:
-		err = add_file_hash(file, &ctx);
-		break;
-	case S_IFDIR:
-		err = add_dir_hash(file, &ctx);
-		break;
-	case S_IFLNK:
-		err = add_link_hash(file, &ctx);
-		break;
-	case S_IFIFO: case S_IFSOCK:
-	case S_IFCHR: case S_IFBLK:
-		err = add_dev_hash(&st, &ctx);
-		break;
-	default:
-		log_errno("Unsupported file type");
-		return -1;
-	}
-
-	if (err)
-		return err;
-
-	err = EVP_DigestFinal(&ctx, hash, &mdlen);
-	if (!err) {
-		log_err("EVP_DigestFinal() failed\n");
-		return 1;
-	}
-
-	return mdlen;
-}
-
 static int hash_ima(const char *file)
 {
 	unsigned char hash[65] = "\x01"; /* MAX hash size + 1 */
 	int len, err;
 
-	len = calc_hash(file, hash + 1);
+	len = ima_calc_hash(file, hash + 1);
 	if (len <= 1)
 		return len;
 
-	if (verbose >= LOG_INFO)
+	if (params.verbose >= LOG_INFO)
 		log_info("hash: ");
 
-	if (sigdump || verbose >= LOG_INFO)
+	if (sigdump || params.verbose >= LOG_INFO)
 		dump(hash, len + 1);
 
 	if (xattr) {
@@ -1067,11 +632,11 @@ static int sign_ima(const char *file, const char *key)
 	char magic[] = "This Is A Crypto Signed Module";
 	int len, err;
 
-	len = calc_hash(file, hash);
+	len = ima_calc_hash(file, hash);
 	if (len <= 1)
 		return len;
 
-	len = sign_hash(hash_algo, hash, len, key, sig + 1);
+	len = sign_hash(params.hash_algo, hash, len, key, sig + 1);
 	if (len <= 1)
 		return len;
 
@@ -1134,7 +699,7 @@ static int sign_ima_file(const char *file)
 {
 	char *key;
 
-	key = keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	return sign_ima(file, key);
 }
@@ -1169,7 +734,7 @@ static int sign_evm_path(const char *file)
 	char *key;
 	int err;
 
-	key = keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
 		err = sign_ima(file, key);
@@ -1211,93 +776,6 @@ static int cmd_sign_evm(struct command *cmd)
 	return err;
 }
 
-static int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile)
-{
-	int err, len;
-	SHA_CTX ctx;
-	unsigned char out[1024];
-	RSA *key;
-	unsigned char sighash[20];
-	struct signature_hdr *hdr = (struct signature_hdr *)sig;
-
-	log_info("hash: ");
-	log_dump(hash, size);
-
-	key = read_pub_key(keyfile);
-	if (!key)
-		return 1;
-
-	SHA1_Init(&ctx);
-	SHA1_Update(&ctx, hash, size);
-	SHA1_Update(&ctx, hdr, sizeof(*hdr));
-	SHA1_Final(sighash, &ctx);
-	log_info("sighash: ");
-	log_dump(sighash, sizeof(sighash));
-
-	err = RSA_public_decrypt(siglen - sizeof(*hdr) - 2, sig + sizeof(*hdr) + 2, out, key, RSA_PKCS1_PADDING);
-	RSA_free(key);
-	if (err < 0) {
-		log_err("RSA_public_decrypt() failed: %d\n", err);
-		return 1;
-	}
-
-	len = err;
-
-	if (len != sizeof(sighash) || memcmp(out, sighash, len) != 0) {
-		log_err("Verification failed: %d\n", err);
-		return -1;
-	} else {
-		/*log_info("Verification is OK\n");*/
-		printf("Verification is OK\n");
-	}
-
-	return 0;
-}
-
-static int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile)
-{
-	int err, len;
-	unsigned char out[1024];
-	RSA *key;
-	struct signature_v2_hdr *hdr = (struct signature_v2_hdr *)sig;
-	const struct RSA_ASN1_template *asn1;
-
-	log_info("hash: ");
-	log_dump(hash, size);
-
-	key = read_pub_key(keyfile);
-	if (!key)
-		return 1;
-
-	err = RSA_public_decrypt(siglen - sizeof(*hdr), sig + sizeof(*hdr), out, key, RSA_PKCS1_PADDING);
-	RSA_free(key);
-	if (err < 0) {
-		log_err("RSA_public_decrypt() failed: %d\n", err);
-		return 1;
-	}
-
-	len = err;
-
-	asn1 = &RSA_ASN1_templates[hdr->hash_algo];
-
-	if (len < asn1->size || memcmp(out, asn1->data, asn1->size)) {
-		log_err("Verification failed: %d\n", err);
-		return -1;
-	}
-
-	len -= asn1->size;
-
-	if (len != size || memcmp(out + asn1->size, hash, len)) {
-		log_err("Verification failed: %d\n", err);
-		return -1;
-	}
-
-	/*log_info("Verification is OK\n");*/
-	printf("Verification is OK\n");
-
-	return 0;
-}
-
 static int verify_evm(const char *file, const char *key)
 {
 	unsigned char hash[20];
@@ -1319,7 +797,7 @@ static int verify_evm(const char *file, const char *key)
 		return -1;
 	}
 
-	return verify_hash(hash, sizeof(hash), sig + 1, len - 1, key);
+	return params.verify_hash(hash, sizeof(hash), sig + 1, len - 1, key);
 }
 
 static int cmd_verify_evm(struct command *cmd)
@@ -1332,84 +810,11 @@ static int cmd_verify_evm(struct command *cmd)
 		return -1;
 	}
 
-	key = keyfile ? : x509 ?
+	key = params.keyfile ? : params.x509 ?
 			"/etc/keys/x509_evm.der" :
 			"/etc/keys/pubkey_evm.pem";
 
 	return verify_evm(file, key);
-}
-
-static int get_hash_algo_from_sig(unsigned char *sig)
-{
-	uint8_t hashalgo;
-
-	if (sig[0] == 1) {
-		hashalgo = ((struct signature_hdr *)sig)->hash;
-
-		if (hashalgo >= DIGEST_ALGO_MAX)
-			return -1;
-
-		switch (hashalgo) {
-		case DIGEST_ALGO_SHA1:
-			return PKEY_HASH_SHA1;
-		case DIGEST_ALGO_SHA256:
-			return PKEY_HASH_SHA256;
-		default:
-			return -1;
-		}
-	} else if (sig[0] == 2) {
-		hashalgo = ((struct signature_v2_hdr *)sig)->hash_algo;
-		if (hashalgo >= PKEY_HASH__LAST)
-			return -1;
-		return hashalgo;
-	} else
-		return -1;
-}
-
-static int verify_signature(const char *file, unsigned char *sig, int siglen)
-{
-	unsigned char hash[64];
-	int hashlen, sig_hash_algo;
-	char *key;
-
-	if (sig[0] != 0x03) {
-		log_err("security.ima has no signature\n");
-		return -1;
-	}
-
-	/* If user specified an hash algo on command line, let it override */
-	if (!user_hash_algo) {
-		sig_hash_algo = get_hash_algo_from_sig(sig + 1);
-		if (sig_hash_algo < 0) {
-			log_err("Invalid signature\n");
-			return -1;
-		}
-
-		/* Use hash algorithm as retrieved from signature */
-		hash_algo = pkey_hash_algo[sig_hash_algo];
-	}
-
-	hashlen = calc_hash(file, hash);
-	if (hashlen <= 1)
-		return hashlen;
-
-	/* Get signature type from sig header if user did not enforce it */
-	if (!user_sig_type) {
-		if (sig[1] == DIGSIG_VERSION_1)
-			verify_hash = verify_hash_v1;
-		else if (sig[1] == DIGSIG_VERSION_2) {
-			verify_hash = verify_hash_v2;
-			/* Read pubkey from x509 cert */
-			x509 = 1;
-		}
-	}
-
-	/* Determine what key to use for verification*/
-	key = keyfile ? : x509 ?
-			"/etc/keys/x509_evm.der" :
-			"/etc/keys/pubkey_evm.pem";
-
-	return verify_hash(hash, hashlen, sig + 1, siglen - 1, key);
 }
 
 static int verify_ima(const char *file)
@@ -1432,7 +837,7 @@ static int verify_ima(const char *file)
 		free(tmp);
 	}
 
-	return verify_signature(file, sig, len);
+	return ima_verify_signature(file, sig, len);
 }
 
 static int cmd_verify_ima(struct command *cmd)
@@ -1459,7 +864,7 @@ static int cmd_import(struct command *cmd)
 
 	inkey = g_argv[optind++];
 	if (!inkey) {
-		inkey = x509 ? "/etc/keys/x509_evm.der" :
+		inkey = params.x509 ? "/etc/keys/x509_evm.der" :
 			       "/etc/keys/pubkey_evm.pem";
 	} else
 		ring = g_argv[optind++];
@@ -1473,7 +878,7 @@ static int cmd_import(struct command *cmd)
 	if (!key)
 		return 1;
 
-	if (x509) {
+	if (params.x509) {
 		pub = file2bin(inkey, NULL, &len);
 		if (!pub)
 			goto out;
@@ -1485,7 +890,7 @@ static int cmd_import(struct command *cmd)
 
 	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
 
-	id = add_key(x509 ? "asymmetric" : "user", x509 ? NULL : name, pub, len, id);
+	id = add_key(params.x509 ? "asymmetric" : "user", params.x509 ? NULL : name, pub, len, id);
 	if (id < 0) {
 		log_err("add_key failed\n");
 		err = id;
@@ -1493,7 +898,7 @@ static int cmd_import(struct command *cmd)
 		log_info("keyid: %d\n", id);
 		printf("%d\n", id);
 	}
-	if (x509)
+	if (params.x509)
 		free(pub);
 out:
 	RSA_free(key);
@@ -1644,7 +1049,7 @@ static int cmd_hmac_evm(struct command *cmd)
 		return -1;
 	}
 
-	key = keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
 		err = sign_ima(file, key);
@@ -1941,7 +1346,7 @@ void ima_ng_show(struct template_entry *entry)
 	if (sig) {
 		log_info(" ");
 		log_dump(sig, sig_len);
-		verify_signature(path, sig, sig_len);
+		ima_verify_signature(path, sig, sig_len);
 	} else
 		log_info("\n");
 
@@ -2164,7 +1569,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	sign_hash = sign_hash_v1;
-	verify_hash = verify_hash_v1;
+	params.verify_hash = verify_hash_v1;
 
 	while (1) {
 		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:r", opts, &lind);
@@ -2177,7 +1582,7 @@ int main(int argc, char *argv[])
 			exit(0);
 			break;
 		case 'v':
-			verbose++;
+			params.verbose++;
 			break;
 		case 'd':
 			digest = 1;
@@ -2191,8 +1596,8 @@ int main(int argc, char *argv[])
 			sigdump = 1;
 			break;
 		case 'a':
-			hash_algo = optarg;
-			user_hash_algo = 1;
+			params.hash_algo = optarg;
+			params.user_hash_algo = 1;
 			break;
 		case 'p':
 			keypass = optarg;
@@ -2209,13 +1614,13 @@ int main(int argc, char *argv[])
 			uuid_str = optarg ?: "-";
 			break;
 		case 'x':
-			x509 = 1;
+			params.x509 = 1;
 			sign_hash = sign_hash_v2;
-			verify_hash = verify_hash_v2;
-			user_sig_type = 1;
+			params.verify_hash = verify_hash_v2;
+			params.user_sig_type = 1;
 			break;
 		case 'k':
-			keyfile = optarg;
+			params.keyfile = optarg;
 			break;
 		case 't':
 			search_type = optarg;
