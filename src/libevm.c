@@ -460,18 +460,17 @@ int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int sig
 {
 	char *key;
 
-	/* Get signature type from sig header if user did not enforce it */
-	if (!params.user_sig_type) {
-		if (sig[0] == DIGSIG_VERSION_1) {
-			params.verify_hash = verify_hash_v1;
-			/* Read pubkey from RSA key */
-			params.x509 = 0;
-		} else if (sig[0] == DIGSIG_VERSION_2) {
-			params.verify_hash = verify_hash_v2;
-			/* Read pubkey from x509 cert */
-			params.x509 = 1;
-		}
-	}
+	/* Get signature type from sig header */
+	if (sig[0] == DIGSIG_VERSION_1) {
+		params.verify_hash = verify_hash_v1;
+		/* Read pubkey from RSA key */
+		params.x509 = 0;
+	} else if (sig[0] == DIGSIG_VERSION_2) {
+		params.verify_hash = verify_hash_v2;
+		/* Read pubkey from x509 cert */
+		params.x509 = 1;
+	} else
+		return -1;
 
 	/* Determine what key to use for verification*/
 	key = params.keyfile ? : params.x509 ?

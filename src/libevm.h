@@ -129,7 +129,6 @@ struct libevm_params {
 	int verbose;
 	const char *hash_algo;
 	int user_hash_algo;
-	int user_sig_type;
 	int x509;
 	char *keyfile;
 	verify_hash_fn_t verify_hash;

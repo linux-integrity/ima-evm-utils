@@ -1613,7 +1613,6 @@ int main(int argc, char *argv[])
 			params.x509 = 1;
 			sign_hash = sign_hash_v2;
 			params.verify_hash = verify_hash_v2;
-			params.user_sig_type = 1;
 			break;
 		case 'k':
 			params.keyfile = optarg;
