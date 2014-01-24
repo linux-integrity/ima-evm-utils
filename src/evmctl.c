@@ -72,7 +72,7 @@ static int digsig;
 static char *keypass;
 static int sigfile;
 static int modsig;
-static char *uuid_str;
+static char *uuid_str = "+";
 static char *search_type;
 static int recursive;
 static dev_t fs_dev;
@@ -434,7 +434,7 @@ static int get_uuid(struct stat *st, char *uuid)
 	FILE *fp;
 	size_t len;
 
-	if (uuid_str[0] != '-')
+	if (uuid_str[0] != '+')
 		return pack_uuid(uuid_str, uuid);
 
 	dev = st->st_dev;
@@ -540,7 +540,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return 1;
 	}
 
-	if (uuid_str) {
+	if (*uuid_str != '-') {
 		err = get_uuid(&st, uuid);
 		if (err)
 			return -1;
@@ -1604,7 +1604,7 @@ int main(int argc, char *argv[])
 			xattr = 0;
 			break;
 		case 'u':
-			uuid_str = optarg ?: "-";
+			uuid_str = optarg ?: "+";
 			break;
 		case '1':
 			params.x509 = 0;
