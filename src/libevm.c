@@ -456,11 +456,22 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 		return -1;
 }
 
+int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen)
+{
+	char *key;
+
+	/* Determine what key to use for verification*/
+	key = params.keyfile ? : params.x509 ?
+			"/etc/keys/x509_evm.der" :
+			"/etc/keys/pubkey_evm.pem";
+
+	return params.verify_hash(hash, size, sig, siglen, key);
+}
+
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
 {
 	unsigned char hash[64];
 	int hashlen, sig_hash_algo;
-	char *key;
 
 	if (sig[0] != 0x03) {
 		log_err("security.ima has no signature\n");
@@ -493,10 +504,5 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
 		}
 	}
 
-	/* Determine what key to use for verification*/
-	key = params.keyfile ? : params.x509 ?
-			"/etc/keys/x509_evm.der" :
-			"/etc/keys/pubkey_evm.pem";
-
-	return params.verify_hash(hash, hashlen, sig + 1, siglen - 1, key);
+	return verify_hash(hash, hashlen, sig + 1, siglen - 1);
 }
