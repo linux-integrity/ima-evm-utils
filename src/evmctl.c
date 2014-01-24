@@ -776,7 +776,7 @@ static int cmd_sign_evm(struct command *cmd)
 	return err;
 }
 
-static int verify_evm(const char *file, const char *key)
+static int verify_evm(const char *file)
 {
 	unsigned char hash[20];
 	unsigned char sig[1024];
@@ -797,12 +797,12 @@ static int verify_evm(const char *file, const char *key)
 		return -1;
 	}
 
-	return params.verify_hash(hash, sizeof(hash), sig + 1, len - 1, key);
+	return verify_hash(hash, sizeof(hash), sig + 1, len - 1);
 }
 
 static int cmd_verify_evm(struct command *cmd)
 {
-	char *key, *file = g_argv[optind++];
+	char *file = g_argv[optind++];
 
 	if (!file) {
 		log_err("Parameters missing\n");
@@ -810,11 +810,7 @@ static int cmd_verify_evm(struct command *cmd)
 		return -1;
 	}
 
-	key = params.keyfile ? : params.x509 ?
-			"/etc/keys/x509_evm.der" :
-			"/etc/keys/pubkey_evm.pem";
-
-	return verify_evm(file, key);
+	return verify_evm(file);
 }
 
 static int verify_ima(const char *file)
