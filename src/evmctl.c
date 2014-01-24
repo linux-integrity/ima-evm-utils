@@ -71,6 +71,7 @@ static int digest;
 static int digsig;
 static char *keypass;
 static int sigfile;
+static int x509 = 1;
 static int modsig;
 static char *uuid_str = "+";
 static char *search_type;
@@ -860,7 +861,7 @@ static int cmd_import(struct command *cmd)
 
 	inkey = g_argv[optind++];
 	if (!inkey) {
-		inkey = params.x509 ? "/etc/keys/x509_evm.der" :
+		inkey = x509 ? "/etc/keys/x509_evm.der" :
 			       "/etc/keys/pubkey_evm.pem";
 	} else
 		ring = g_argv[optind++];
@@ -870,11 +871,11 @@ static int cmd_import(struct command *cmd)
 	else
 		id = atoi(ring);
 
-	key = read_pub_key(inkey);
+	key = read_pub_key(inkey, x509);
 	if (!key)
 		return 1;
 
-	if (params.x509) {
+	if (x509) {
 		pub = file2bin(inkey, NULL, &len);
 		if (!pub)
 			goto out;
@@ -886,7 +887,7 @@ static int cmd_import(struct command *cmd)
 
 	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
 
-	id = add_key(params.x509 ? "asymmetric" : "user", params.x509 ? NULL : name, pub, len, id);
+	id = add_key(x509 ? "asymmetric" : "user", x509 ? NULL : name, pub, len, id);
 	if (id < 0) {
 		log_err("add_key failed\n");
 		err = id;
@@ -894,7 +895,7 @@ static int cmd_import(struct command *cmd)
 		log_info("keyid: %d\n", id);
 		printf("%d\n", id);
 	}
-	if (params.x509)
+	if (x509)
 		free(pub);
 out:
 	RSA_free(key);
@@ -1606,7 +1607,7 @@ int main(int argc, char *argv[])
 			uuid_str = optarg ?: "+";
 			break;
 		case '1':
-			params.x509 = 0;
+			x509 = 0;
 			break;
 		case 'k':
 			params.keyfile = optarg;
@@ -1625,7 +1626,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (params.x509)
+	if (x509)
 		sign_hash = sign_hash_v2;
 	else
 		sign_hash = sign_hash_v1;

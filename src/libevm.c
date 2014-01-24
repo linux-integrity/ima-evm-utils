@@ -99,7 +99,6 @@ const struct RSA_ASN1_template RSA_ASN1_templates[PKEY_HASH__LAST] = {
 struct libevm_params params = {
 	.verbose = LOG_INFO - 1,
 	.hash_algo = "sha1",
-	.x509 = 1,
 };
 
 void do_dump(FILE *fp, const void *ptr, int len, bool cr)
@@ -291,7 +290,7 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 	return mdlen;
 }
 
-RSA *read_pub_key(const char *keyfile)
+RSA *read_pub_key(const char *keyfile, int x509)
 {
 	FILE *fp;
 	RSA *key = NULL;
@@ -304,7 +303,7 @@ RSA *read_pub_key(const char *keyfile)
 		return NULL;
 	}
 
-	if (params.x509) {
+	if (x509) {
 		crt = d2i_X509_fp(fp, NULL);
 		if (!crt) {
 			log_err("d2i_X509_fp() failed\n");
@@ -344,7 +343,7 @@ int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int 
 	log_info("hash: ");
 	log_dump(hash, size);
 
-	key = read_pub_key(keyfile);
+	key = read_pub_key(keyfile, 0);
 	if (!key)
 		return 1;
 
@@ -386,7 +385,7 @@ int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int 
 	log_info("hash: ");
 	log_dump(hash, size);
 
-	key = read_pub_key(keyfile);
+	key = read_pub_key(keyfile, 1);
 	if (!key)
 		return 1;
 
@@ -460,21 +459,22 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen)
 {
 	char *key;
+	int x509;
 
 	/* Get signature type from sig header */
 	if (sig[0] == DIGSIG_VERSION_1) {
 		params.verify_hash = verify_hash_v1;
 		/* Read pubkey from RSA key */
-		params.x509 = 0;
+		x509 = 0;
 	} else if (sig[0] == DIGSIG_VERSION_2) {
 		params.verify_hash = verify_hash_v2;
 		/* Read pubkey from x509 cert */
-		params.x509 = 1;
+		x509 = 1;
 	} else
 		return -1;
 
 	/* Determine what key to use for verification*/
-	key = params.keyfile ? : params.x509 ?
+	key = params.keyfile ? : x509 ?
 			"/etc/keys/x509_evm.der" :
 			"/etc/keys/pubkey_evm.pem";
 

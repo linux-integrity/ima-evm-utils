@@ -128,7 +128,6 @@ typedef int (*verify_hash_fn_t)(const unsigned char *hash, int size, unsigned ch
 struct libevm_params {
 	int verbose;
 	const char *hash_algo;
-	int x509;
 	char *keyfile;
 	verify_hash_fn_t verify_hash;
 };
@@ -146,7 +145,7 @@ void dump(const void *ptr, int len);
 int get_filesize(const char *filename);
 int ima_calc_hash(const char *file, uint8_t *hash);
 int get_hash_algo(const char *algo);
-RSA *read_pub_key(const char *keyfile);
+RSA *read_pub_key(const char *keyfile, int x509);
 
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen);
