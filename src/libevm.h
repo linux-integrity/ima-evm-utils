@@ -129,7 +129,6 @@ struct libevm_params {
 	int verbose;
 	const char *hash_algo;
 	char *keyfile;
-	verify_hash_fn_t verify_hash;
 };
 
 struct RSA_ASN1_template {

@@ -460,14 +460,15 @@ int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int sig
 {
 	char *key;
 	int x509;
+	verify_hash_fn_t verify_hash;
 
 	/* Get signature type from sig header */
 	if (sig[0] == DIGSIG_VERSION_1) {
-		params.verify_hash = verify_hash_v1;
+		verify_hash = verify_hash_v1;
 		/* Read pubkey from RSA key */
 		x509 = 0;
 	} else if (sig[0] == DIGSIG_VERSION_2) {
-		params.verify_hash = verify_hash_v2;
+		verify_hash = verify_hash_v2;
 		/* Read pubkey from x509 cert */
 		x509 = 1;
 	} else
@@ -478,7 +479,7 @@ int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int sig
 			"/etc/keys/x509_evm.der" :
 			"/etc/keys/pubkey_evm.pem";
 
-	return params.verify_hash(hash, size, sig, siglen, key);
+	return verify_hash(hash, size, sig, siglen, key);
 }
 
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
