@@ -72,7 +72,6 @@ static int digsig;
 static char *keypass;
 static int sigfile;
 static int x509 = 1;
-static int modsig;
 static char *uuid_str = "+";
 static char *search_type;
 static int recursive;
@@ -630,7 +629,6 @@ static int sign_ima(const char *file, const char *key)
 {
 	unsigned char hash[64];
 	unsigned char sig[1024] = "\x03";
-	char magic[] = "This Is A Crypto Signed Module";
 	int len, err;
 
 	len = ima_calc_hash(file, hash);
@@ -643,16 +641,6 @@ static int sign_ima(const char *file, const char *key)
 
 	/* add header */
 	len++;
-
-	if (modsig) {
-		/* add signature length */
-		*(uint16_t *)(sig + len) = __cpu_to_be16(len - 1);
-		len += sizeof(uint16_t);
-		memcpy(sig + len, magic, sizeof(magic) - 1);
-		len += sizeof(magic) - 1;
-		bin2file(file, "sig", sig + 1, len - 1);
-		return 0;
-	}
 
 	if (sigfile)
 		bin2file(file, "sig", sig, len);
@@ -1510,7 +1498,6 @@ static void usage(void)
 		"  -s, --imasig       also make IMA signature\n"
 		"  -d, --imahash      also make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
-		"  -m, --modsig       store module signature in .sig file instead of xattr\n"
 		"  -1, --rsa          signing key is in RSA DER format (signing v1)\n"
 		"  -k, --key          path to signing key (default keys are /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"  -p, --pass         password for encrypted signing key\n"
@@ -1530,7 +1517,7 @@ struct command cmds[] = {
 	{"import", cmd_import, 0, "[--rsa] pubkey keyring", "Import public key into the keyring.\n"},
 	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass password] file", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
-	{"ima_sign", cmd_sign_ima, 0, "[--sigfile | --modsig] [--key key] [--pass password] file", "Make file content signature.\n"},
+	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--key key] [--pass password] file", "Make file content signature.\n"},
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
@@ -1548,7 +1535,6 @@ static struct option opts[] = {
 	{"hashalgo", 1, 0, 'a'},
 	{"pass", 1, 0, 'p'},
 	{"sigfile", 0, 0, 'f'},
-	{"modsig", 0, 0, 'm'},
 	{"uuid", 2, 0, 'u'},
 	{"rsa", 0, 0, '1'},
 	{"key", 1, 0, 'k'},
@@ -1597,10 +1583,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			sigfile = 1;
-			xattr = 0;
-			break;
-		case 'm':
-			modsig = 1;
 			xattr = 0;
 			break;
 		case 'u':
