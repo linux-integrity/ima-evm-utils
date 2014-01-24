@@ -148,8 +148,6 @@ int get_filesize(const char *filename);
 int ima_calc_hash(const char *file, uint8_t *hash);
 int get_hash_algo(const char *algo);
 RSA *read_pub_key(const char *keyfile);
-int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile);
-int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile);
 
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen);

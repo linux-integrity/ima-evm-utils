@@ -1565,7 +1565,6 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	sign_hash = sign_hash_v1;
-	params.verify_hash = verify_hash_v1;
 
 	while (1) {
 		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:r", opts, &lind);
@@ -1612,7 +1611,6 @@ int main(int argc, char *argv[])
 		case 'x':
 			params.x509 = 1;
 			sign_hash = sign_hash_v2;
-			params.verify_hash = verify_hash_v2;
 			break;
 		case 'k':
 			params.keyfile = optarg;
