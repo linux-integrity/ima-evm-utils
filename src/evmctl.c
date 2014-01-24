@@ -1564,8 +1564,6 @@ int main(int argc, char *argv[])
 	g_argv = argv;
 	g_argc = argc;
 
-	sign_hash = sign_hash_v1;
-
 	while (1) {
 		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:r", opts, &lind);
 		if (c == -1)
@@ -1610,7 +1608,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'x':
 			params.x509 = 1;
-			sign_hash = sign_hash_v2;
 			break;
 		case 'k':
 			params.keyfile = optarg;
@@ -1628,6 +1625,11 @@ int main(int argc, char *argv[])
 			log_err("getopt() returned: %d (%c)\n", c, c);
 		}
 	}
+
+	if (params.x509)
+		sign_hash = sign_hash_v2;
+	else
+		sign_hash = sign_hash_v1;
 
 	OpenSSL_add_all_algorithms();
 	ERR_load_crypto_strings();
