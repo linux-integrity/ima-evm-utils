@@ -1,3 +1,14 @@
+2014-02-17  Dmitry Kasatkin <d.kasatkin@samsung.com>
+
+	version 0.7
+	* Fix symbolic links related bugs
+	* Provide recursive fixing
+	* Provide recursive signing
+	* Move IMA verification to the library (first for LTP use)
+	* Support for target architecture data size
+	* Remove obsolete module signing code
+	* Code cleanup
+
 2013-08-28  Dmitry Kasatkin <d.kasatkin@samsung.com>
 
 	version 0.6
