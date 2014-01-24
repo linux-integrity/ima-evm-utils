@@ -1590,7 +1590,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'a':
 			params.hash_algo = optarg;
-			params.user_hash_algo = 1;
 			break;
 		case 'p':
 			keypass = optarg;

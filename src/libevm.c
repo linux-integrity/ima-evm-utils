@@ -491,16 +491,13 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
 		return -1;
 	}
 
-	/* If user specified an hash algo on command line, let it override */
-	if (!params.user_hash_algo) {
-		sig_hash_algo = get_hash_algo_from_sig(sig + 1);
-		if (sig_hash_algo < 0) {
-			log_err("Invalid signature\n");
-			return -1;
-		}
-		/* Use hash algorithm as retrieved from signature */
-		params.hash_algo = pkey_hash_algo[sig_hash_algo];
+	sig_hash_algo = get_hash_algo_from_sig(sig + 1);
+	if (sig_hash_algo < 0) {
+		log_err("Invalid signature\n");
+		return -1;
 	}
+	/* Use hash algorithm as retrieved from signature */
+	params.hash_algo = pkey_hash_algo[sig_hash_algo];
 
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)

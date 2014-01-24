@@ -128,7 +128,6 @@ typedef int (*verify_hash_fn_t)(const unsigned char *hash, int size, unsigned ch
 struct libevm_params {
 	int verbose;
 	const char *hash_algo;
-	int user_hash_algo;
 	int x509;
 	char *keyfile;
 	verify_hash_fn_t verify_hash;
