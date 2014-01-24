@@ -152,6 +152,7 @@ RSA *read_pub_key(const char *keyfile);
 int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile);
 int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile);
 
+int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen);
 
 #endif

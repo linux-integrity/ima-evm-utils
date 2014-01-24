@@ -460,6 +460,19 @@ int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int sig
 {
 	char *key;
 
+	/* Get signature type from sig header if user did not enforce it */
+	if (!params.user_sig_type) {
+		if (sig[0] == DIGSIG_VERSION_1) {
+			params.verify_hash = verify_hash_v1;
+			/* Read pubkey from RSA key */
+			params.x509 = 0;
+		} else if (sig[0] == DIGSIG_VERSION_2) {
+			params.verify_hash = verify_hash_v2;
+			/* Read pubkey from x509 cert */
+			params.x509 = 1;
+		}
+	}
+
 	/* Determine what key to use for verification*/
 	key = params.keyfile ? : params.x509 ?
 			"/etc/keys/x509_evm.der" :
@@ -492,17 +505,6 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)
 		return hashlen;
-
-	/* Get signature type from sig header if user did not enforce it */
-	if (!params.user_sig_type) {
-		if (sig[1] == DIGSIG_VERSION_1)
-			params.verify_hash = verify_hash_v1;
-		else if (sig[1] == DIGSIG_VERSION_2) {
-			params.verify_hash = verify_hash_v2;
-			/* Read pubkey from x509 cert */
-			params.x509 = 1;
-		}
-	}
 
 	return verify_hash(hash, hashlen, sig + 1, siglen - 1);
 }
