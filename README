@@ -19,9 +19,8 @@ it is necessary to provide '--uuid' or '-u' parameter to the 'sign' command.
 UUID can be provided on command line in form of '-uUUID' or '--uuid=UUID'.
 
 Latest kernel got IMA/EVM support for using X509 certificates and asymmetric key
-support for verifying digital signatures. The new command line parameter
-'-x' or '--x509' was added to the evmctl to enable using of X509 certificates
-and new signature format.
+support for verifying digital signatures. This version uses x509 format by default.
+Use '--rsa' or '-1' parameter to use old signature format and API.
 
 
 Key generation
@@ -98,11 +97,11 @@ Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
 
     # import IMA public key
     ima_id=`keyctl newring _ima @u`
-    evmctl import /etc/keys/pubkey_evm.pem $ima_id
+    evmctl --rsa import /etc/keys/pubkey_evm.pem $ima_id
 
     # import EVM public key
     evm_id=`keyctl newring _evm @u`
-    evmctl import /etc/keys/pubkey_evm.pem $evm_id
+    evmctl --rsa import /etc/keys/pubkey_evm.pem $evm_id
 
     # enable EVM
     echo "1" > /sys/kernel/security/evm
@@ -110,8 +109,8 @@ Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
 
 Import X509 certificate into the kernel keyring (since kernel 3.9?)
 
-    $ evmctl -x import /etc/keys/x509_evm.der `keyctl search @u keyring _ima`
-    $ evmctl -x import /etc/keys/x509_evm.der `keyctl search @u keyring _evm`
+    $ evmctl import /etc/keys/x509_evm.der `keyctl search @u keyring _ima`
+    $ evmctl import /etc/keys/x509_evm.der `keyctl search @u keyring _evm`
 
 
 Signing
@@ -121,24 +120,24 @@ Default public key: /etc/keys/pubkey_evm.pem
 Default private key: /etc/keys/privkey_evm.pem
 Default X509 certificate: /etc/keys/x509_evm.der
 
-Signing for using X509 certificates is done using '-x' or '--x509' parameter.
+Signing for using old RSA format is done using '-1' or '--rsa' parameter.
 Signing for using new the EVM HMAC format is done using '-u' or '--uuid' parameter.
 
 Sign file with EVM signature and use hash value for IMA - common case
 
-    $ evmctl sign [-u] [-x] --imahash test.txt
+    $ evmctl sign [-u] [-1] --imahash test.txt
 
 Sign file with both IMA and EVM signatures - for immutable files
 
-    $ evmctl sign [-u] [-x] --imasig test.txt
+    $ evmctl sign [-u] [-1] --imasig test.txt
 
 Sign file with IMA signature - for immutable files
 
-    $ evmctl ima_sign [-x] test.txt
+    $ evmctl ima_sign [-1] test.txt
 
 Label whole filesystem with EVM signatures
 
-    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u] [-x] --imahash '{}' \;
+    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u] [-1] --imahash '{}' \;
 
 Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs
 

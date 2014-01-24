@@ -1510,7 +1510,7 @@ static void usage(void)
 		"  -d, --imahash      also make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
 		"  -m, --modsig       store module signature in .sig file instead of xattr\n"
-		"  -x, --x509         signing key is in x509 DER format (signing v2 for using asymmetric keys)\n"
+		"  -1, --rsa          signing key is in RSA DER format (signing v1)\n"
 		"  -k, --key          path to signing key (default keys are /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -u, --uuid         use file system UUID in HMAC calculation (EVM v2)\n"
@@ -1526,7 +1526,7 @@ static void usage(void)
 
 struct command cmds[] = {
 	{"help", cmd_help, 0, "<command>"},
-	{"import", cmd_import, 0, "[--x509] pubkey keyring", "Import public key into the keyring.\n"},
+	{"import", cmd_import, 0, "[--rsa] pubkey keyring", "Import public key into the keyring.\n"},
 	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass password] file", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
 	{"ima_sign", cmd_sign_ima, 0, "[--sigfile | --modsig] [--key key] [--pass password] file", "Make file content signature.\n"},
@@ -1549,7 +1549,7 @@ static struct option opts[] = {
 	{"sigfile", 0, 0, 'f'},
 	{"modsig", 0, 0, 'm'},
 	{"uuid", 2, 0, 'u'},
-	{"x509", 0, 0, 'x'},
+	{"rsa", 0, 0, '1'},
 	{"key", 1, 0, 'k'},
 	{"type", 1, 0, 't'},
 	{"recursive", 0, 0, 'r'},
@@ -1606,8 +1606,8 @@ int main(int argc, char *argv[])
 		case 'u':
 			uuid_str = optarg ?: "-";
 			break;
-		case 'x':
-			params.x509 = 1;
+		case '1':
+			params.x509 = 0;
 			break;
 		case 'k':
 			params.keyfile = optarg;

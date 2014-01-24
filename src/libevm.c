@@ -98,7 +98,8 @@ const struct RSA_ASN1_template RSA_ASN1_templates[PKEY_HASH__LAST] = {
 
 struct libevm_params params = {
 	.verbose = LOG_INFO - 1,
-	.hash_algo = "sha1"
+	.hash_algo = "sha1",
+	.x509 = 1,
 };
 
 void do_dump(FILE *fp, const void *ptr, int len, bool cr)
