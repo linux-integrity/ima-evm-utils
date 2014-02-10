@@ -44,7 +44,7 @@ exit 0
 %files
 %defattr(-,root,root,-)
 %{_bindir}/*
-%{_libdir}/*
+%{_libdir}/libevm.*
 
 %changelog
 * Thu Apr 05 2012 Dmitry Kasatkin <dmitry.kasatkin@intel.com>
