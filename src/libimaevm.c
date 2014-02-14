@@ -26,7 +26,7 @@
 /* should we use logger instead for library? */
 #define USE_FPRINTF
 
-#include "libevm.h"
+#include "imaevm.h"
 
 const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_MD4]		= "md4",

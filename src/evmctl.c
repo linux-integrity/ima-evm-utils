@@ -45,7 +45,7 @@
 
 #define USE_FPRINTF
 
-#include <libevm.h>
+#include "imaevm.h"
 
 static char *evm_config_xattrnames[] = {
 	"security.selinux",

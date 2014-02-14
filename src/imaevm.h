@@ -1,5 +1,5 @@
-#ifndef _LIBEVM_H
-#define _LIBEVM_H
+#ifndef _LIBIMAEVM_H
+#define _LIBIMAEVM_H
 
 #include <sys/types.h>
 #include <stdint.h>
