@@ -933,6 +933,8 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	unsigned char evmkey[MAX_KEY_SIZE];
 	char list[1024];
 	ssize_t list_size;
+	struct h_misc_64 hmac_misc;
+	int hmac_size;
 
 	key = file2bin(keyfile, NULL, &keylen);
 	if (!key) {
@@ -1004,13 +1006,37 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	}
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
-	hmac_misc.ino = st.st_ino;
-	hmac_misc.generation = generation;
-	hmac_misc.uid = st.st_uid;
-	hmac_misc.gid = st.st_gid;
-	hmac_misc.mode = st.st_mode;
 
-	err = !HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
+	if (msize == 0) {
+		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
+		hmac_size = sizeof(*hmac);
+		hmac->ino = st.st_ino;
+		hmac->generation = generation;
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	} else if (msize == 64) {
+		struct h_misc_64 *hmac = (struct h_misc_64 *)&hmac_misc;
+		hmac_size = sizeof(*hmac);
+		hmac->ino = st.st_ino;
+		hmac->generation = generation;
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	} else {
+		struct h_misc_32 *hmac = (struct h_misc_32 *)&hmac_misc;
+		hmac_size = sizeof(*hmac);
+		hmac->ino = st.st_ino;
+		hmac->generation = generation;
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	}
+
+	log_debug("hmac_misc (%d): ", hmac_size);
+	log_debug_dump(&hmac_misc, hmac_size);
+
+	err = !HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, hmac_size);
 	if (err) {
 		log_err("HMAC_Update() failed\n");
 		goto out_ctx_cleanup;

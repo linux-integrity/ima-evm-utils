@@ -63,7 +63,7 @@ struct h_misc {
 	uid_t uid;
 	gid_t gid;
 	unsigned short mode;
-} hmac_misc;
+};
 
 struct h_misc_32 {
 	uint32_t ino;
