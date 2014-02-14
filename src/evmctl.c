@@ -534,6 +534,9 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	hmac_misc.gid = st.st_gid;
 	hmac_misc.mode = st.st_mode;
 
+	log_debug("hmac_misc (%lu): ", sizeof(hmac_misc));
+	log_debug_dump(&hmac_misc, sizeof(hmac_misc));
+
 	err = EVP_DigestUpdate(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
 	if (!err) {
 		log_err("EVP_DigestUpdate() failed\n");
