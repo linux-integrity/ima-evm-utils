@@ -75,6 +75,7 @@ static int x509 = 1;
 static char *uuid_str = "+";
 static char *search_type;
 static int recursive;
+static int msize;
 static dev_t fs_dev;
 
 typedef int (*find_cb_t)(const char *path);
@@ -472,6 +473,8 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	char list[1024];
 	ssize_t list_size;
 	char uuid[16];
+	struct h_misc_64 hmac_misc;
+	int hmac_size;
 
 	if (lstat(file, &st)) {
 		log_err("lstat() failed\n");
@@ -528,16 +531,37 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	}
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
-	hmac_misc.ino = st.st_ino;
-	hmac_misc.generation = generation;
-	hmac_misc.uid = st.st_uid;
-	hmac_misc.gid = st.st_gid;
-	hmac_misc.mode = st.st_mode;
 
-	log_debug("hmac_misc (%lu): ", sizeof(hmac_misc));
-	log_debug_dump(&hmac_misc, sizeof(hmac_misc));
+	if (msize == 0) {
+		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
+		hmac_size = sizeof(*hmac);
+		hmac->ino = st.st_ino;
+		hmac->generation = generation;
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	} else if (msize == 64) {
+		struct h_misc_64 *hmac = (struct h_misc_64 *)&hmac_misc;
+		hmac_size = sizeof(*hmac);
+		hmac->ino = st.st_ino;
+		hmac->generation = generation;
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	} else {
+		struct h_misc_32 *hmac = (struct h_misc_32 *)&hmac_misc;
+		hmac_size = sizeof(*hmac);
+		hmac->ino = st.st_ino;
+		hmac->generation = generation;
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	}
 
-	err = EVP_DigestUpdate(&ctx, (const unsigned char *)&hmac_misc, sizeof(hmac_misc));
+	log_debug("hmac_misc (%d): ", hmac_size);
+	log_debug_dump(&hmac_misc, hmac_size);
+
+	err = EVP_DigestUpdate(&ctx, &hmac_misc, hmac_size);
 	if (!err) {
 		log_err("EVP_DigestUpdate() failed\n");
 		return 1;
@@ -1510,6 +1534,8 @@ static void usage(void)
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
 		"  -r, --recursive    recurse into directories (sign)\n"
+		"  --x32              force signature for 32 bit target system\n"
+		"  --x64              force signature for 32 bit target system\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
@@ -1543,6 +1569,8 @@ static struct option opts[] = {
 	{"key", 1, 0, 'k'},
 	{"type", 1, 0, 't'},
 	{"recursive", 0, 0, 'r'},
+	{"m32", 0, 0, '3'},
+	{"m64", 0, 0, '6'},
 	{}
 
 };
@@ -1602,6 +1630,12 @@ int main(int argc, char *argv[])
 			break;
 		case 'r':
 			recursive = 1;
+			break;
+		case '3':
+			msize = 32;
+			break;
+		case '6':
+			msize = 64;
 			break;
 		case '?':
 			exit(1);

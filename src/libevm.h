@@ -65,6 +65,22 @@ struct h_misc {
 	unsigned short mode;
 } hmac_misc;
 
+struct h_misc_32 {
+	uint32_t ino;
+	uint32_t generation;
+	uid_t uid;
+	gid_t gid;
+	unsigned short mode;
+};
+
+struct h_misc_64 {
+	uint64_t ino;
+	uint32_t generation;
+	uid_t uid;
+	gid_t gid;
+	unsigned short mode;
+};
+
 enum pubkey_algo {
 	PUBKEY_ALGO_RSA,
 	PUBKEY_ALGO_MAX,
