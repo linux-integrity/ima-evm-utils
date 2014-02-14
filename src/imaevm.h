@@ -1,25 +1,12 @@
 #ifndef _LIBIMAEVM_H
 #define _LIBIMAEVM_H
 
-#include <sys/types.h>
 #include <stdint.h>
-#include <unistd.h>
 #include <syslog.h>
-
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <dirent.h>
-#include <string.h>
 #include <stdbool.h>
+#include <errno.h>
 
-#include <openssl/sha.h>
 #include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/hmac.h>
-#include <openssl/engine.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
-#include <openssl/x509.h>
 
 #ifdef USE_FPRINTF
 #define do_log(level, fmt, args...)	({ if (level <= params.verbose) fprintf(stderr, fmt, ##args); })

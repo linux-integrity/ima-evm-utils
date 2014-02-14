@@ -27,21 +27,27 @@
  */
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <sys/param.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <dirent.h>
 #include <attr/xattr.h>
 #include <getopt.h>
-#include <signal.h>
 #include <keyutils.h>
 #include <asm/byteorder.h>
 #include <ctype.h>
+
+#include <openssl/sha.h>
+#include <openssl/pem.h>
+#include <openssl/hmac.h>
+#include <openssl/err.h>
+#include <openssl/rsa.h>
 
 #define USE_FPRINTF
 

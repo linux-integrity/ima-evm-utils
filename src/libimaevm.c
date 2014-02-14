@@ -26,6 +26,18 @@
 /* should we use logger instead for library? */
 #define USE_FPRINTF
 
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <string.h>
+#include <stdio.h>
+
+#include <openssl/pem.h>
+#include <openssl/evp.h>
+#include <openssl/x509.h>
+
 #include "imaevm.h"
 
 const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
