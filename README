@@ -82,6 +82,16 @@ or
     $ scp x509_evm.pem target:/etc/keys
 
 
+Generation of EVM keys
+
+    $ # create and save the kernel master key (user type)
+    $ keyctl add user kmk "`dd if=/dev/urandom bs=1 count=32 2>/dev/null`" @u
+    $ keyctl pipe `keyctl search @u user kmk` > /etc/keys/kmk
+    $ # create the EVM encrypted key
+    $ keyctl add encrypted evm-key "new user:kmk 32" @u
+    $ keyctl pipe `keyctl search @u encrypted evm-key` >/etc/keys/evm-key
+
+
 Initialization
 --------------
 
@@ -92,7 +102,7 @@ Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
 
     # import EVM HMAC key
     keyctl clear @u
-    keyctl add user kmk "testing123" @u
+    cat /etc/keys/kmk | keyctl padd user kmk @u
     keyctl add encrypted evm-key "load `cat /etc/keys/evm-key`" @u
 
     # import IMA public key
