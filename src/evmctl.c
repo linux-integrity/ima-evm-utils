@@ -402,6 +402,23 @@ static int hex2bin(uint8_t *dst, const char *src, size_t count)
 	return 0;
 }
 
+#define hex_asc_lo(x)   hex_asc[((x) & 0x0f)]
+#define hex_asc_hi(x)   hex_asc[((x) & 0xf0) >> 4]
+
+const char hex_asc[] = "0123456789abcdef";
+
+/* this is faster than fprintf - makes sense? */
+static void bin2hex(uint8_t *buf, size_t buflen, FILE *stream)
+{
+	char asciihex[2];
+
+	for (; buflen--; buf++) {
+		asciihex[0] = hex_asc_hi(*buf);
+		asciihex[1] = hex_asc_lo(*buf);
+		fwrite(asciihex, 2, 1, stream);
+	}
+}
+
 static int pack_uuid(const char *uuid_str, char *uuid)
 {
 	int i;
@@ -749,6 +766,49 @@ static int cmd_sign_ima(struct command *cmd)
 	}
 
 	return err;
+}
+
+static int cmd_sign_hash(struct command *cmd)
+{
+	char *key, *token, *line = NULL;
+	int hashlen = 0;
+	size_t line_len;
+	ssize_t len;
+	unsigned char hash[64];
+	unsigned char sig[1024] = "\x03";
+	int siglen;
+
+	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
+
+	/* support reading hash (eg. output of shasum) */
+	while ((len = getline(&line, &line_len, stdin)) > 0) {
+		/* remove end of line */
+		if (line[len - 1] == '\n')
+			line[--len] = '\0';
+
+		/* find the end of the hash */
+		token = strpbrk(line, ", \t");
+		hashlen = token ? token - line : strlen(line);
+
+		hex2bin(hash, line, hashlen);
+		siglen = sign_hash(params.hash_algo, hash, hashlen/2,
+				 key, sig + 1);
+		if (siglen <= 1)
+			return siglen;
+
+		fwrite(line, len, 1, stdout);
+		fprintf(stdout, " ");
+		bin2hex(sig, siglen + 1, stdout);
+		fprintf(stdout, "\n");
+	}
+
+	if (!hashlen) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	return 0;
 }
 
 static int sign_evm_path(const char *file)
@@ -1599,6 +1659,7 @@ struct command cmds[] = {
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
+	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass password]", "Sign hashes from shaXsum output.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
