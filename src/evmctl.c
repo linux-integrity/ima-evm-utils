@@ -887,10 +887,26 @@ static int cmd_import(struct command *cmd)
 	} else
 		ring = g_argv[optind++];
 
-	if (!ring)
-		id = KEY_SPEC_USER_KEYRING;
-	else
-		id = atoi(ring);
+	id = KEY_SPEC_USER_KEYRING; /* default keyring */
+
+	if (ring) {
+		if (ring[0] != '@') {
+			id = atoi(ring);
+		} else {
+			if (strcmp(ring, "@t") == 0)
+				id = -1;
+			else if (strcmp(ring, "@p") == 0)
+				id = -2;
+			else if (strcmp(ring, "@s") == 0)
+				id = -3;
+			else if (strcmp(ring, "@u") == 0)
+				id = -4;
+			else if (strcmp(ring, "@us") == 0)
+				id = -5;
+			else if (strcmp(ring, "@g") == 0)
+				id = -6;
+		}
+	}
 
 	key = read_pub_key(inkey, x509);
 	if (!key)
