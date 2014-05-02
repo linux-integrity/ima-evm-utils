@@ -1704,7 +1704,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p:fu::xk:t:r", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:p:fu::k:t:r", opts, &lind);
 		if (c == -1)
 			break;
 
