@@ -1654,8 +1654,8 @@ static void usage(void)
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
 		"  -r, --recursive    recurse into directories (sign)\n"
-		"  --x32              force signature for 32 bit target system\n"
-		"  --x64              force signature for 32 bit target system\n"
+		"  --m32              force signature for 32 bit target system\n"
+		"  --m64              force signature for 32 bit target system\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
