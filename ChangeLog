@@ -1,3 +1,11 @@
+2014-05-05  Dmitry Kasatkin <d.kasatkin@samsung.com>
+
+	version 0.8
+	* Symbilic names for keyrings
+	* Hash list signing
+	* License text fix for using OpenSSL
+	* Help output fix
+
 2014-02-17  Dmitry Kasatkin <d.kasatkin@samsung.com>
 
 	version 0.7
