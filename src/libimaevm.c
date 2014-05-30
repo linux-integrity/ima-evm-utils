@@ -152,19 +152,19 @@ int get_filesize(const char *filename)
 	return (int)stats.st_size;
 }
 
-static inline int get_fdsize(int fd)
+static inline off_t get_fdsize(int fd)
 {
 	struct stat stats;
 	/*  Need to know the file length */
 	fstat(fd, &stats);
-	return (int)stats.st_size;
+	return stats.st_size;
 }
 
 static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 {
 	uint8_t *data;
-	int err, size, bs = DATA_SIZE;
-	size_t len;
+	int err, bs = DATA_SIZE;
+	off_t size, len;
 	FILE *fp;
 
 	data = malloc(bs);
