@@ -163,15 +163,9 @@ static inline off_t get_fdsize(int fd)
 static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 {
 	uint8_t *data;
-	int err, bs = DATA_SIZE;
+	int err = -1, bs = DATA_SIZE;
 	off_t size, len;
 	FILE *fp;
-
-	data = malloc(bs);
-	if (!data) {
-		log_err("malloc failed\n");
-		return -1;
-	}
 
 	fp = fopen(file, "r");
 	if (!fp) {
@@ -179,27 +173,33 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 		return -1;
 	}
 
+	data = malloc(bs);
+	if (!data) {
+		log_err("malloc failed\n");
+		goto out;
+	}
+
 	for (size = get_fdsize(fileno(fp)); size; size -= len) {
 		len = MIN(size, bs);
-		err = fread(data, len, 1, fp);
-		if (!err) {
+		if (!fread(data, len, 1, fp)) {
 			if (ferror(fp)) {
 				log_err("fread() error\n\n");
-				return -1;
+				goto out;
 			}
 			break;
 		}
-		err = EVP_DigestUpdate(ctx, data, len);
-		if (!err) {
+		if (!EVP_DigestUpdate(ctx, data, len)) {
 			log_err("EVP_DigestUpdate() failed\n");
-			return 1;
+			err = 1;
+			goto out;
 		}
 	}
-
+	err = 0;
+out:
 	fclose(fp);
 	free(data);
 
-	return 0;
+	return err;
 }
 
 static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
