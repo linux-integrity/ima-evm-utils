@@ -90,11 +90,15 @@ static int digsig;
 static char *keypass;
 static int sigfile;
 static int x509 = 1;
-static char *uuid_str = "+";
+static char *uuid_str;
 static char *search_type;
 static int recursive;
 static int msize;
 static dev_t fs_dev;
+
+#define HMAC_FLAG_UUID			0x0001
+#define HMAC_FLAG_UUID_SET		0x0002
+static unsigned long hmac_flags = HMAC_FLAG_UUID;
 
 typedef int (*find_cb_t)(const char *path);
 static int find(const char *path, int dts, find_cb_t func);
@@ -470,7 +474,7 @@ static int get_uuid(struct stat *st, char *uuid)
 	FILE *fp;
 	size_t len;
 
-	if (uuid_str[0] != '+')
+	if (hmac_flags & HMAC_FLAG_UUID_SET)
 		return pack_uuid(uuid_str, uuid);
 
 	dev = st->st_dev;
@@ -602,7 +606,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return 1;
 	}
 
-	if (*uuid_str != '-') {
+	if (hmac_flags & HMAC_FLAG_UUID) {
 		err = get_uuid(&st, uuid);
 		if (err)
 			return -1;
@@ -1758,7 +1762,11 @@ int main(int argc, char *argv[])
 			xattr = 0;
 			break;
 		case 'u':
-			uuid_str = optarg ?: "+";
+			uuid_str = optarg;
+			if (uuid_str)
+				hmac_flags |= HMAC_FLAG_UUID_SET;
+			else
+				hmac_flags &= ~HMAC_FLAG_UUID;
 			break;
 		case '1':
 			x509 = 0;
