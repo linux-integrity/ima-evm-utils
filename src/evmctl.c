@@ -963,7 +963,10 @@ static int cmd_import(struct command *cmd)
 
 	if (ring) {
 		if (ring[0] != '@') {
-			id = atoi(ring);
+			int base = 10;
+			if (ring[0] == '0' && ring[1] == 'x')
+				base = 16;
+			id = strtoul(ring, NULL, base);
 		} else {
 			if (strcmp(ring, "@t") == 0)
 				id = -1;
