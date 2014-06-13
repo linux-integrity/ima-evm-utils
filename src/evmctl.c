@@ -529,7 +529,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 			log_err("Unable to open %s\n", file);
 			return -1;
 		}
-		if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
+		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
 			log_err("ioctl() failed\n");
 			return -1;
 		}
@@ -1082,7 +1082,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 			log_err("Unable to open %s\n", file);
 			goto out;
 		}
-		if (ioctl(fd, EXT34_IOC_GETVERSION, &generation)) {
+		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
 			log_err("ioctl() failed\n");
 			goto out;
 		}

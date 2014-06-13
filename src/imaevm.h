@@ -41,6 +41,7 @@
 #ifndef _LIBIMAEVM_H
 #define _LIBIMAEVM_H
 
+#include <linux/fs.h>
 #include <stdint.h>
 #include <syslog.h>
 #include <stdbool.h>
@@ -73,14 +74,6 @@
 
 #define	DATA_SIZE	4096
 #define SHA1_HASH_LEN   20
-
-#define	EXT2_IOC_GETVERSION	_IOR('v', 1, long)
-#define	EXT34_IOC_GETVERSION	_IOR('f', 3, long)
-
-#define	FS_IOC_GETFLAGS		_IOR('f', 1, long)
-#define	FS_IOC_SETFLAGS		_IOW('f', 2, long)
-#define FS_IOC32_GETFLAGS	_IOR('f', 1, int)
-#define FS_IOC32_SETFLAGS	_IOW('f', 2, int)
 
 #define __packed __attribute__((packed))
 
