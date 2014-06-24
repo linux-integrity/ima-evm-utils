@@ -651,22 +651,33 @@ static int sign_evm(const char *file, const char *key)
 
 static int hash_ima(const char *file)
 {
-	unsigned char hash[65]; /* MAX hash size + 1 */
-	int len, err;
+	unsigned char hash[66]; /* MAX hash size + 2 */
+	int len, err, offset;
+	int algo = get_hash_algo(params.hash_algo);
 
-	hash[0] = IMA_XATTR_DIGEST;
-	len = ima_calc_hash(file, hash + 1);
+	if (algo > PKEY_HASH_SHA1) {
+		hash[0] = IMA_XATTR_DIGEST_NG;
+		hash[1] = algo;
+		offset = 2;
+	} else {
+		hash[0] = IMA_XATTR_DIGEST;
+		offset = 1;
+	}
+
+	len = ima_calc_hash(file, hash + offset);
 	if (len <= 1)
 		return len;
+
+	len += offset;
 
 	if (params.verbose >= LOG_INFO)
 		log_info("hash: ");
 
 	if (sigdump || params.verbose >= LOG_INFO)
-		dump(hash, len + 1);
+		dump(hash, len);
 
 	if (xattr) {
-		err = lsetxattr(file, "security.ima", hash, len + 1, 0);
+		err = lsetxattr(file, "security.ima", hash, len, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
