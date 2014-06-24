@@ -626,7 +626,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 static int sign_evm(const char *file, const char *key)
 {
 	unsigned char hash[20];
-	unsigned char sig[1024] = "\x03";
+	unsigned char sig[1024];
 	int len, err;
 
 	len = calc_evm_hash(file, hash);
@@ -638,6 +638,7 @@ static int sign_evm(const char *file, const char *key)
 		return len;
 
 	if (xattr) {
+		sig[0] = EVM_IMA_XATTR_DIGSIG;
 		err = lsetxattr(file, "security.evm", sig, len + 1, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
@@ -650,9 +651,10 @@ static int sign_evm(const char *file, const char *key)
 
 static int hash_ima(const char *file)
 {
-	unsigned char hash[65] = "\x01"; /* MAX hash size + 1 */
+	unsigned char hash[65]; /* MAX hash size + 1 */
 	int len, err;
 
+	hash[0] = IMA_XATTR_DIGEST;
 	len = ima_calc_hash(file, hash + 1);
 	if (len <= 1)
 		return len;
@@ -690,7 +692,7 @@ static int cmd_hash_ima(struct command *cmd)
 static int sign_ima(const char *file, const char *key)
 {
 	unsigned char hash[64];
-	unsigned char sig[1024] = "\x03";
+	unsigned char sig[1024];
 	int len, err;
 
 	len = ima_calc_hash(file, hash);
@@ -703,6 +705,7 @@ static int sign_ima(const char *file, const char *key)
 
 	/* add header */
 	len++;
+	sig[0] = EVM_IMA_XATTR_DIGSIG;
 
 	if (sigfile)
 		bin2file(file, "sig", sig, len);
@@ -1151,7 +1154,7 @@ out:
 static int hmac_evm(const char *file, const char *key)
 {
 	unsigned char hash[20];
-	unsigned char sig[1024] = "\x02";
+	unsigned char sig[1024];
 	int len, err;
 
 	len = calc_evm_hmac(file, key, hash);
@@ -1163,6 +1166,7 @@ static int hmac_evm(const char *file, const char *key)
 	memcpy(sig + 1, hash, len);
 
 	if (xattr) {
+		sig[0] = EVM_XATTR_HMAC;
 		err = lsetxattr(file, "security.evm", sig, len + 1, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);

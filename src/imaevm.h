@@ -84,6 +84,13 @@
 
 #define __packed __attribute__((packed))
 
+enum evm_ima_xattr_type {
+	IMA_XATTR_DIGEST = 0x01,
+	EVM_XATTR_HMAC,
+	EVM_IMA_XATTR_DIGSIG,
+	IMA_XATTR_DIGEST_NG,
+};
+
 struct h_misc {
 	unsigned long ino;
 	uint32_t generation;
