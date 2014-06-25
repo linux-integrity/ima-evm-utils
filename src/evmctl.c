@@ -84,6 +84,7 @@ struct command {
 static int g_argc;
 static char **g_argv;
 static int xattr = 1;
+static bool check_xattr;
 static int sigdump;
 static int digest;
 static int digsig;
@@ -749,6 +750,8 @@ static int get_file_type(const char *path, const char *search_type)
 			dts |= DIR_MASK; break;
 		case 's':
 			dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
+		case 'x':
+			check_xattr = true; break;
 		case 'm':
 			/* stay within the same filesystem*/
 			err = lstat(path, &st);
@@ -1227,7 +1230,7 @@ static int ima_fix(const char *path)
 
 	log_info("%s\n", path);
 
-	if (xattr) {
+	if (check_xattr) {
 		/* re-measuring takes a time
 		 * in some cases we can skip labeling if xattrs exists
 		 */
@@ -1312,7 +1315,6 @@ static int cmd_ima_fix(struct command *cmd)
 {
 	char *path = g_argv[optind++];
 	int err, dts = REG_MASK; /* only regular files by default */
-	struct stat st;
 
 	if (!path) {
 		log_err("Parameters missing\n");
@@ -1320,41 +1322,18 @@ static int cmd_ima_fix(struct command *cmd)
 		return -1;
 	}
 
-	xattr = 0; /* do not check xattrs, fix everything */
-
-	if (search_type) {
-		int i;
-
-		dts = 0;
-		for (i = 0; search_type[i]; i++) {
-			switch (search_type[i]) {
-			case 'f':
-				dts |= REG_MASK; break;
-			case 'd':
-				dts |= DIR_MASK; break;
-			case 's':
-				dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
-			case 'x':
-				/* check xattrs */
-				xattr = 1; break;
-			case 'm':
-				/* stay within the same filesystem*/
-				err = lstat(path, &st);
-				if (err < 0) {
-					log_err("stat() failed\n");
-					return err;
-				}
-				fs_dev = st.st_dev; /* filesystem to start from */
-				break;
-			}
+	if (recursive) {
+		if (search_type) {
+			dts = get_file_type(path, search_type);
+			if (dts < 0)
+				return dts;
 		}
+		err = find(path, dts, ima_fix);
+	} else {
+		err = ima_fix(path);
 	}
 
-	err = find(path, dts, ima_fix);
-	if (err)
-		return err;
-
-	return 0;
+	return err;
 }
 
 
