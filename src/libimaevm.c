@@ -44,6 +44,7 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <asm/byteorder.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
@@ -125,6 +126,7 @@ const struct RSA_ASN1_template RSA_ASN1_templates[PKEY_HASH__LAST] = {
 
 struct libevm_params params = {
 	.verbose = LOG_INFO - 1,
+	.x509 = 1,
 	.hash_algo = "sha1",
 };
 
@@ -532,4 +534,260 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
 		return hashlen;
 
 	return verify_hash(hash, hashlen, sig + 1, siglen - 1);
+}
+
+/*
+ * Create binary key representation suitable for kernel
+ */
+int key2bin(RSA *key, unsigned char *pub)
+{
+	int len, b, offset = 0;
+	struct pubkey_hdr *pkh = (struct pubkey_hdr *)pub;
+
+	/* add key header */
+	pkh->version = 1;
+	pkh->timestamp = 0;	/* PEM has no timestamp?? */
+	pkh->algo = PUBKEY_ALGO_RSA;
+	pkh->nmpi = 2;
+
+	offset += sizeof(*pkh);
+
+	len = BN_num_bytes(key->n);
+	b = BN_num_bits(key->n);
+	pub[offset++] = b >> 8;
+	pub[offset++] = b & 0xff;
+	BN_bn2bin(key->n, &pub[offset]);
+	offset += len;
+
+	len = BN_num_bytes(key->e);
+	b = BN_num_bits(key->e);
+	pub[offset++] = b >> 8;
+	pub[offset++] = b & 0xff;
+	BN_bn2bin(key->e, &pub[offset]);
+	offset += len;
+
+	return offset;
+}
+
+void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len)
+{
+	uint8_t sha1[SHA_DIGEST_LENGTH];
+	uint64_t id;
+
+	SHA1(pkey, len, sha1);
+
+	/* sha1[12 - 19] is exactly keyid from gpg file */
+	memcpy(keyid, sha1 + 12, 8);
+	log_debug("keyid: ");
+	log_debug_dump(keyid, 8);
+
+	id = __be64_to_cpup((__be64 *) keyid);
+	sprintf(str, "%llX", (unsigned long long)id);
+	log_info("keyid: %s\n", str);
+}
+
+void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
+{
+	uint8_t sha1[SHA_DIGEST_LENGTH];
+	unsigned char *pkey = NULL;
+	int len;
+
+	len = i2d_RSAPublicKey(key, &pkey);
+
+	SHA1(pkey, len, sha1);
+
+	/* sha1[12 - 19] is exactly keyid from gpg file */
+	memcpy(keyid, sha1 + 16, 4);
+	log_debug("keyid: ");
+	log_debug_dump(keyid, 4);
+
+	sprintf(str, "%x", __be32_to_cpup(keyid));
+	log_info("keyid: %s\n", str);
+
+	free(pkey);
+}
+
+static RSA *read_priv_key(const char *keyfile, char *keypass)
+{
+	FILE *fp;
+	RSA *key;
+
+	fp = fopen(keyfile, "r");
+	if (!fp) {
+		log_err("Unable to open keyfile %s\n", keyfile);
+		return NULL;
+	}
+	key = PEM_read_RSAPrivateKey(fp, NULL, NULL, keypass);
+	if (!key)
+		log_err("PEM_read_RSAPrivateKey() failed\n");
+
+	fclose(fp);
+	return key;
+}
+
+static int get_hash_algo_v1(const char *algo)
+{
+
+	if (!strcmp(algo, "sha1"))
+		return DIGEST_ALGO_SHA1;
+	else if (!strcmp(algo, "sha256"))
+		return DIGEST_ALGO_SHA256;
+
+	return -1;
+}
+
+int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+{
+	int len = -1, hashalgo_idx;
+	SHA_CTX ctx;
+	unsigned char pub[1024];
+	RSA *key;
+	char name[20];
+	unsigned char sighash[20];
+	struct signature_hdr *hdr;
+	uint16_t *blen;
+
+	if (!hash) {
+		log_err("sign_hash_v1: hash is null\n");
+		return -1;
+	}
+
+	if (size < 0) {
+		log_err("sign_hash_v1: size is negative: %d\n", size);
+		return -1;
+	}
+
+	if (!hashalgo) {
+		log_err("sign_hash_v1: hashalgo is null\n");
+		return -1;
+	}
+
+	if (!sig) {
+		log_err("sign_hash_v1: sig is null\n");
+		return -1;
+	}
+
+	log_info("hash: ");
+	log_dump(hash, size);
+
+	key = read_priv_key(keyfile, params.keypass);
+	if (!key) {
+		return -1;
+	}
+
+	hdr = (struct signature_hdr *)sig;
+
+	/* now create a new hash */
+	hdr->version = (uint8_t) DIGSIG_VERSION_1;
+	hdr->timestamp = time(NULL);
+	hdr->algo = PUBKEY_ALGO_RSA;
+	hashalgo_idx = get_hash_algo_v1(hashalgo);
+	if (hashalgo_idx < 0) {
+		log_err("Signature version 1 does not support hash algo %s\n",
+			hashalgo);
+		goto out;
+	}
+	hdr->hash = (uint8_t) hashalgo_idx;
+
+	len = key2bin(key, pub);
+	calc_keyid_v1(hdr->keyid, name, pub, len);
+
+	hdr->nmpi = 1;
+
+	SHA1_Init(&ctx);
+	SHA1_Update(&ctx, hash, size);
+	SHA1_Update(&ctx, hdr, sizeof(*hdr));
+	SHA1_Final(sighash, &ctx);
+	log_info("sighash: ");
+	log_dump(sighash, sizeof(sighash));
+
+	len = RSA_private_encrypt(sizeof(sighash), sighash, sig + sizeof(*hdr) + 2, key, RSA_PKCS1_PADDING);
+	if (len < 0) {
+		log_err("RSA_private_encrypt() failed: %d\n", len);
+		goto out;
+	}
+
+	/* we add bit length of the signature to make it gnupg compatible */
+	blen = (uint16_t *) (sig + sizeof(*hdr));
+	*blen = __cpu_to_be16(len << 3);
+	len += sizeof(*hdr) + 2;
+	log_info("evm/ima signature: %d bytes\n", len);
+out:
+	RSA_free(key);
+	return len;
+}
+
+int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+{
+	struct signature_v2_hdr *hdr;
+	int len = -1;
+	RSA *key;
+	char name[20];
+	unsigned char *buf;
+	const struct RSA_ASN1_template *asn1;
+
+	if (!hash) {
+		log_err("sign_hash_v2: hash is null\n");
+		return -1;
+	}
+
+	if (size < 0) {
+		log_err("sign_hash_v2: size is negative: %d\n", size);
+		return -1;
+	}
+
+	if (!sig) {
+		log_err("sign_hash_v2: sig is null\n");
+		return -1;
+	}
+
+	if (!algo) {
+		log_err("sign_hash_v2: algo is null\n");
+		return -1;
+	}
+
+	log_info("hash: ");
+	log_dump(hash, size);
+
+	key = read_priv_key(keyfile, params.keypass);
+	if (!key)
+		return -1;
+
+	hdr = (struct signature_v2_hdr *)sig;
+	hdr->version = (uint8_t) DIGSIG_VERSION_2;
+
+	hdr->hash_algo = get_hash_algo(algo);
+
+	calc_keyid_v2(&hdr->keyid, name, key);
+
+	asn1 = &RSA_ASN1_templates[hdr->hash_algo];
+
+	buf = malloc(size + asn1->size);
+	if (!buf)
+		goto out;
+
+	memcpy(buf, asn1->data, asn1->size);
+	memcpy(buf + asn1->size, hash, size);
+	len = RSA_private_encrypt(size + asn1->size, buf, hdr->sig,
+				  key, RSA_PKCS1_PADDING);
+	if (len < 0) {
+		log_err("RSA_private_encrypt() failed: %d\n", len);
+		goto out;
+	}
+
+	/* we add bit length of the signature to make it gnupg compatible */
+	hdr->sig_size = __cpu_to_be16(len);
+	len += sizeof(*hdr);
+	log_info("evm/ima signature: %d bytes\n", len);
+out:
+	if (buf)
+		free(buf);
+	RSA_free(key);
+	return len;
+}
+
+int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+{
+	return params.x509 ? sign_hash_v2(hashalgo, hash, size, keyfile, sig) :
+			     sign_hash_v1(hashalgo, hash, size, keyfile, sig);
 }

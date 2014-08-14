@@ -170,8 +170,10 @@ typedef int (*verify_hash_fn_t)(const unsigned char *hash, int size, unsigned ch
 
 struct libevm_params {
 	int verbose;
+	int x509;
 	const char *hash_algo;
 	char *keyfile;
+	char *keypass;
 };
 
 struct RSA_ASN1_template {
@@ -189,6 +191,11 @@ int ima_calc_hash(const char *file, uint8_t *hash);
 int get_hash_algo(const char *algo);
 RSA *read_pub_key(const char *keyfile, int x509);
 
+void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len);
+void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key);
+int key2bin(RSA *key, unsigned char *pub);
+
+int sign_hash(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig);
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen);
 
