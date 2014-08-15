@@ -309,6 +309,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		/* we cannot at the momement to get generation of special files..
 		 * kernel API does not support it */
 		int fd = open(file, 0);
+
 		if (fd < 0) {
 			log_err("Unable to open %s\n", file);
 			return -1;
@@ -358,6 +359,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	if (msize == 0) {
 		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
+
 		hmac_size = sizeof(*hmac);
 		hmac->ino = st.st_ino;
 		hmac->generation = generation;
@@ -366,6 +368,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		hmac->mode = st.st_mode;
 	} else if (msize == 64) {
 		struct h_misc_64 *hmac = (struct h_misc_64 *)&hmac_misc;
+
 		hmac_size = sizeof(*hmac);
 		hmac->ino = st.st_ino;
 		hmac->generation = generation;
@@ -374,6 +377,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		hmac->mode = st.st_mode;
 	} else {
 		struct h_misc_32 *hmac = (struct h_misc_32 *)&hmac_misc;
+
 		hmac_size = sizeof(*hmac);
 		hmac->ino = st.st_ino;
 		hmac->generation = generation;
@@ -735,8 +739,8 @@ static int verify_ima(const char *file)
 	}
 
 	if (sigfile) {
-		void *tmp;
-		tmp = file2bin(file, "sig", &len);
+		void *tmp = file2bin(file, "sig", &len);
+
 		memcpy(sig, tmp, len);
 		free(tmp);
 	}
@@ -778,6 +782,7 @@ static int cmd_import(struct command *cmd)
 	if (ring) {
 		if (ring[0] != '@') {
 			int base = 10;
+
 			if (ring[0] == '0' && ring[1] == 'x')
 				base = 16;
 			id = strtoul(ring, NULL, base);
@@ -871,6 +876,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		/* we cannot at the momement to get generation of special files..
 		 * kernel API does not support it */
 		int fd = open(file, 0);
+
 		if (fd < 0) {
 			log_err("Unable to open %s\n", file);
 			goto out;
@@ -920,6 +926,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	if (msize == 0) {
 		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
+
 		hmac_size = sizeof(*hmac);
 		hmac->ino = st.st_ino;
 		hmac->generation = generation;
@@ -928,6 +935,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		hmac->mode = st.st_mode;
 	} else if (msize == 64) {
 		struct h_misc_64 *hmac = (struct h_misc_64 *)&hmac_misc;
+
 		hmac_size = sizeof(*hmac);
 		hmac->ino = st.st_ino;
 		hmac->generation = generation;
@@ -936,6 +944,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		hmac->mode = st.st_mode;
 	} else {
 		struct h_misc_32 *hmac = (struct h_misc_32 *)&hmac_misc;
+
 		hmac_size = sizeof(*hmac);
 		hmac->ino = st.st_ino;
 		hmac->generation = generation;
@@ -1062,6 +1071,7 @@ static int find(const char *path, int dts, find_cb_t func)
 	if (fs_dev) {
 		struct stat st;
 		int err = lstat(path, &st);
+
 		if (err < 0) {
 			log_err("stat() failed\n");
 			return err;
@@ -1576,6 +1586,7 @@ int main(int argc, char *argv[])
 
 	if (err) {
 		unsigned long error;
+
 		if (errno)
 			log_err("errno: %s (%d)\n", strerror(errno), errno);
 		for (;;) {

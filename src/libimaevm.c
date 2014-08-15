@@ -257,15 +257,16 @@ static int add_dev_hash(struct stat *st, EVP_MD_CTX *ctx)
 	uint32_t dev = st->st_rdev;
 	unsigned major = (dev & 0xfff00) >> 8;
 	unsigned minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
+
 	log_info("device: %u:%u\n", major, minor);
 	return !EVP_DigestUpdate(ctx, &dev, sizeof(dev));
 }
 
 int ima_calc_hash(const char *file, uint8_t *hash)
 {
+	const EVP_MD *md;
 	struct stat st;
 	EVP_MD_CTX ctx;
-	const EVP_MD *md;
 	unsigned int mdlen;
 	int err;
 
@@ -671,9 +672,8 @@ int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, cons
 	log_dump(hash, size);
 
 	key = read_priv_key(keyfile, params.keypass);
-	if (!key) {
+	if (!key)
 		return -1;
-	}
 
 	hdr = (struct signature_hdr *)sig;
 
