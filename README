@@ -1,12 +1,61 @@
-ima-evm-utils - IMA/EVM signing utility
-=========================================
+EVMCTL(1)
+=========
 
-Contents:
+NAME
+----
 
-   1. Key and signature formats
-   2. Key generation
-   3. Initialization
-   4. Signing
+evmctl - IMA/EVM signing utility
+
+
+SYNOPSIS
+--------
+
+evmctl [options] <command> [OPTIONS]
+
+
+DESCRIPTION
+-----------
+
+The evmctl utility can be used for producing and verifying digital signatures,
+which are used by Linux kernel integrity subsystem (IMA/EVM). It can be also
+used to import keys into the kernel keyring.
+
+COMMANDS
+--------
+
+ help <command>
+ import [--rsa] pubkey keyring
+ sign [-r] [--imahash | --imasig ] [--key key] [--pass password] file
+ verify file
+ ima_sign [--sigfile] [--key key] [--pass password] file
+ ima_verify file
+ ima_hash file
+ ima_measurement file
+ ima_fix [-t fdsxm] path
+ sign_hash [--key key] [--pass password]
+ hmac [--imahash | --imasig ] file
+
+
+OPTIONS
+-------
+
+ -a, --hashalgo     sha1 (default), sha224, sha256, sha384, sha512
+ -s, --imasig       also make IMA signature
+ -d, --imahash      also make IMA hash
+ -f, --sigfile      store IMA signature in .sig file instead of xattr
+ -1, --rsa          signing key is in RSA DER format (signing v1)
+ -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)
+ -p, --pass         password for encrypted signing key
+ -u, --uuid         use file system UUID in HMAC calculation (EVM v2)
+ -t, --type         file types to fix 'fdsxm' (f: file, d: directory, s: block/char/symlink)
+                    x - skip fixing if both ima and evm xattrs exist (use with caution)
+                    m - stay on the same filesystem (like 'find -xdev')
+ -n                 print result to stdout instead of setting xattr
+ -r, --recursive    recurse into directories (sign)
+ --m32              force signature for 32 bit target system
+ --m64              force signature for 32 bit target system
+ -v                 increase verbosity level
+ -h, --help         display this help and exit
 
 
 Key and signature formats
@@ -26,24 +75,24 @@ Use '--rsa' or '-1' parameter to use old signature format and API.
 Key generation
 --------------
 
-Generate private key in plain text format
+Generate private key in plain text format:
 
-    $ openssl genrsa -out privkey_evm.pem 1024
+    openssl genrsa -out privkey_evm.pem 1024
 
-Generate encrypted private key
+Generate encrypted private key:
 
-    $ openssl genrsa -des3 -out privkey_evm.pem 1024
+    openssl genrsa -des3 -out privkey_evm.pem 1024
 
-Make encrypted private key from unencrypted
+Make encrypted private key from unencrypted:
 
-    $ openssl rsa -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem -des3
+    openssl rsa -in /etc/keys/privkey_evm.pem -out privkey_evm_enc.pem -des3
 
-Generate self-signed X509 certificate and private key for using kernel asymmetric
-keys support
+Generate self-signed X509 certificate and private key for using kernel
+asymmetric keys support:
 
-	$ openssl req -new -nodes -utf8 -sha1 -days 36500 -batch \
-	      -x509 -config x509_evm.genkey \
-	      -outform DER -out x509_evm.der -keyout privkey_evm.pem
+    openssl req -new -nodes -utf8 -sha1 -days 36500 -batch \
+    	        -x509 -config x509_evm.genkey \
+	        -outform DER -out x509_evm.der -keyout privkey_evm.pem
 
 Configuration file x509_evm.genkey:
 
@@ -68,28 +117,28 @@ Configuration file x509_evm.genkey:
 	# EOF
 
 
-Get public key
+Get public key:
 
-    $ openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
+    openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
 
-Copy keys to /etc/keys
+Copy keys to /etc/keys:
 
-    $ cp pubkey_evm.pem /etc/keys
-    $ scp pubkey_evm.pem target:/etc/keys
+    cp pubkey_evm.pem /etc/keys
+    scp pubkey_evm.pem target:/etc/keys
 
 or
-    $ cp x509_evm.pem /etc/keys
-    $ scp x509_evm.pem target:/etc/keys
+    cp x509_evm.pem /etc/keys
+    scp x509_evm.pem target:/etc/keys
 
 
-Generation of EVM keys
+Generate EVM keys:
 
-    $ # create and save the kernel master key (user type)
-    $ keyctl add user kmk "`dd if=/dev/urandom bs=1 count=32 2>/dev/null`" @u
-    $ keyctl pipe `keyctl search @u user kmk` > /etc/keys/kmk
-    $ # create the EVM encrypted key
-    $ keyctl add encrypted evm-key "new user:kmk 32" @u
-    $ keyctl pipe `keyctl search @u encrypted evm-key` >/etc/keys/evm-key
+    # create and save the kernel master key (user type)
+    keyctl add user kmk "`dd if=/dev/urandom bs=1 count=32 2>/dev/null`" @u
+    keyctl pipe `keyctl search @u user kmk` > /etc/keys/kmk
+    # create the EVM encrypted key
+    keyctl add encrypted evm-key "new user:kmk 32" @u
+    keyctl pipe `keyctl search @u encrypted evm-key` >/etc/keys/evm-key
 
 
 Initialization
@@ -117,10 +166,10 @@ Here is an example script /etc/initramfs-tools/scripts/local-top/ima.sh
     echo "1" > /sys/kernel/security/evm
 
 
-Import X509 certificate into the kernel keyring (since kernel 3.9?)
+Import X509 certificate into the kernel keyring (since kernel 3.9?):
 
-    $ evmctl import /etc/keys/x509_evm.der `keyctl search @u keyring _ima`
-    $ evmctl import /etc/keys/x509_evm.der `keyctl search @u keyring _evm`
+    evmctl import /etc/keys/x509_evm.der `keyctl search @u keyring _ima`
+    evmctl import /etc/keys/x509_evm.der `keyctl search @u keyring _evm`
 
 
 Signing
@@ -133,23 +182,44 @@ Default X509 certificate: /etc/keys/x509_evm.der
 Signing for using old RSA format is done using '-1' or '--rsa' parameter.
 Signing for using old EVM HMAC format is done using '-u-' or '--uuid=-' parameter.
 
-Sign file with EVM signature and use hash value for IMA - common case
+Sign file with EVM signature and use hash value for IMA - common case:
 
-    $ evmctl sign [-u] [-1] --imahash test.txt
+    evmctl sign [-u] [-1] --imahash test.txt
 
-Sign file with both IMA and EVM signatures - for immutable files
+Sign file with both IMA and EVM signatures - for immutable files:
 
-    $ evmctl sign [-u] [-1] --imasig test.txt
+    evmctl sign [-u] [-1] --imasig test.txt:
 
-Sign file with IMA signature - for immutable files
+Sign file with IMA signature - for immutable files:
 
-    $ evmctl ima_sign [-1] test.txt
+    evmctl ima_sign [-1] test.txt
 
-Label whole filesystem with EVM signatures
+Label whole filesystem with EVM signatures:
 
-    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u] [-1] --imahash '{}' \;
+    find / \( -fstype rootfs -o -fstype ext4 \) -exec evmctl sign [-u] [-1] --imahash '{}' \;
 
-Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs
+Label filesystem in fix mode - kernel sets correct values to IMA and EVM xattrs:
 
-    $ find / \( -fstype rootfs -o -fstype ext4 \) -exec sh -c "< '{}'" \;
+    find / \( -fstype rootfs -o -fstype ext4 \) -exec sh -c "< '{}'" \;
+
+
+AUTHOR
+------
+
+Written by Dmitry Kasatkin, <dmitry.kasatkin at gmail.com>
+
+
+RESOURCES
+---------
+
+http://sourceforge.net/p/linux-ima/wiki/Home
+
+http://sourceforge.net/p/linux-ima/ima-evm-utils
+
+
+COPYING
+-------
+
+Copyright \(C) 2012 - 2014 Dmitry Kasatkin. Free use of this software is granted under
+the terms of the GNU Public License (GPL).
 
