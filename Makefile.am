@@ -1,11 +1,10 @@
 SUBDIRS = src
-# does work on Ubuntu, but on Fedora different path to XSL stylesheets
-#man_MANS = evmctl.1
+dist_man_MANS = evmctl.1
 
 doc_DATA =  examples/ima-genkey-self.sh examples/ima-genkey.sh examples/ima-gen-local-ca.sh
 EXTRA_DIST = autogen.sh $(doc_DATA)
 
-CLEANFILES = *.html *.1 *.xsl
+CLEANFILES = *.html *.xsl
 
 ACLOCAL_AMFLAGS = -I m4
 
@@ -30,12 +29,14 @@ MANPAGE_DOCBOOK_XSL = /usr/share/xml/docbook/stylesheet/docbook-xsl/manpages/doc
 evmctl.1.html: README
 	@asciidoc -o $@ $<
 
-evmctl.1.xsl: README
-	@asciidoc -d manpage -b docbook -o $@ $<
+evmctl.1:
+	asciidoc -d manpage -b docbook -o evmctl.1.xsl README
+	xsltproc --nonet -o $@ $(MANPAGE_DOCBOOK_XSL) evmctl.1.xsl
+	rm -f evmctl.1.xsl
 
-evmctl.1: evmctl.1.xsl
-	@xsltproc --nonet -o $@ $(MANPAGE_DOCBOOK_XSL) $<
+rmman:
+	rm -f evmctl.1
 
-doc: evmctl.1.html evmctl.1
+doc: evmctl.1.html rmman evmctl.1
 
 .PHONY: $(tarname)
