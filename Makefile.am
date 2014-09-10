@@ -1,6 +1,7 @@
 SUBDIRS = src
 
-EXTRA_DIST = autogen.sh
+doc_DATA =  examples/ima-genkey-self.sh examples/ima-genkey.sh examples/ima-gen-local-ca.sh
+EXTRA_DIST = autogen.sh $(doc_DATA)
 
 ACLOCAL_AMFLAGS = -I m4
 
