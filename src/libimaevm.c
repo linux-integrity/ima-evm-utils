@@ -171,7 +171,7 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 
 	fp = fopen(file, "r");
 	if (!fp) {
-		log_err("Unable to open %s\n", file);
+		log_err("Failed to open: %s\n", file);
 		return -1;
 	}
 
@@ -185,7 +185,7 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 		len = MIN(size, bs);
 		if (!fread(data, len, 1, fp)) {
 			if (ferror(fp)) {
-				log_err("fread() error\n\n");
+				log_err("fread() failed\n\n");
 				goto out;
 			}
 			break;
@@ -214,7 +214,7 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 
 	dir = opendir(file);
 	if (!dir) {
-		log_err("Unable to open %s\n", file);
+		log_err("Failed to open: %s\n", file);
 		return -1;
 	}
 
@@ -273,7 +273,7 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 	/*  Need to know the file length */
 	err = lstat(file, &st);
 	if (err < 0) {
-		log_err("stat() failed\n");
+		log_err("Failed to stat: %s\n", file);
 		return err;
 	}
 
@@ -329,7 +329,7 @@ RSA *read_pub_key(const char *keyfile, int x509)
 
 	fp = fopen(keyfile, "r");
 	if (!fp) {
-		log_err("Unable to open keyfile %s\n", keyfile);
+		log_err("Failed to open keyfile: %s\n", keyfile);
 		return NULL;
 	}
 
@@ -615,7 +615,7 @@ static RSA *read_priv_key(const char *keyfile, char *keypass)
 
 	fp = fopen(keyfile, "r");
 	if (!fp) {
-		log_err("Unable to open keyfile %s\n", keyfile);
+		log_err("Failed to open keyfile: %s\n", keyfile);
 		return NULL;
 	}
 	key = PEM_read_RSAPrivateKey(fp, NULL, NULL, keypass);

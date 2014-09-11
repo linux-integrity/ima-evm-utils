@@ -125,7 +125,7 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 
 	fp = fopen(name, "w");
 	if (!fp) {
-		log_err("Unable to open %s for writing\n", name);
+		log_err("Failed to open: %s\n", name);
 		return -1;
 	}
 	err = fwrite(data, len, 1, fp);
@@ -150,7 +150,7 @@ static unsigned char *file2bin(const char *file, const char *ext, int *size)
 	len = get_filesize(name);
 	fp = fopen(name, "r");
 	if (!fp) {
-		log_err("Unable to open %s\n", name);
+		log_err("Failed to open: %s\n", name);
 		return NULL;
 	}
 	data = malloc(len);
@@ -270,19 +270,18 @@ static int get_uuid(struct stat *st, char *uuid)
 	sprintf(path, "blkid -s UUID -o value /dev/block/%u:%u", major, minor);
 
 	fp = popen(path, "r");
-	if (!fp) {
-		log_err("popen() failed\n");
-		return -1;
-	}
+	if (!fp)
+		goto err;
 
 	len = fread(_uuid, 1, sizeof(_uuid), fp);
 	pclose(fp);
-	if (len != sizeof(_uuid)) {
-		log_err("fread() failed\n");
-		return -1;
-	}
+	if (len != sizeof(_uuid))
+		goto err;
 
 	return pack_uuid(_uuid, uuid);
+err:
+	log_err("Failed to read UUID. Root access might require.\n");
+	return -1;
 }
 
 static int calc_evm_hash(const char *file, unsigned char *hash)
@@ -301,7 +300,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	int hmac_size;
 
 	if (lstat(file, &st)) {
-		log_err("lstat() failed\n");
+		log_err("Failed to stat: %s\n", file);
 		return -1;
 	}
 
@@ -311,7 +310,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		int fd = open(file, 0);
 
 		if (fd < 0) {
-			log_err("Unable to open %s\n", file);
+			log_err("Failed to open: %s\n", file);
 			return -1;
 		}
 		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
@@ -553,7 +552,7 @@ static int get_file_type(const char *path, const char *search_type)
 			/* stay within the same filesystem*/
 			err = lstat(path, &st);
 			if (err < 0) {
-				log_err("stat() failed\n");
+				log_err("Failed to stat: %s\n", path);
 				return err;
 			}
 			fs_dev = st.st_dev; /* filesystem to start from */
@@ -700,12 +699,12 @@ static int verify_evm(const char *file)
 
 	len = lgetxattr(file, "security.evm", sig, sizeof(sig));
 	if (len < 0) {
-		log_err("getxattr failed\n");
+		log_err("getxattr failed: %s\n", file);
 		return len;
 	}
 
 	if (sig[0] != 0x03) {
-		log_err("security.evm has not signature\n");
+		log_err("security.evm has no signature\n");
 		return -1;
 	}
 
@@ -733,7 +732,7 @@ static int verify_ima(const char *file)
 	if (xattr) {
 		len = lgetxattr(file, "security.ima", sig, sizeof(sig));
 		if (len < 0) {
-			log_err("getxattr failed\n");
+			log_err("getxattr failed: %s\n", file);
 			return len;
 		}
 	}
@@ -854,12 +853,12 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	key = file2bin(keyfile, NULL, &keylen);
 	if (!key) {
-		log_err("Unable to read a key: %s\n\n", keyfile);
+		log_err("Failed to read a key: %s\n", keyfile);
 		return -1;
 	}
 
 	if (keylen > sizeof(evmkey)) {
-		log_err("key is too long\n");
+		log_err("key is too long: %d\n", keylen);
 		goto out;
 	}
 
@@ -868,7 +867,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	memset(evmkey + keylen, 0, sizeof(evmkey) - keylen);
 
 	if (lstat(file, &st)) {
-		log_err("lstat() failed\n");
+		log_err("Failed to stat: %s\n", file);
 		goto out;
 	}
 
@@ -878,7 +877,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		int fd = open(file, 0);
 
 		if (fd < 0) {
-			log_err("Unable to open %s\n", file);
+			log_err("Failed to open %s\n", file);
 			goto out;
 		}
 		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
@@ -892,7 +891,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	list_size = llistxattr(file, list, sizeof(list));
 	if (list_size <= 0) {
-		log_err("llistxattr() failed\n");
+		log_err("llistxattr() failed: %s\n", file);
 		goto out;
 	}
 
@@ -1038,7 +1037,7 @@ static int ima_fix(const char *path)
 		 */
 		size = llistxattr(path, list, sizeof(buf));
 		if (size < 0) {
-			log_errno("llistxattr() failed: %s\n", path);
+			log_errno("Failed to read xattrs (llistxattr): %s\n", path);
 			return -1;
 		}
 		for (; size > 0; len++, size -= len, list += len) {
@@ -1054,7 +1053,7 @@ static int ima_fix(const char *path)
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
-		log_errno("%s open failed", path);
+		log_errno("Failed to open file: %s", path);
 		return -1;
 	}
 
@@ -1073,7 +1072,7 @@ static int find(const char *path, int dts, find_cb_t func)
 		int err = lstat(path, &st);
 
 		if (err < 0) {
-			log_err("stat() failed\n");
+			log_err("Failed to stat: %s\n", path);
 			return err;
 		}
 		if (st.st_dev != fs_dev)
@@ -1082,12 +1081,12 @@ static int find(const char *path, int dts, find_cb_t func)
 
 	dir = opendir(path);
 	if (!dir) {
-		log_err("Unable to open %s\n", path);
+		log_err("Failed to open directory %s\n", path);
 		return -1;
 	}
 
 	if (fchdir(dirfd(dir))) {
-		log_err("Unable to chdir %s\n", path);
+		log_err("Failed to chdir %s\n", path);
 		return -1;
 	}
 
@@ -1102,7 +1101,7 @@ static int find(const char *path, int dts, find_cb_t func)
 	}
 
 	if (chdir("..")) {
-		log_err("Unable to chdir %s\n", path);
+		log_err("Failed to chdir: %s\n", path);
 		return -1;
 	}
 
@@ -1305,7 +1304,7 @@ static int ima_measurement(const char *file)
 
 	fp = fopen(file, "rb");
 	if (!fp) {
-		log_err("Unable to open measurement file\n");
+		log_err("Failed to open measurement file: %s\n", file);
 		return -1;
 	}
 
@@ -1448,20 +1447,20 @@ static void usage(void)
 	printf(
 		"\n"
 		"  -a, --hashalgo     sha1 (default), sha224, sha256, sha384, sha512\n"
-		"  -s, --imasig       also make IMA signature\n"
-		"  -d, --imahash      also make IMA hash\n"
+		"  -s, --imasig       make IMA signature\n"
+		"  -d, --imahash      make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
-		"  -1, --rsa          signing key is in RSA DER format (signing v1)\n"
-		"  -k, --key          path to signing key (default keys are /etc/keys/{privkey,pubkey}_evm.pem)\n"
+		"      --rsa          use RSA key type and signing scheme v1\n"
+		"  -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"  -p, --pass         password for encrypted signing key\n"
-		"  -u, --uuid         use file system UUID in HMAC calculation (EVM v2)\n"
-		"  -t, --type         file types to fix 'fdsxm' (f - file, d - directory, s - block/char/symlink)\n"
-		"                     x - skip fixing if both ima and evm xattrs exist (caution: they may be wrong)\n"
+		"  -r, --recursive    recurse into directories (sign)\n"
+		"  -t, --type         file types to fix 'fdsxm' (f: file, d: directory, s: block/char/symlink)\n"
+		"                     x - skip fixing if both ima and evm xattrs exist (use with caution)\n"
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
-		"  -r, --recursive    recurse into directories (sign)\n"
-		"  --m32              force signature for 32 bit target system\n"
-		"  --m64              force signature for 32 bit target system\n"
+		"  -u, --uuid         use custom FS UUID for EVM (unspecified: from FS, empty: do not use)\n"
+		"      --m32          force EVM hmac/signature for 32 bit target system\n"
+		"      --m64          force EVM hmac/signature for 64 bit target system\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
