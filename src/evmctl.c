@@ -50,6 +50,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <attr/xattr.h>
+#include <linux/xattr.h>
 #include <getopt.h>
 #include <keyutils.h>
 #include <ctype.h>
@@ -65,10 +66,10 @@
 #include "imaevm.h"
 
 static char *evm_config_xattrnames[] = {
-	"security.selinux",
-	"security.SMACK64",
-	"security.ima",
-	"security.capability",
+	XATTR_NAME_SELINUX,
+	XATTR_NAME_SMACK,
+	XATTR_NAME_IMA,
+	XATTR_NAME_CAPS,
 	NULL
 };
 
