@@ -65,13 +65,26 @@
 
 #include "imaevm.h"
 
-static char *evm_config_xattrnames[] = {
+static char *evm_default_xattrs[] = {
 	XATTR_NAME_SELINUX,
 	XATTR_NAME_SMACK,
 	XATTR_NAME_IMA,
 	XATTR_NAME_CAPS,
 	NULL
 };
+
+static char *evm_extra_smack_xattrs[] = {
+	XATTR_NAME_SELINUX,
+	XATTR_NAME_SMACK,
+	XATTR_NAME_SMACKEXEC,
+	XATTR_NAME_SMACKTRANSMUTE,
+	XATTR_NAME_SMACKMMAP,
+	XATTR_NAME_IMA,
+	XATTR_NAME_CAPS,
+	NULL
+};
+
+static char **evm_config_xattrnames = evm_default_xattrs;
 
 struct command {
 	char *name;
@@ -1460,6 +1473,7 @@ static void usage(void)
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
 		"  -u, --uuid         use custom FS UUID for EVM (unspecified: from FS, empty: do not use)\n"
+		"      --smack        use extra SMACK xattrs for EVM\n"
 		"      --m32          force EVM hmac/signature for 32 bit target system\n"
 		"      --m64          force EVM hmac/signature for 64 bit target system\n"
 		"  -v                 increase verbosity level\n"
@@ -1498,6 +1512,7 @@ static struct option opts[] = {
 	{"recursive", 0, 0, 'r'},
 	{"m32", 0, 0, '3'},
 	{"m64", 0, 0, '6'},
+	{"smack", 0, 0, 256},
 	{}
 
 };
@@ -1567,6 +1582,9 @@ int main(int argc, char *argv[])
 			break;
 		case '6':
 			msize = 64;
+			break;
+		case 256:
+			evm_config_xattrnames = evm_extra_smack_xattrs;
 			break;
 		case '?':
 			exit(1);
