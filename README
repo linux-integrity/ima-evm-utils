@@ -23,6 +23,7 @@ used to import keys into the kernel keyring.
 COMMANDS
 --------
 
+ --version
  help <command>
  import [--rsa] pubkey keyring
  sign [-r] [--imahash | --imasig ] [--key key] [--pass password] file

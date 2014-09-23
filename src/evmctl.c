@@ -1482,6 +1482,7 @@ static void usage(void)
 }
 
 struct command cmds[] = {
+	{"--version", NULL, 0, ""},
 	{"help", cmd_help, 0, "<command>"},
 	{"import", cmd_import, 0, "[--rsa] pubkey keyring", "Import public key into the keyring.\n"},
 	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass password] file", "Sign file metadata.\n"},
@@ -1513,6 +1514,7 @@ static struct option opts[] = {
 	{"m32", 0, 0, '3'},
 	{"m64", 0, 0, '6'},
 	{"smack", 0, 0, 256},
+	{"version", 0, 0, 257},
 	{}
 
 };
@@ -1585,6 +1587,10 @@ int main(int argc, char *argv[])
 			break;
 		case 256:
 			evm_config_xattrnames = evm_extra_smack_xattrs;
+			break;
+		case 257:
+			printf("evmctl %s\n", VERSION);
+			exit(0);
 			break;
 		case '?':
 			exit(1);
