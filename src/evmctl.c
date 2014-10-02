@@ -499,19 +499,6 @@ static int hash_ima(const char *file)
 	return 0;
 }
 
-static int cmd_hash_ima(struct command *cmd)
-{
-	char *file = g_argv[optind++];
-
-	if (!file) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
-
-	return hash_ima(file);
-}
-
 static int sign_ima(const char *file, const char *key)
 {
 	unsigned char hash[64];
@@ -575,6 +562,31 @@ static int get_file_type(const char *path, const char *search_type)
 	}
 
 	return dts;
+}
+
+static int cmd_hash_ima(struct command *cmd)
+{
+	char *file = g_argv[optind++];
+	int err, dts = REG_MASK; /* only regular files by default */
+
+	if (!file) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	if (recursive) {
+		if (search_type) {
+			dts = get_file_type(file, search_type);
+			if (dts < 0)
+				return dts;
+		}
+		err = find(file, dts, hash_ima);
+	} else {
+		err = hash_ima(file);
+	}
+
+	return err;
 }
 
 static int sign_ima_file(const char *file)
