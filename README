@@ -403,7 +403,7 @@ When using plain RSA public keys in PEM format, use 'evmctl import --rsa' for im
 
 Latest version of keyctl allows to import X509 public key certificates:
 
-    cat /etc/keys/x509_ima.der | keyctl padd asymmetric '' @ima_id
+    cat /etc/keys/x509_ima.der | keyctl padd asymmetric '' $ima_id
 
 
 FILES
