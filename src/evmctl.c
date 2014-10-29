@@ -107,6 +107,7 @@ static char *search_type;
 static int recursive;
 static int msize;
 static dev_t fs_dev;
+static bool evm_immutable;
 
 #define HMAC_FLAG_UUID			0x0001
 #define HMAC_FLAG_UUID_SET		0x0002
@@ -318,23 +319,24 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return -1;
 	}
 
-	if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) {
-		/* we cannot at the momement to get generation of special files..
-		 * kernel API does not support it */
-		int fd = open(file, 0);
+	if (!evm_immutable) {
+		if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) {
+			/* we cannot at the momement to get generation of special files..
+			 * kernel API does not support it */
+			int fd = open(file, 0);
 
-		if (fd < 0) {
-			log_err("Failed to open: %s\n", file);
-			return -1;
+			if (fd < 0) {
+				log_err("Failed to open: %s\n", file);
+				return -1;
+			}
+			if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
+				log_err("ioctl() failed\n");
+				return -1;
+			}
+			close(fd);
 		}
-		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
-			log_err("ioctl() failed\n");
-			return -1;
-		}
-		close(fd);
+		log_info("generation: %u\n", generation);
 	}
-
-	log_info("generation: %u\n", generation);
 
 	list_size = llistxattr(file, list, sizeof(list));
 	if (list_size < 0) {
@@ -370,7 +372,14 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
 
-	if (msize == 0) {
+	if (evm_immutable) {
+		struct h_misc_digsig *hmac = (struct h_misc_digsig *)&hmac_misc;
+
+		hmac_size = sizeof(*hmac);
+		hmac->uid = st.st_uid;
+		hmac->gid = st.st_gid;
+		hmac->mode = st.st_mode;
+	} else if (msize == 0) {
 		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
 
 		hmac_size = sizeof(*hmac);
@@ -408,7 +417,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return 1;
 	}
 
-	if (hmac_flags & HMAC_FLAG_UUID) {
+	if (!evm_immutable && (hmac_flags & HMAC_FLAG_UUID)) {
 		err = get_uuid(&st, uuid);
 		if (err)
 			return -1;
@@ -446,6 +455,9 @@ static int sign_evm(const char *file, const char *key)
 	/* add header */
 	len++;
 	sig[0] = EVM_IMA_XATTR_DIGSIG;
+
+	if (evm_immutable)
+		sig[1] = 3; /* immutable signature version */
 
 	if (sigdump || params.verbose >= LOG_INFO)
 		dump(sig, len);
@@ -1539,7 +1551,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p:fu::k:t:r", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:p:fu::k:t:ri", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1584,6 +1596,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'k':
 			params.keyfile = optarg;
+			break;
+		case 'i':
+			evm_immutable = true;
 			break;
 		case 't':
 			search_type = optarg;
@@ -1635,6 +1650,6 @@ int main(int argc, char *argv[])
 
 	ERR_free_strings();
 	EVP_cleanup();
-
+	BIO_free(NULL);
 	return err;
 }

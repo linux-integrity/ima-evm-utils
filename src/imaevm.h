@@ -108,6 +108,12 @@ struct h_misc_64 {
 	unsigned short mode;
 };
 
+struct h_misc_digsig {
+	uid_t uid;
+	gid_t gid;
+	unsigned short mode;
+};
+
 enum pubkey_algo {
 	PUBKEY_ALGO_RSA,
 	PUBKEY_ALGO_MAX,
