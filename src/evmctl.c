@@ -1121,6 +1121,19 @@ static int cmd_ima_fix(struct command *cmd)
 	return do_cmd(cmd, ima_fix);
 }
 
+static int ima_clear(const char *path)
+{
+	log_info("%s\n", path);
+	lremovexattr(path, "security.ima");
+	lremovexattr(path, "security.evm");
+
+	return 0;
+}
+
+static int cmd_ima_clear(struct command *cmd)
+{
+	return do_cmd(cmd, ima_clear);
+}
 
 static char *pcrs = "/sys/class/misc/tpm0/device/pcrs";
 
@@ -1461,6 +1474,7 @@ struct command cmds[] = {
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
+	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
 	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass password]", "Sign hashes from shaXsum output.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
