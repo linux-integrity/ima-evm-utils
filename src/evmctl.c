@@ -576,12 +576,12 @@ static int get_file_type(const char *path, const char *search_type)
 	return dts;
 }
 
-static int cmd_hash_ima(struct command *cmd)
+static int do_cmd(struct command *cmd, find_cb_t func)
 {
-	char *file = g_argv[optind++];
+	char *path = g_argv[optind++];
 	int err, dts = REG_MASK; /* only regular files by default */
 
-	if (!file) {
+	if (!path) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return -1;
@@ -589,16 +589,21 @@ static int cmd_hash_ima(struct command *cmd)
 
 	if (recursive) {
 		if (search_type) {
-			dts = get_file_type(file, search_type);
+			dts = get_file_type(path, search_type);
 			if (dts < 0)
 				return dts;
 		}
-		err = find(file, dts, hash_ima);
+		err = find(path, dts, func);
 	} else {
-		err = hash_ima(file);
+		err = func(path);
 	}
 
 	return err;
+}
+
+static int cmd_hash_ima(struct command *cmd)
+{
+	return do_cmd(cmd, hash_ima);
 }
 
 static int sign_ima_file(const char *file)
@@ -612,27 +617,7 @@ static int sign_ima_file(const char *file)
 
 static int cmd_sign_ima(struct command *cmd)
 {
-	char *file = g_argv[optind++];
-	int err, dts = REG_MASK; /* only regular files by default */
-
-	if (!file) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
-
-	if (recursive) {
-		if (search_type) {
-			dts = get_file_type(file, search_type);
-			if (dts < 0)
-				return dts;
-		}
-		err = find(file, dts, sign_ima_file);
-	} else {
-		err = sign_ima_file(file);
-	}
-
-	return err;
+	return do_cmd(cmd, sign_ima_file);
 }
 
 static int cmd_sign_hash(struct command *cmd)
@@ -702,27 +687,7 @@ static int sign_evm_path(const char *file)
 
 static int cmd_sign_evm(struct command *cmd)
 {
-	char *path = g_argv[optind++];
-	int err, dts = REG_MASK; /* only regular files by default */
-
-	if (!path) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
-
-	if (recursive) {
-		if (search_type) {
-			dts = get_file_type(path, search_type);
-			if (dts < 0)
-				return dts;
-		}
-		err = find(path, dts, sign_evm_path);
-	} else {
-		err = sign_evm_path(path);
-	}
-
-	return err;
+	return do_cmd(cmd, sign_evm_path);
 }
 
 static int verify_evm(const char *file)
@@ -1153,27 +1118,7 @@ static int find(const char *path, int dts, find_cb_t func)
 
 static int cmd_ima_fix(struct command *cmd)
 {
-	char *path = g_argv[optind++];
-	int err, dts = REG_MASK; /* only regular files by default */
-
-	if (!path) {
-		log_err("Parameters missing\n");
-		print_usage(cmd);
-		return -1;
-	}
-
-	if (recursive) {
-		if (search_type) {
-			dts = get_file_type(path, search_type);
-			if (dts < 0)
-				return dts;
-		}
-		err = find(path, dts, ima_fix);
-	} else {
-		err = ima_fix(path);
-	}
-
-	return err;
+	return do_cmd(cmd, ima_fix);
 }
 
 
