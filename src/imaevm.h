@@ -201,7 +201,7 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key);
 int key2bin(RSA *key, unsigned char *pub);
 
-int sign_hash(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig);
+int sign_hash(const char *algo, const unsigned char *hash, int size, const char *keyfile, char *keypass, unsigned char *sig);
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen);
 

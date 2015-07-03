@@ -53,6 +53,7 @@
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
+#include <openssl/err.h>
 
 #include "imaevm.h"
 
@@ -129,6 +130,8 @@ struct libevm_params params = {
 	.x509 = 1,
 	.hash_algo = "sha1",
 };
+
+static void __attribute__ ((constructor)) libinit(void);
 
 void do_dump(FILE *fp, const void *ptr, int len, bool cr)
 {
@@ -618,9 +621,14 @@ static RSA *read_priv_key(const char *keyfile, char *keypass)
 		log_err("Failed to open keyfile: %s\n", keyfile);
 		return NULL;
 	}
+	ERR_load_crypto_strings();
 	key = PEM_read_RSAPrivateKey(fp, NULL, NULL, keypass);
-	if (!key)
-		log_err("PEM_read_RSAPrivateKey() failed\n");
+	if (!key) {
+		char str[256];
+
+		ERR_error_string(ERR_get_error(), str);
+		log_err("PEM_read_RSAPrivateKey() failed: %s\n", str);
+	}
 
 	fclose(fp);
 	return key;
@@ -786,8 +794,18 @@ out:
 	return len;
 }
 
-int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+
+int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, char *keypass, unsigned char *sig)
 {
+	if (keypass)
+		params.keypass = keypass;
+
 	return params.x509 ? sign_hash_v2(hashalgo, hash, size, keyfile, sig) :
 			     sign_hash_v1(hashalgo, hash, size, keyfile, sig);
+}
+
+static void libinit()
+{
+	OpenSSL_add_all_algorithms();
+	ERR_load_crypto_strings();
 }

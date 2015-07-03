@@ -448,7 +448,7 @@ static int sign_evm(const char *file, const char *key)
 	if (len <= 1)
 		return len;
 
-	len = sign_hash("sha1", hash, len, key, sig + 1);
+	len = sign_hash("sha1", hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 
@@ -521,7 +521,7 @@ static int sign_ima(const char *file, const char *key)
 	if (len <= 1)
 		return len;
 
-	len = sign_hash(params.hash_algo, hash, len, key, sig + 1);
+	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 
@@ -644,7 +644,7 @@ static int cmd_sign_hash(struct command *cmd)
 
 		hex2bin(hash, line, hashlen);
 		siglen = sign_hash(params.hash_algo, hash, hashlen/2,
-				 key, sig + 1);
+				 key, NULL, sig + 1);
 		if (siglen <= 1)
 			return siglen;
 
@@ -1585,9 +1585,6 @@ int main(int argc, char *argv[])
 			log_err("getopt() returned: %d (%c)\n", c, c);
 		}
 	}
-
-	OpenSSL_add_all_algorithms();
-	ERR_load_crypto_strings();
 
 	if (argv[optind] == NULL)
 		usage();
