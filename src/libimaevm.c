@@ -491,7 +491,7 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen)
 {
-	char *key;
+	const char *key;
 	int x509;
 	verify_hash_fn_t verify_hash;
 
@@ -611,7 +611,7 @@ void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
 	free(pkey);
 }
 
-static RSA *read_priv_key(const char *keyfile, char *keypass)
+static RSA *read_priv_key(const char *keyfile, const char *keypass)
 {
 	FILE *fp;
 	RSA *key;
@@ -622,7 +622,7 @@ static RSA *read_priv_key(const char *keyfile, char *keypass)
 		return NULL;
 	}
 	ERR_load_crypto_strings();
-	key = PEM_read_RSAPrivateKey(fp, NULL, NULL, keypass);
+	key = PEM_read_RSAPrivateKey(fp, NULL, NULL, (void *)keypass);
 	if (!key) {
 		char str[256];
 
@@ -795,7 +795,7 @@ out:
 }
 
 
-int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, char *keypass, unsigned char *sig)
+int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, const char *keypass, unsigned char *sig)
 {
 	if (keypass)
 		params.keypass = keypass;

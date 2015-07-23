@@ -608,7 +608,7 @@ static int cmd_hash_ima(struct command *cmd)
 
 static int sign_ima_file(const char *file)
 {
-	char *key;
+	const char *key;
 
 	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
@@ -622,7 +622,8 @@ static int cmd_sign_ima(struct command *cmd)
 
 static int cmd_sign_hash(struct command *cmd)
 {
-	char *key, *token, *line = NULL;
+	const char *key;
+	char *token, *line = NULL;
 	int hashlen = 0;
 	size_t line_len;
 	ssize_t len;
@@ -665,7 +666,7 @@ static int cmd_sign_hash(struct command *cmd)
 
 static int sign_evm_path(const char *file)
 {
-	char *key;
+	const char *key;
 	int err;
 
 	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
@@ -1001,7 +1002,7 @@ static int hmac_evm(const char *file, const char *key)
 
 static int cmd_hmac_evm(struct command *cmd)
 {
-	char *key, *file = g_argv[optind++];
+	const char *key, *file = g_argv[optind++];
 	int err;
 
 	if (!file) {
