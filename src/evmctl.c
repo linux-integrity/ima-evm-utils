@@ -54,6 +54,7 @@
 #include <getopt.h>
 #include <keyutils.h>
 #include <ctype.h>
+#include <termios.h>
 
 #include <openssl/sha.h>
 #include <openssl/pem.h>
@@ -1468,15 +1469,15 @@ struct command cmds[] = {
 	{"--version", NULL, 0, ""},
 	{"help", cmd_help, 0, "<command>"},
 	{"import", cmd_import, 0, "[--rsa] pubkey keyring", "Import public key into the keyring.\n"},
-	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass password] file", "Sign file metadata.\n"},
+	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass [password] file", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
-	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--key key] [--pass password] file", "Make file content signature.\n"},
+	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--key key] [--pass [password] file", "Make file content signature.\n"},
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
-	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass password]", "Sign hashes from shaXsum output.\n"},
+	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass [password]", "Sign hashes from shaXsum output.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
@@ -1488,7 +1489,7 @@ static struct option opts[] = {
 	{"imasig", 0, 0, 's'},
 	{"imahash", 0, 0, 'd'},
 	{"hashalgo", 1, 0, 'a'},
-	{"pass", 1, 0, 'p'},
+	{"pass", 2, 0, 'p'},
 	{"sigfile", 0, 0, 'f'},
 	{"uuid", 2, 0, 'u'},
 	{"rsa", 0, 0, '1'},
@@ -1503,6 +1504,40 @@ static struct option opts[] = {
 
 };
 
+static char *get_password(void)
+{
+	struct termios flags, tmp_flags;
+	char *password, *pwd;
+	int passlen = 64;
+
+	password = malloc(passlen);
+	if (!password) {
+		perror("malloc");
+		return NULL;
+	}
+
+	tcgetattr(fileno(stdin), &flags);
+	tmp_flags = flags;
+	tmp_flags.c_lflag &= ~ECHO;
+	tmp_flags.c_lflag |= ECHONL;
+
+	if (tcsetattr(fileno(stdin), TCSANOW, &tmp_flags) != 0) {
+		perror("tcsetattr");
+		return NULL;
+	}
+
+	printf("PEM password: ");
+	pwd = fgets(password, passlen, stdin);
+
+	/* restore terminal */
+	if (tcsetattr(fileno(stdin), TCSANOW, &flags) != 0) {
+		perror("tcsetattr");
+		return NULL;
+	}
+
+	return pwd;
+}
+
 int main(int argc, char *argv[])
 {
 	int err = 0, c, lind;
@@ -1511,7 +1546,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p:fu::k:t:ri", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:p::fu::k:t:ri", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1538,7 +1573,10 @@ int main(int argc, char *argv[])
 			params.hash_algo = optarg;
 			break;
 		case 'p':
-			params.keypass = optarg;
+			if (optarg)
+				params.keypass = optarg;
+			else
+				params.keypass = get_password();
 			break;
 		case 'f':
 			sigfile = 1;
