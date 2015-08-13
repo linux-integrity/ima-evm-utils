@@ -1143,6 +1143,7 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 {
 	FILE *fp;
 	char *p, pcr_str[7], buf[70]; /* length of the TPM string */
+	int result = -1;
 
 	sprintf(pcr_str, "PCR-%d", idx);
 
@@ -1158,11 +1159,12 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 			break;
 		if (!strncmp(p, pcr_str, 6)) {
 			hex2bin(pcr, p + 7, len);
-			return 0;
+			result = 0;
+			break;
 		}
 	}
 	fclose(fp);
-	return -1;
+	return result;
 }
 
 #define TCG_EVENT_NAME_LEN_MAX	255
