@@ -734,19 +734,17 @@ static int verify_ima(const char *file)
 	unsigned char sig[1024];
 	int len;
 
-	if (xattr) {
-		len = lgetxattr(file, "security.ima", sig, sizeof(sig));
-		if (len < 0) {
-			log_err("getxattr failed: %s\n", file);
-			return len;
-		}
-	}
-
 	if (sigfile) {
 		void *tmp = file2bin(file, "sig", &len);
 
 		memcpy(sig, tmp, len);
 		free(tmp);
+	} else {
+		len = lgetxattr(file, "security.ima", sig, sizeof(sig));
+		if (len < 0) {
+			log_err("getxattr failed: %s\n", file);
+			return len;
+		}
 	}
 
 	return ima_verify_signature(file, sig, len);
@@ -1582,7 +1580,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			sigfile = 1;
-			xattr = 0;
 			break;
 		case 'u':
 			uuid_str = optarg;
