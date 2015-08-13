@@ -214,6 +214,7 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 	DIR *dir;
 	unsigned long long ino, off;
 	unsigned int type;
+	int result = 0;
 
 	dir = opendir(file);
 	if (!dir) {
@@ -233,13 +234,14 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 		err |= EVP_DigestUpdate(ctx, &type, sizeof(type));
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
-			return 1;
+			result = 1;
+			break;
 		}
 	}
 
 	closedir(dir);
 
-	return 0;
+	return result;
 }
 
 static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
