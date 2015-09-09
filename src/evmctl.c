@@ -332,6 +332,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 			}
 			if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
 				log_err("ioctl() failed\n");
+				close(fd);
 				return -1;
 			}
 			close(fd);
@@ -885,6 +886,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		}
 		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
 			log_err("ioctl() failed\n");
+			close(fd);
 			goto out;
 		}
 		close(fd);
