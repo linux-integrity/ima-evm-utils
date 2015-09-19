@@ -375,7 +375,7 @@ int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int 
 	unsigned char sighash[20];
 	struct signature_hdr *hdr = (struct signature_hdr *)sig;
 
-	log_info("hash: ");
+	log_info("hash-v1: ");
 	log_dump(hash, size);
 
 	key = read_pub_key(keyfile, 0);
@@ -589,7 +589,7 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 
 	id = __be64_to_cpup((__be64 *) keyid);
 	sprintf(str, "%llX", (unsigned long long)id);
-	log_info("keyid: %s\n", str);
+	log_info("keyid-v1: %s\n", str);
 }
 
 void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
@@ -721,7 +721,7 @@ int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, cons
 	blen = (uint16_t *) (sig + sizeof(*hdr));
 	*blen = __cpu_to_be16(len << 3);
 	len += sizeof(*hdr) + 2;
-	log_info("evm/ima signature: %d bytes\n", len);
+	log_info("evm/ima signature-v1: %d bytes\n", len);
 out:
 	RSA_free(key);
 	return len;

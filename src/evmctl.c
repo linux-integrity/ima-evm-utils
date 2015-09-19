@@ -104,6 +104,14 @@ static int digest;
 static int digsig;
 static int sigfile;
 static char *uuid_str;
+static char *ino_str;
+static char *uid_str;
+static char *gid_str;
+static char *mode_str;
+static char *generation_str;
+static char *caps_str;
+static char *ima_str;
+static char *selinux_str;
 static char *search_type;
 static int recursive;
 static int msize;
@@ -111,6 +119,7 @@ static dev_t fs_dev;
 static bool evm_immutable;
 
 #define HMAC_FLAG_NO_UUID	0x0001
+#define HMAC_FLAG_CAPS_SET	0x0002
 
 static unsigned long hmac_flags;
 
@@ -200,7 +209,7 @@ static int hex_to_bin(char ch)
 	return -1;
 }
 
-static int hex2bin(uint8_t *dst, const char *src, size_t count)
+static int hex2bin(void *dst, const char *src, size_t count)
 {
 	int hi, lo;
 
@@ -214,7 +223,7 @@ static int hex2bin(uint8_t *dst, const char *src, size_t count)
 		if ((hi < 0) || (lo < 0))
 			return -1;
 
-		*dst++ = (hi << 4) | lo;
+		*(uint8_t *)dst++ = (hi << 4) | lo;
 	}
 	return 0;
 }
@@ -320,10 +329,21 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return -1;
 	}
 
+	if (generation_str)
+		generation = strtoul(generation_str, NULL, 10);
+	if (ino_str)
+		st.st_ino = strtoul(ino_str, NULL, 10);
+	if (uid_str)
+		st.st_uid = strtoul(uid_str, NULL, 10);
+	if (gid_str)
+		st.st_gid = strtoul(gid_str, NULL, 10);
+	if (mode_str)
+		st.st_mode = strtoul(mode_str, NULL, 10);
+
 	if (!evm_immutable) {
-		if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) {
-			/* we cannot at the momement to get generation of special files..
-			 * kernel API does not support it */
+		if ((S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) && !generation_str) {
+			/* we cannot at the momement to get generation of
+			   special files kernel API does not support it */
 			int fd = open(file, 0);
 
 			if (fd < 0) {
@@ -353,14 +373,27 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
-		err = lgetxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
-		if (err < 0) {
-			log_info("no xattr: %s\n", *xattrname);
-			continue;
-		}
-		if (!find_xattr(list, list_size, *xattrname)) {
-			log_info("skipping xattr: %s\n", *xattrname);
-			continue;
+		if (!strcmp(*xattrname, XATTR_NAME_SELINUX) && selinux_str) {
+			strcpy(xattr_value, selinux_str);
+			err = strlen(selinux_str) + 1;
+		} else if (!strcmp(*xattrname, XATTR_NAME_IMA) && ima_str) {
+			hex2bin(xattr_value, ima_str, strlen(ima_str) / 2);
+			err = strlen(ima_str) / 2;
+		} else if (!strcmp(*xattrname, XATTR_NAME_CAPS) && (hmac_flags & HMAC_FLAG_CAPS_SET)) {
+			if (!caps_str)
+				continue;
+			strcpy(xattr_value, caps_str);
+			err = strlen(caps_str);
+		} else {
+			err = lgetxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
+			if (err < 0) {
+				log_info("no xattr: %s\n", *xattrname);
+				continue;
+			}
+			if (!find_xattr(list, list_size, *xattrname)) {
+				log_info("skipping xattr: %s\n", *xattrname);
+				continue;
+			}
 		}
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
@@ -763,6 +796,38 @@ static int cmd_verify_ima(struct command *cmd)
 
 	return verify_ima(file);
 }
+
+static int cmd_convert(struct command *cmd)
+{
+	char *inkey;
+	unsigned char _pub[1024], *pub = _pub;
+	int len, err = 0;
+	char name[20];
+	uint8_t keyid[8];
+	RSA *key;
+
+	params.x509 = 0;
+
+	inkey = g_argv[optind++];
+	if (!inkey) {
+		inkey = params.x509 ? "/etc/keys/x509_evm.der" :
+				      "/etc/keys/pubkey_evm.pem";
+	}
+
+	key = read_pub_key(inkey, params.x509);
+	if (!key)
+		return 1;
+
+	len = key2bin(key, pub);
+	calc_keyid_v1(keyid, name, pub, len);
+
+	bin2file(inkey, "bin", pub, len);
+	bin2file(inkey, "keyid", (const unsigned char *)name, strlen(name));
+
+	RSA_free(key);
+	return err;
+}
+
 
 static int cmd_import(struct command *cmd)
 {
@@ -1462,6 +1527,14 @@ static void usage(void)
 		"      --smack        use extra SMACK xattrs for EVM\n"
 		"      --m32          force EVM hmac/signature for 32 bit target system\n"
 		"      --m64          force EVM hmac/signature for 64 bit target system\n"
+		"      --ino          use custom inode for EVM\n"
+		"      --uid          use custom UID for EVM\n"
+		"      --gid          use custom GID for EVM\n"
+		"      --mode         use custom Mode for EVM\n"
+		"      --generation   use custom Generation for EVM(unspecified: from FS, empty: use 0)\n"
+		"      --ima          use custom IMA signature for EVM\n"
+		"      --selinux      use custom Selinux label for EVM\n"
+		"      --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
@@ -1471,6 +1544,7 @@ struct command cmds[] = {
 	{"--version", NULL, 0, ""},
 	{"help", cmd_help, 0, "<command>"},
 	{"import", cmd_import, 0, "[--rsa] pubkey keyring", "Import public key into the keyring.\n"},
+	{"convert", cmd_convert, 0, "key", "convert public key into the keyring.\n"},
 	{"sign", cmd_sign_evm, 0, "[-r] [--imahash | --imasig ] [--key key] [--pass [password] file", "Sign file metadata.\n"},
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
 	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--key key] [--pass [password] file", "Make file content signature.\n"},
@@ -1502,6 +1576,14 @@ static struct option opts[] = {
 	{"m64", 0, 0, '6'},
 	{"smack", 0, 0, 128},
 	{"version", 0, 0, 129},
+	{"inode", 1, 0, 130},
+	{"uid", 1, 0, 131},
+	{"gid", 1, 0, 132},
+	{"mode", 1, 0, 133},
+	{"generation", 1, 0, 134},
+	{"ima", 1, 0, 135},
+	{"selinux", 1, 0, 136},
+	{"caps", 2, 0, 137},
 	{}
 
 };
@@ -1615,6 +1697,31 @@ int main(int argc, char *argv[])
 		case 129:
 			printf("evmctl %s\n", VERSION);
 			exit(0);
+			break;
+		case 130:
+			ino_str = optarg;
+			break;
+		case 131:
+			uid_str = optarg;
+			break;
+		case 132:
+			gid_str = optarg;
+			break;
+		case 133:
+			mode_str = optarg;
+			break;
+		case 134:
+			generation_str = optarg;
+			break;
+		case 135:
+			ima_str = optarg;
+			break;
+		case 136:
+			selinux_str = optarg;
+			break;
+		case 137:
+			caps_str = optarg;
+			hmac_flags |= HMAC_FLAG_CAPS_SET;
 			break;
 		case '?':
 			exit(1);
