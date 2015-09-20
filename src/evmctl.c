@@ -1500,8 +1500,8 @@ static struct option opts[] = {
 	{"recursive", 0, 0, 'r'},
 	{"m32", 0, 0, '3'},
 	{"m64", 0, 0, '6'},
-	{"smack", 0, 0, 256},
-	{"version", 0, 0, 257},
+	{"smack", 0, 0, 128},
+	{"version", 0, 0, 129},
 	{}
 
 };
@@ -1611,10 +1611,10 @@ int main(int argc, char *argv[])
 		case '6':
 			msize = 64;
 			break;
-		case 256:
+		case 128:
 			evm_config_xattrnames = evm_extra_smack_xattrs;
 			break;
-		case 257:
+		case 129:
 			printf("evmctl %s\n", VERSION);
 			exit(0);
 			break;
