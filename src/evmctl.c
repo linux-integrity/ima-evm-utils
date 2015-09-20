@@ -110,9 +110,9 @@ static int msize;
 static dev_t fs_dev;
 static bool evm_immutable;
 
-#define HMAC_FLAG_UUID			0x0001
-#define HMAC_FLAG_UUID_SET		0x0002
-static unsigned long hmac_flags = HMAC_FLAG_UUID;
+#define HMAC_FLAG_NO_UUID	0x0001
+
+static unsigned long hmac_flags;
 
 typedef int (*find_cb_t)(const char *path);
 static int find(const char *path, int dts, find_cb_t func);
@@ -275,7 +275,7 @@ static int get_uuid(struct stat *st, char *uuid)
 	FILE *fp;
 	size_t len;
 
-	if (hmac_flags & HMAC_FLAG_UUID_SET)
+	if (uuid_str)
 		return pack_uuid(uuid_str, uuid);
 
 	dev = st->st_dev;
@@ -419,7 +419,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return 1;
 	}
 
-	if (!evm_immutable && (hmac_flags & HMAC_FLAG_UUID)) {
+	if (!evm_immutable && !(hmac_flags & HMAC_FLAG_NO_UUID)) {
 		err = get_uuid(&st, uuid);
 		if (err)
 			return -1;
@@ -1585,10 +1585,8 @@ int main(int argc, char *argv[])
 			break;
 		case 'u':
 			uuid_str = optarg;
-			if (uuid_str)
-				hmac_flags |= HMAC_FLAG_UUID_SET;
-			else
-				hmac_flags &= ~HMAC_FLAG_UUID;
+			if (!uuid_str)
+				hmac_flags |= HMAC_FLAG_NO_UUID;
 			break;
 		case '1':
 			params.x509 = 0;
