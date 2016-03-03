@@ -828,7 +828,6 @@ static int cmd_convert(struct command *cmd)
 	return err;
 }
 
-
 static int cmd_import(struct command *cmd)
 {
 	char *inkey, *ring = NULL;
@@ -899,6 +898,42 @@ static int cmd_import(struct command *cmd)
 out:
 	RSA_free(key);
 	return err;
+}
+
+static int setxattr_ima(const char *file, char *sig_file)
+{
+	unsigned char *sig;
+	int len, err;
+
+	if (sig_file)
+		sig = file2bin(sig_file, NULL, &len);
+	else
+		sig = file2bin(file, "sig", &len);
+	if (!sig)
+		return 0;
+
+	err = lsetxattr(file, "security.ima", sig, len, 0);
+	if (err < 0)
+		log_err("setxattr failed: %s\n", file);
+	free(sig);
+	return err;
+}
+
+static int cmd_setxattr_ima(struct command *cmd)
+{
+	char *file, *sig = NULL;
+
+	if (sigfile)
+		sig = g_argv[optind++];
+	file =  g_argv[optind++];
+
+	if (!file) {
+		log_err("Parameters missing\n");
+		print_usage(cmd);
+		return -1;
+	}
+
+	return setxattr_ima(file, sig);
 }
 
 #define MAX_KEY_SIZE 128
@@ -1549,6 +1584,7 @@ struct command cmds[] = {
 	{"verify", cmd_verify_evm, 0, "file", "Verify EVM signature (for debugging).\n"},
 	{"ima_sign", cmd_sign_ima, 0, "[--sigfile] [--key key] [--pass [password] file", "Make file content signature.\n"},
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
+	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
