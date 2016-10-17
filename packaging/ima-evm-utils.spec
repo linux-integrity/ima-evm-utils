@@ -11,7 +11,6 @@ BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires:    autoconf
 BuildRequires:    automake
 BuildRequires:    openssl-devel
-BuildRequires:    libattr-devel
 BuildRequires:    keyutils-libs-devel
 
 %description

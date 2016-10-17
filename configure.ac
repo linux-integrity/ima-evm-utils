@@ -30,7 +30,7 @@ AC_SUBST(OPENSSL_LIBS)
 AC_CHECK_HEADER(unistd.h)
 AC_CHECK_HEADERS(openssl/conf.h)
 
-AC_CHECK_HEADERS(attr/xattr.h, , [AC_MSG_ERROR([attr/xattr.h header not found. You need the libattr development package.])])
+AC_CHECK_HEADERS(sys/xattr.h, , [AC_MSG_ERROR([sys/xattr.h header not found. You need the c-library development package.])])
 AC_CHECK_HEADERS(keyutils.h, , [AC_MSG_ERROR([keyutils.h header not found. You need the libkeyutils development package.])])
 
 #debug support - yes for a while

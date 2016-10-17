@@ -49,7 +49,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <dirent.h>
-#include <attr/xattr.h>
+#include <sys/xattr.h>
 #include <linux/xattr.h>
 #include <getopt.h>
 #include <keyutils.h>
