@@ -26,7 +26,7 @@ COMMANDS
  --version
  help <command>
  import [--rsa] pubkey keyring
- sign [-r] [--imahash | --imasig ] [--key key] [--pass password] file
+ sign [-r] [--imahash | --imasig ] [--portable] [--key key] [--pass password] file
  verify file
  ima_sign [--sigfile] [--key key] [--pass password] file
  ima_verify file
@@ -46,6 +46,7 @@ OPTIONS
   -f, --sigfile      store IMA signature in .sig file instead of xattr
       --rsa          use RSA key type and signing scheme v1
   -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)
+  -o, --portable     generate portable EVM signatures
   -p, --pass         password for encrypted signing key
   -r, --recursive    recurse into directories (sign)
   -t, --type         file types to fix 'fdsxm' (f: file, d: directory, s: block/char/symlink)
@@ -95,7 +96,8 @@ Kernel configuration option CONFIG_EVM_ATTR_FSUUID controls whether to include
 filesystem UUID into HMAC and enabled by default. Therefore evmctl also includes
 fsuuid by default. Providing '--uuid' option without parameter allows to disable
 usage of fs uuid. Providing '--uuid=UUID' option with parameter allows to use
-custom UUID.
+custom UUID. Providing the '--portable' option will disable usage of the fs uuid
+and also the inode number and generation.
 
 Kernel configuration option CONFIG_EVM_EXTRA_SMACK_XATTRS controls whether to
 include additional SMACK extended attributes into HMAC. They are following:

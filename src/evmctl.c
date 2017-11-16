@@ -117,6 +117,7 @@ static int recursive;
 static int msize;
 static dev_t fs_dev;
 static bool evm_immutable;
+static bool evm_portable;
 
 #define HMAC_FLAG_NO_UUID	0x0001
 #define HMAC_FLAG_CAPS_SET	0x0002
@@ -418,8 +419,10 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
 
 		hmac_size = sizeof(*hmac);
-		hmac->ino = st.st_ino;
-		hmac->generation = generation;
+		if (!evm_portable) {
+			hmac->ino = st.st_ino;
+			hmac->generation = generation;
+		}
 		hmac->uid = st.st_uid;
 		hmac->gid = st.st_gid;
 		hmac->mode = st.st_mode;
@@ -427,8 +430,10 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		struct h_misc_64 *hmac = (struct h_misc_64 *)&hmac_misc;
 
 		hmac_size = sizeof(*hmac);
-		hmac->ino = st.st_ino;
-		hmac->generation = generation;
+		if (!evm_portable) {
+			hmac->ino = st.st_ino;
+			hmac->generation = generation;
+		}
 		hmac->uid = st.st_uid;
 		hmac->gid = st.st_gid;
 		hmac->mode = st.st_mode;
@@ -436,8 +441,10 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		struct h_misc_32 *hmac = (struct h_misc_32 *)&hmac_misc;
 
 		hmac_size = sizeof(*hmac);
-		hmac->ino = st.st_ino;
-		hmac->generation = generation;
+		if (!evm_portable) {
+			hmac->ino = st.st_ino;
+			hmac->generation = generation;
+		}
 		hmac->uid = st.st_uid;
 		hmac->gid = st.st_gid;
 		hmac->mode = st.st_mode;
@@ -452,7 +459,8 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return 1;
 	}
 
-	if (!evm_immutable && !(hmac_flags & HMAC_FLAG_NO_UUID)) {
+	if (!evm_immutable && !evm_portable &&
+	    !(hmac_flags & HMAC_FLAG_NO_UUID)) {
 		err = get_uuid(&st, uuid);
 		if (err)
 			return -1;
@@ -489,7 +497,10 @@ static int sign_evm(const char *file, const char *key)
 
 	/* add header */
 	len++;
-	sig[0] = EVM_IMA_XATTR_DIGSIG;
+	if (evm_portable)
+		sig[0] = EVM_XATTR_PORTABLE_DIGSIG;
+	else
+		sig[0] = EVM_IMA_XATTR_DIGSIG;
 
 	if (evm_immutable)
 		sig[1] = 3; /* immutable signature version */
@@ -1552,6 +1563,7 @@ static void usage(void)
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
 		"      --rsa          use RSA key type and signing scheme v1\n"
 		"  -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)\n"
+		"  -o, --portable     generate portable EVM signatures\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -r, --recursive    recurse into directories (sign)\n"
 		"  -t, --type         file types to fix 'fdsxm' (f: file, d: directory, s: block/char/symlink)\n"
@@ -1610,6 +1622,7 @@ static struct option opts[] = {
 	{"recursive", 0, 0, 'r'},
 	{"m32", 0, 0, '3'},
 	{"m64", 0, 0, '6'},
+	{"portable", 0, 0, 'o'},
 	{"smack", 0, 0, 128},
 	{"version", 0, 0, 129},
 	{"inode", 1, 0, 130},
@@ -1666,7 +1679,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:p::fu::k:t:ri", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:op::fu::k:t:ri", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -1713,7 +1726,16 @@ int main(int argc, char *argv[])
 			params.keyfile = optarg;
 			break;
 		case 'i':
-			evm_immutable = true;
+			if (evm_portable)
+				log_err("Portable and immutable options are exclusive, ignoring immutable option.");
+			else
+				evm_immutable = true;
+			break;
+		case 'o':
+			if (evm_immutable)
+				log_err("Portable and immutable options are exclusive, ignoring portable option.");
+			else
+				evm_portable = true;
 			break;
 		case 't':
 			search_type = optarg;

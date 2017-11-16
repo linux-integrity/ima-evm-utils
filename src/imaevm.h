@@ -82,6 +82,7 @@ enum evm_ima_xattr_type {
 	EVM_XATTR_HMAC,
 	EVM_IMA_XATTR_DIGSIG,
 	IMA_XATTR_DIGEST_NG,
+	EVM_XATTR_PORTABLE_DIGSIG,
 };
 
 struct h_misc {
