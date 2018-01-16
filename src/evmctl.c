@@ -1342,7 +1342,7 @@ void ima_ng_show(struct template_entry *entry)
 	char *algo, *path;
 
 	/* get binary digest */
-	field_len = *(uint8_t *)fieldp;
+	field_len = *(uint32_t *)fieldp;
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
 
@@ -1356,7 +1356,7 @@ void ima_ng_show(struct template_entry *entry)
 	total_len -= field_len;
 
 	/* get path */
-	field_len = *(uint8_t *)fieldp;
+	field_len = *(uint32_t *)fieldp;
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
 
@@ -1368,7 +1368,7 @@ void ima_ng_show(struct template_entry *entry)
 
 	if (!strcmp(entry->name, "ima-sig")) {
 		/* get signature */
-		field_len = *(uint8_t *)fieldp;
+		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
 		total_len -= sizeof(field_len);
 
