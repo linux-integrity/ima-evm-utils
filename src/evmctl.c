@@ -1310,7 +1310,7 @@ void ima_extend_pcr(uint8_t *pcr, uint8_t *digest, int length)
 	SHA1_Final(pcr, &ctx);
 }
 
-static int ima_verify_tamplate_hash(struct template_entry *entry)
+static int ima_verify_template_hash(struct template_entry *entry)
 {
 	uint8_t digest[SHA_DIGEST_LENGTH];
 
@@ -1446,7 +1446,7 @@ static int ima_measurement(const char *file)
 		}
 
 		if (validate)
-			ima_verify_tamplate_hash(&entry);
+			ima_verify_template_hash(&entry);
 
 		if (!strcmp(entry.name, "ima"))
 			ima_show(&entry);
