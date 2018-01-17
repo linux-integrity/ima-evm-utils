@@ -409,6 +409,61 @@ int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int 
 	return 0;
 }
 
+struct public_key_entry {
+	struct public_key_entry *next;
+	uint32_t keyid;
+	char name[9];
+	RSA *key;
+};
+static struct public_key_entry *public_keys = NULL;
+
+static RSA *find_keyid(uint32_t keyid)
+{
+	struct public_key_entry *entry;
+
+	for (entry = public_keys; entry != NULL; entry = entry->next) {
+		if (entry->keyid == keyid)
+			return entry->key;
+	}
+	return NULL;
+}
+
+void init_public_keys(const char *keyfiles)
+{
+	struct public_key_entry *entry;
+	char *tmp_keyfiles;
+	char *keyfile;
+	int i = 1;
+
+	tmp_keyfiles = strdup(keyfiles);
+
+	while ((keyfile = strsep(&tmp_keyfiles, ", \t")) != NULL) {
+		if (!keyfile)
+			break;
+		if ((*keyfile == '\0') || (*keyfile == ' ') ||
+		    (*keyfile == '\t'))
+			continue;
+
+		entry = malloc(sizeof(struct public_key_entry));
+		if (!entry) {
+			perror("malloc");
+			break;
+		}
+
+		entry->key = read_pub_key(keyfile, 1);
+		if (!entry->key) {
+			free(entry);
+			continue;
+		}
+
+		calc_keyid_v2(&entry->keyid, entry->name, entry->key);
+		sprintf(entry->name, "%x", __be32_to_cpup(&entry->keyid));
+		log_info("key %d: %s %s\n", i++, entry->name, keyfile);
+		entry->next = public_keys;
+		public_keys = entry;
+	}
+}
+
 int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile)
 {
 	int err, len;
@@ -420,12 +475,22 @@ int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int 
 	log_info("hash: ");
 	log_dump(hash, size);
 
-	key = read_pub_key(keyfile, 1);
-	if (!key)
-		return 1;
+	if (public_keys) {
+		key = find_keyid(hdr->keyid);
+		if (!key) {
+			log_err("Unknown keyid: %x\n",
+				__be32_to_cpup(&hdr->keyid));
+			return -1;
+		}
+	} else {
+		key = read_pub_key(keyfile, 1);
+		if (!key)
+			return 1;
+	}
 
-	err = RSA_public_decrypt(siglen - sizeof(*hdr), sig + sizeof(*hdr), out, key, RSA_PKCS1_PADDING);
-	RSA_free(key);
+
+	err = RSA_public_decrypt(siglen - sizeof(*hdr), sig + sizeof(*hdr),
+				 out, key, RSA_PKCS1_PADDING);
 	if (err < 0) {
 		log_err("RSA_public_decrypt() failed: %d\n", err);
 		return 1;

@@ -1419,6 +1419,10 @@ static int ima_measurement(const char *file)
 		return -1;
 	}
 
+	/* Support multiple public keys */
+	if (params.keyfile)
+		init_public_keys(params.keyfile);
+
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
 		ima_extend_pcr(pcr, entry.header.digest, SHA_DIGEST_LENGTH);
 

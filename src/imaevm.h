@@ -205,5 +205,6 @@ int key2bin(RSA *key, unsigned char *pub);
 int sign_hash(const char *algo, const unsigned char *hash, int size, const char *keyfile, const char *keypass, unsigned char *sig);
 int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen);
+void init_public_keys(const char *keyfiles);
 
 #endif
