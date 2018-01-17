@@ -113,6 +113,7 @@ static char *caps_str;
 static char *ima_str;
 static char *selinux_str;
 static char *search_type;
+static int measurement_list;
 static int recursive;
 static int msize;
 static dev_t fs_dev;
@@ -792,7 +793,7 @@ static int verify_ima(const char *file)
 		}
 	}
 
-	return ima_verify_signature(file, sig, len);
+	return ima_verify_signature(file, sig, len, NULL, 0);
 }
 
 static int cmd_verify_ima(struct command *cmd)
@@ -1392,7 +1393,11 @@ void ima_ng_show(struct template_entry *entry)
 	if (sig) {
 		log_info(" ");
 		log_dump(sig, sig_len);
-		ima_verify_signature(path, sig, sig_len);
+		if (measurement_list)
+			ima_verify_signature(path, sig, sig_len,
+					     digest, digest_len);
+		else
+			ima_verify_signature(path, sig, sig_len, NULL, 0);
 	} else
 		log_info("\n");
 
@@ -1586,6 +1591,7 @@ static void usage(void)
 		"      --ima          use custom IMA signature for EVM\n"
 		"      --selinux      use custom Selinux label for EVM\n"
 		"      --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)\n"
+		"      --list         measurement list verification\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
@@ -1637,6 +1643,7 @@ static struct option opts[] = {
 	{"ima", 1, 0, 135},
 	{"selinux", 1, 0, 136},
 	{"caps", 2, 0, 137},
+	{"list", 0, 0, 138},
 	{}
 
 };
@@ -1784,6 +1791,9 @@ int main(int argc, char *argv[])
 		case 137:
 			caps_str = optarg;
 			hmac_flags |= HMAC_FLAG_CAPS_SET;
+			break;
+		case 138:
+			measurement_list = 1;
 			break;
 		case '?':
 			exit(1);

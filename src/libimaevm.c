@@ -582,7 +582,8 @@ int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int sig
 	return verify_hash(hash, size, sig, siglen, key);
 }
 
-int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
+int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
+			 unsigned char *digest, int digestlen)
 {
 	unsigned char hash[64];
 	int hashlen, sig_hash_algo;
@@ -599,6 +600,13 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen)
 	}
 	/* Use hash algorithm as retrieved from signature */
 	params.hash_algo = pkey_hash_algo[sig_hash_algo];
+
+	/*
+	 * Validate the signature based on the digest included in the
+	 * measurement list, not by calculating the local file digest.
+	 */
+	if (digestlen > 0)
+	    return verify_hash(digest, digestlen, sig + 1, siglen - 1);
 
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)
