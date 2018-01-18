@@ -1407,12 +1407,15 @@ void ima_ng_show(struct template_entry *entry)
 
 static int ima_measurement(const char *file)
 {
-	uint8_t pcr[SHA_DIGEST_LENGTH] = {0,};
-	uint8_t pcr10[SHA_DIGEST_LENGTH];
+	uint8_t pcr[NUM_PCRS][SHA_DIGEST_LENGTH] = {{0}};
+	uint8_t hwpcr[SHA_DIGEST_LENGTH];
 	struct template_entry entry = { .template = 0 };
 	FILE *fp;
 	int err = -1;
+	bool verify_failed = false;
+	int i;
 
+	memset(zero, 0, SHA_DIGEST_LENGTH);
 	memset(fox, 0xff, SHA_DIGEST_LENGTH);
 
 	log_debug("Initial PCR value: ");
@@ -1429,7 +1432,8 @@ static int ima_measurement(const char *file)
 		init_public_keys(params.keyfile);
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
-		ima_extend_pcr(pcr, entry.header.digest, SHA_DIGEST_LENGTH);
+		ima_extend_pcr(pcr[entry.header.pcr], entry.header.digest,
+			       SHA_DIGEST_LENGTH);
 
 		if (!fread(entry.name, entry.header.name_len, 1, fp)) {
 			log_err("Unable to read template name\n");
@@ -1463,23 +1467,29 @@ static int ima_measurement(const char *file)
 			ima_ng_show(&entry);
 	}
 
-	tpm_pcr_read(10, pcr10, sizeof(pcr10));
 
-	log_info("PCRAgg: ");
-	log_dump(pcr, sizeof(pcr));
+	for (i = 0; i < NUM_PCRS; i++) {
+		if (memcmp(pcr[i], zero, SHA_DIGEST_LENGTH) == 0)
+			continue;
 
-	log_info("PCR-10: ");
-	log_dump(pcr10, sizeof(pcr10));
+		log_info("PCRAgg %.2d: ", i);
+		log_dump(pcr[i], SHA_DIGEST_LENGTH);
 
-	if (memcmp(pcr, pcr10, sizeof(pcr))) {
-		log_err("PCRAgg does not match PCR-10\n");
-		goto out;
+		tpm_pcr_read(i, hwpcr, sizeof(hwpcr));
+		log_info("HW PCR-%d: ", i);
+		log_dump(hwpcr, sizeof(hwpcr));
+
+		if (memcmp(pcr[i], hwpcr, sizeof(SHA_DIGEST_LENGTH)) != 0) {
+			log_err("PCRAgg %d does not match HW PCR-%d\n", i, i);
+
+			verify_failed = true;
+		}
 	}
 
-	err = 0;
+	if (!verify_failed)
+		err = 0;
 out:
 	fclose(fp);
-
 	return err;
 }
 
