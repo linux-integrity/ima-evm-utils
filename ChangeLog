@@ -1,3 +1,16 @@
+2018-01-28  Mimi Zohar <zohar@us.ibm.com>
+
+	version 1.1
+	* Support the new openssl 1.1 api
+	* Support for validating multiple pcrs
+	* Verify the measurement list signature based on the list digest
+	* Verify the "ima-sig" measurement list using multiple keys
+	* Fixed parsing the measurement template data field length
+	* Portable & immutable EVM signatures (new format)
+	* Multiple fixes that have been lingering in the next branch. Some
+	  are for experimental features that are not yet supported in the
+	  kernel.
+
 2014-07-30  Dmitry Kasatkin <dmitry.kasatkin@huawei.com>
 
 	version 1.0
