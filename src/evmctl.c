@@ -316,7 +316,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	struct stat st;
 	int err;
 	uint32_t generation = 0;
-	EVP_MD_CTX ctx;
+	EVP_MD_CTX *pctx;
 	unsigned int mdlen;
 	char **xattrname;
 	char xattr_value[1024];
@@ -325,6 +325,12 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	char uuid[16];
 	struct h_misc_64 hmac_misc;
 	int hmac_size;
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	EVP_MD_CTX ctx;
+	pctx = &ctx;
+#else
+	pctx = EVP_MD_CTX_new();
+#endif
 
 	if (lstat(file, &st)) {
 		log_err("Failed to stat: %s\n", file);
@@ -368,7 +374,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return -1;
 	}
 
-	err = EVP_DigestInit(&ctx, EVP_sha1());
+	err = EVP_DigestInit(pctx, EVP_sha1());
 	if (!err) {
 		log_err("EVP_DigestInit() failed\n");
 		return 1;
@@ -400,7 +406,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
-		err = EVP_DigestUpdate(&ctx, xattr_value, err);
+		err = EVP_DigestUpdate(pctx, xattr_value, err);
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
@@ -454,7 +460,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	log_debug("hmac_misc (%d): ", hmac_size);
 	log_debug_dump(&hmac_misc, hmac_size);
 
-	err = EVP_DigestUpdate(&ctx, &hmac_misc, hmac_size);
+	err = EVP_DigestUpdate(pctx, &hmac_misc, hmac_size);
 	if (!err) {
 		log_err("EVP_DigestUpdate() failed\n");
 		return 1;
@@ -466,14 +472,14 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		if (err)
 			return -1;
 
-		err = EVP_DigestUpdate(&ctx, (const unsigned char *)uuid, sizeof(uuid));
+		err = EVP_DigestUpdate(pctx, (const unsigned char *)uuid, sizeof(uuid));
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
 			return 1;
 		}
 	}
 
-	err = EVP_DigestFinal(&ctx, hash, &mdlen);
+	err = EVP_DigestFinal(pctx, hash, &mdlen);
 	if (!err) {
 		log_err("EVP_DigestFinal() failed\n");
 		return 1;
@@ -955,7 +961,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	struct stat st;
 	int err = -1;
 	uint32_t generation = 0;
-	HMAC_CTX ctx;
+	HMAC_CTX *pctx;
 	unsigned int mdlen;
 	char **xattrname;
 	unsigned char xattr_value[1024];
@@ -966,6 +972,12 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	ssize_t list_size;
 	struct h_misc_64 hmac_misc;
 	int hmac_size;
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	HMAC_CTX ctx;
+	pctx = &ctx;
+#else
+	pctx = HMAC_CTX_new();
+#endif
 
 	key = file2bin(keyfile, NULL, &keylen);
 	if (!key) {
@@ -1012,7 +1024,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		goto out;
 	}
 
-	err = !HMAC_Init(&ctx, evmkey, sizeof(evmkey), EVP_sha1());
+	err = !HMAC_Init_ex(pctx, evmkey, sizeof(evmkey), EVP_sha1(), NULL);
 	if (err) {
 		log_err("HMAC_Init() failed\n");
 		goto out;
@@ -1031,7 +1043,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
 		log_info("name: %s, size: %d\n", *xattrname, err);
 		log_debug_dump(xattr_value, err);
-		err = !HMAC_Update(&ctx, xattr_value, err);
+		err = !HMAC_Update(pctx, xattr_value, err);
 		if (err) {
 			log_err("HMAC_Update() failed\n");
 			goto out_ctx_cleanup;
@@ -1072,16 +1084,20 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 	log_debug("hmac_misc (%d): ", hmac_size);
 	log_debug_dump(&hmac_misc, hmac_size);
 
-	err = !HMAC_Update(&ctx, (const unsigned char *)&hmac_misc, hmac_size);
+	err = !HMAC_Update(pctx, (const unsigned char *)&hmac_misc, hmac_size);
 	if (err) {
 		log_err("HMAC_Update() failed\n");
 		goto out_ctx_cleanup;
 	}
-	err = !HMAC_Final(&ctx, hash, &mdlen);
+	err = !HMAC_Final(pctx, hash, &mdlen);
 	if (err)
 		log_err("HMAC_Final() failed\n");
 out_ctx_cleanup:
-	HMAC_CTX_cleanup(&ctx);
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	HMAC_CTX_cleanup(pctx);
+#else
+	HMAC_CTX_free(pctx);
+#endif
 out:
 	free(key);
 	return err ?: mdlen;
