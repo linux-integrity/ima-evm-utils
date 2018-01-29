@@ -1265,7 +1265,8 @@ static int cmd_ima_clear(struct command *cmd)
 	return do_cmd(cmd, ima_clear);
 }
 
-static char *pcrs = "/sys/class/misc/tpm0/device/pcrs";
+static char *pcrs = "/sys/class/tpm/tpm0/device/pcrs";  /* Kernels >= 4.0 */
+static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
 
 static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 {
@@ -1276,8 +1277,11 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 	sprintf(pcr_str, "PCR-%d", idx);
 
 	fp = fopen(pcrs, "r");
+	if (!fp)
+		fp = fopen(misc_pcrs, "r");
+
 	if (!fp) {
-		log_err("Unable to open %s\n", pcrs);
+		log_err("Unable to open %s or %s\n", pcrs, misc_pcrs);
 		return -1;
 	}
 
