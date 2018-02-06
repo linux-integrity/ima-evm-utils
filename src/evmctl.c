@@ -765,7 +765,7 @@ static int verify_evm(const char *file)
 		return -1;
 	}
 
-	return verify_hash(hash, sizeof(hash), sig + 1, len - 1);
+	return verify_hash(file, hash, sizeof(hash), sig + 1, len - 1);
 }
 
 static int cmd_verify_evm(struct command *cmd)

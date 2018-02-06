@@ -372,7 +372,8 @@ out:
 	return key;
 }
 
-int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile)
+int verify_hash_v1(const char *file, const unsigned char *hash, int size,
+		   unsigned char *sig, int siglen, const char *keyfile)
 {
 	int err, len;
 	SHA_CTX ctx;
@@ -398,18 +399,18 @@ int verify_hash_v1(const unsigned char *hash, int size, unsigned char *sig, int 
 	err = RSA_public_decrypt(siglen - sizeof(*hdr) - 2, sig + sizeof(*hdr) + 2, out, key, RSA_PKCS1_PADDING);
 	RSA_free(key);
 	if (err < 0) {
-		log_err("RSA_public_decrypt() failed: %d\n", err);
+		log_err("%s: RSA_public_decrypt() failed: %d\n", file, err);
 		return 1;
 	}
 
 	len = err;
 
 	if (len != sizeof(sighash) || memcmp(out, sighash, len) != 0) {
-		log_err("Verification failed: %d\n", err);
+		log_err("%s: verification failed: %d\n", file, err);
 		return -1;
 	} else {
-		/*log_info("Verification is OK\n");*/
-		printf("Verification is OK\n");
+		/*log_info("%s: verification is OK\n", file);*/
+		printf("%s: verification is OK\n", file);
 	}
 
 	return 0;
@@ -470,7 +471,8 @@ void init_public_keys(const char *keyfiles)
 	}
 }
 
-int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile)
+int verify_hash_v2(const char *file, const unsigned char *hash, int size,
+		   unsigned char *sig, int siglen, const char *keyfile)
 {
 	int err, len;
 	unsigned char out[1024];
@@ -484,7 +486,7 @@ int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int 
 	if (public_keys) {
 		key = find_keyid(hdr->keyid);
 		if (!key) {
-			log_err("Unknown keyid: %x\n",
+			log_err("%s: Unknown keyid: %x\n", file,
 				__be32_to_cpup(&hdr->keyid));
 			return -1;
 		}
@@ -498,7 +500,7 @@ int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int 
 	err = RSA_public_decrypt(siglen - sizeof(*hdr), sig + sizeof(*hdr),
 				 out, key, RSA_PKCS1_PADDING);
 	if (err < 0) {
-		log_err("RSA_public_decrypt() failed: %d\n", err);
+		log_err("%s: RSA_public_decrypt() failed: %d\n", file, err);
 		return 1;
 	}
 
@@ -507,19 +509,19 @@ int verify_hash_v2(const unsigned char *hash, int size, unsigned char *sig, int 
 	asn1 = &RSA_ASN1_templates[hdr->hash_algo];
 
 	if (len < asn1->size || memcmp(out, asn1->data, asn1->size)) {
-		log_err("Verification failed: %d\n", err);
+		log_err("%s: verification failed: %d\n", file, err);
 		return -1;
 	}
 
 	len -= asn1->size;
 
 	if (len != size || memcmp(out + asn1->size, hash, len)) {
-		log_err("Verification failed: %d\n", err);
+		log_err("%s: verification failed: %d\n", file, err);
 		return -1;
 	}
 
-	/*log_info("Verification is OK\n");*/
-	printf("Verification is OK\n");
+	/*log_info("%s: verification is OK\n", file);*/
+	printf("%s: verification is OK\n", file);
 
 	return 0;
 }
@@ -562,7 +564,8 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 		return -1;
 }
 
-int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int siglen)
+int verify_hash(const char *file, const unsigned char *hash, int size, unsigned char *sig,
+		int siglen)
 {
 	const char *key;
 	int x509;
@@ -585,7 +588,7 @@ int verify_hash(const unsigned char *hash, int size, unsigned char *sig, int sig
 			"/etc/keys/x509_evm.der" :
 			"/etc/keys/pubkey_evm.pem";
 
-	return verify_hash(hash, size, sig, siglen, key);
+	return verify_hash(file, hash, size, sig, siglen, key);
 }
 
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
@@ -612,13 +615,13 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	 * measurement list, not by calculating the local file digest.
 	 */
 	if (digestlen > 0)
-	    return verify_hash(digest, digestlen, sig + 1, siglen - 1);
+	    return verify_hash(file, digest, digestlen, sig + 1, siglen - 1);
 
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)
 		return hashlen;
 
-	return verify_hash(hash, hashlen, sig + 1, siglen - 1);
+	return verify_hash(file, hash, hashlen, sig + 1, siglen - 1);
 }
 
 /*
