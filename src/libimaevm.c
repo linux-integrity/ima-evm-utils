@@ -408,9 +408,6 @@ int verify_hash_v1(const char *file, const unsigned char *hash, int size,
 	if (len != sizeof(sighash) || memcmp(out, sighash, len) != 0) {
 		log_err("%s: verification failed: %d\n", file, err);
 		return -1;
-	} else {
-		/*log_info("%s: verification is OK\n", file);*/
-		printf("%s: verification is OK\n", file);
 	}
 
 	return 0;
@@ -480,13 +477,15 @@ int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	struct signature_v2_hdr *hdr = (struct signature_v2_hdr *)sig;
 	const struct RSA_ASN1_template *asn1;
 
-	log_info("hash: ");
-	log_dump(hash, size);
+	if (params.verbose > LOG_INFO) {
+		log_info("hash: ");
+		log_dump(hash, size);
+	}
 
 	if (public_keys) {
 		key = find_keyid(hdr->keyid);
 		if (!key) {
-			log_err("%s: Unknown keyid: %x\n", file,
+			log_err("%s: unknown keyid: %x\n", file,
 				__be32_to_cpup(&hdr->keyid));
 			return -1;
 		}
@@ -519,9 +518,6 @@ int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 		log_err("%s: verification failed: %d\n", file, err);
 		return -1;
 	}
-
-	/*log_info("%s: verification is OK\n", file);*/
-	printf("%s: verification is OK\n", file);
 
 	return 0;
 }
@@ -677,9 +673,11 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 	log_debug("keyid: ");
 	log_debug_dump(keyid, 8);
 
-	id = __be64_to_cpup((__be64 *) keyid);
-	sprintf(str, "%llX", (unsigned long long)id);
-	log_info("keyid-v1: %s\n", str);
+	if (params.verbose > LOG_INFO) {
+		id = __be64_to_cpup((__be64 *) keyid);
+		sprintf(str, "%llX", (unsigned long long)id);
+		log_info("keyid-v1: %s\n", str);
+	}
 }
 
 void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
@@ -697,8 +695,10 @@ void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
 	log_debug("keyid: ");
 	log_debug_dump(keyid, 4);
 
-	sprintf(str, "%x", __be32_to_cpup(keyid));
-	log_info("keyid: %s\n", str);
+	if (params.verbose > LOG_INFO) {
+		sprintf(str, "%x", __be32_to_cpup(keyid));
+		log_info("keyid: %s\n", str);
+	}
 
 	free(pkey);
 }

@@ -771,6 +771,7 @@ static int verify_evm(const char *file)
 static int cmd_verify_evm(struct command *cmd)
 {
 	char *file = g_argv[optind++];
+	int err;
 
 	if (!file) {
 		log_err("Parameters missing\n");
@@ -778,7 +779,10 @@ static int cmd_verify_evm(struct command *cmd)
 		return -1;
 	}
 
-	return verify_evm(file);
+	err = verify_evm(file);
+	if (!err && params.verbose >= LOG_INFO)
+		log_info("%s: verification is OK\n", file);
+	return err;
 }
 
 static int verify_ima(const char *file)
@@ -805,14 +809,19 @@ static int verify_ima(const char *file)
 static int cmd_verify_ima(struct command *cmd)
 {
 	char *file = g_argv[optind++];
+	int err;
 
+	errno = 0;
 	if (!file) {
 		log_err("Parameters missing\n");
 		print_usage(cmd);
 		return -1;
 	}
 
-	return verify_ima(file);
+	err = verify_ima(file);
+	if (!err && params.verbose >= LOG_INFO)
+		log_info("%s: verification is OK\n", file);
+	return err;
 }
 
 static int cmd_convert(struct command *cmd)
@@ -1361,6 +1370,7 @@ void ima_ng_show(struct template_entry *entry)
 	int total_len = entry->template_len, digest_len, len, sig_len;
 	uint8_t *digest, *sig = NULL;
 	char *algo, *path;
+	int err;
 
 	/* get binary digest */
 	field_len = *(uint32_t *)fieldp;
@@ -1404,22 +1414,30 @@ void ima_ng_show(struct template_entry *entry)
 	}
 
 	/* ascii_runtime_measurements */
-	log_info("%d ", entry->header.pcr);
-	log_dump_n(entry->header.digest, sizeof(entry->header.digest));
-	log_info(" %s %s", entry->name, algo);
-	log_dump_n(digest, digest_len);
-	log_info(" %s", path);
+	if (params.verbose > LOG_INFO) {
+		log_info("%d ", entry->header.pcr);
+		log_dump_n(entry->header.digest, sizeof(entry->header.digest));
+		log_info(" %s %s", entry->name, algo);
+		log_dump_n(digest, digest_len);
+		log_info(" %s", path);
+	}
 
 	if (sig) {
-		log_info(" ");
-		log_dump(sig, sig_len);
+		if (params.verbose > LOG_INFO) {
+			log_info(" ");
+			log_dump(sig, sig_len);
+		}
 		if (measurement_list)
-			ima_verify_signature(path, sig, sig_len,
-					     digest, digest_len);
+			err = ima_verify_signature(path, sig, sig_len,
+						   digest, digest_len);
 		else
-			ima_verify_signature(path, sig, sig_len, NULL, 0);
-	} else
-		log_info("\n");
+			err = ima_verify_signature(path, sig, sig_len, NULL, 0);
+		if (!err && params.verbose > LOG_INFO)
+			log_info("%s: verification is OK\n", path);
+	} else {
+		if (params.verbose > LOG_INFO)
+			log_info("\n");
+	}
 
 	if (total_len)
 		log_err("Remain unprocessed data: %d\n", total_len);
@@ -1435,6 +1453,7 @@ static int ima_measurement(const char *file)
 	bool verify_failed = false;
 	int i;
 
+	errno = 0;
 	memset(zero, 0, SHA_DIGEST_LENGTH);
 	memset(fox, 0xff, SHA_DIGEST_LENGTH);
 
