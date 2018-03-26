@@ -23,9 +23,6 @@ rpm: $(tarname)
 	cp $(tarname) $(SRCS)/
 	rpmbuild -ba --nodeps $(SPEC)
 
-# requires asciidoc, xslproc, docbook-xsl
-MANPAGE_DOCBOOK_XSL = /usr/share/xml/docbook/stylesheet/docbook-xsl/manpages/docbook.xsl
-
 evmctl.1.html: README
 	@asciidoc -o $@ $<
 

@@ -5,7 +5,7 @@ AC_INIT(ima-evm-utils, 1.1, zohar@linux.vnet.ibm.com)
 AM_INIT_AUTOMAKE
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
- 
+
 AC_CANONICAL_HOST
 
 # Checks for programs.
@@ -41,6 +41,8 @@ else
 	CFLAGS="$CFLAGS -Wall -Wstrict-prototypes -pipe -fomit-frame-pointer"
 fi
 
+EVMCTL_MANPAGE_DOCBOOK_XSL
+
 # for gcov
 #CFLAGS="$CFLAGS -Wall -fprofile-arcs -ftest-coverage"
 #CXXFLAGS="$CXXFLAGS -Wall -fprofile-arcs -ftest-coverage"
@@ -56,7 +58,7 @@ AC_OUTPUT
 # Give some feedback
 echo
 echo
-echo	"Configuration:"		
+echo	"Configuration:"
 echo	"	debug:	$pkg_cv_enable_debug"
 echo
 
