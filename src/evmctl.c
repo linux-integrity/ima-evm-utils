@@ -62,6 +62,11 @@
 #include <openssl/err.h>
 #include <openssl/rsa.h>
 
+#ifndef XATTR_APPAARMOR_SUFFIX
+#define XATTR_APPARMOR_SUFFIX "apparmor"
+#define XATTR_NAME_APPARMOR XATTR_SECURITY_PREFIX XATTR_APPARMOR_SUFFIX
+#endif
+
 #define USE_FPRINTF
 
 #include "imaevm.h"
@@ -69,6 +74,7 @@
 static char *evm_default_xattrs[] = {
 	XATTR_NAME_SELINUX,
 	XATTR_NAME_SMACK,
+	XATTR_NAME_APPARMOR,
 	XATTR_NAME_IMA,
 	XATTR_NAME_CAPS,
 	NULL
@@ -80,6 +86,7 @@ static char *evm_extra_smack_xattrs[] = {
 	XATTR_NAME_SMACKEXEC,
 	XATTR_NAME_SMACKTRANSMUTE,
 	XATTR_NAME_SMACKMMAP,
+	XATTR_NAME_APPARMOR,
 	XATTR_NAME_IMA,
 	XATTR_NAME_CAPS,
 	NULL
