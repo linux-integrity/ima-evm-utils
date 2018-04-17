@@ -313,6 +313,7 @@ err:
 
 static int calc_evm_hash(const char *file, unsigned char *hash)
 {
+        const EVP_MD *md;
 	struct stat st;
 	int err;
 	uint32_t generation = 0;
@@ -374,7 +375,13 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return -1;
 	}
 
-	err = EVP_DigestInit(pctx, EVP_sha1());
+	md = EVP_get_digestbyname(params.hash_algo);
+	if (!md) {
+		log_err("EVP_get_digestbyname() failed\n");
+		return 1;
+	}
+
+	err = EVP_DigestInit(pctx, md);
 	if (!err) {
 		log_err("EVP_DigestInit() failed\n");
 		return 1;
@@ -490,7 +497,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 static int sign_evm(const char *file, const char *key)
 {
-	unsigned char hash[20];
+	unsigned char hash[64];
 	unsigned char sig[1024];
 	int len, err;
 
@@ -498,7 +505,7 @@ static int sign_evm(const char *file, const char *key)
 	if (len <= 1)
 		return len;
 
-	len = sign_hash("sha1", hash, len, key, NULL, sig + 1);
+	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 
@@ -967,6 +974,7 @@ static int cmd_setxattr_ima(struct command *cmd)
 
 static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *hash)
 {
+        const EVP_MD *md;
 	struct stat st;
 	int err = -1;
 	uint32_t generation = 0;
@@ -1033,7 +1041,13 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		goto out;
 	}
 
-	err = !HMAC_Init_ex(pctx, evmkey, sizeof(evmkey), EVP_sha1(), NULL);
+	md = EVP_get_digestbyname(params.hash_algo);
+	if (!md) {
+		log_err("EVP_get_digestbyname() failed\n");
+		goto out;
+	}
+
+	err = !HMAC_Init_ex(pctx, evmkey, sizeof(evmkey), md, NULL);
 	if (err) {
 		log_err("HMAC_Init() failed\n");
 		goto out;
