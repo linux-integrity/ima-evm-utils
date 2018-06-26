@@ -1535,7 +1535,8 @@ static int ima_measurement(const char *file)
 		log_info("PCRAgg %.2d: ", i);
 		log_dump(pcr[i], SHA_DIGEST_LENGTH);
 
-		tpm_pcr_read(i, hwpcr, sizeof(hwpcr));
+		if (tpm_pcr_read(i, hwpcr, sizeof(hwpcr)))
+			exit(1);
 		log_info("HW PCR-%d: ", i);
 		log_dump(hwpcr, sizeof(hwpcr));
 
