@@ -672,12 +672,11 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 	memcpy(keyid, sha1 + 12, 8);
 	log_debug("keyid: ");
 	log_debug_dump(keyid, 8);
+	id = __be64_to_cpup((__be64 *) keyid);
+	sprintf(str, "%llX", (unsigned long long)id);
 
-	if (params.verbose > LOG_INFO) {
-		id = __be64_to_cpup((__be64 *) keyid);
-		sprintf(str, "%llX", (unsigned long long)id);
+	if (params.verbose > LOG_INFO)
 		log_info("keyid-v1: %s\n", str);
-	}
 }
 
 void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
@@ -694,11 +693,10 @@ void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
 	memcpy(keyid, sha1 + 16, 4);
 	log_debug("keyid: ");
 	log_debug_dump(keyid, 4);
+	sprintf(str, "%x", __be32_to_cpup(keyid));
 
-	if (params.verbose > LOG_INFO) {
-		sprintf(str, "%x", __be32_to_cpup(keyid));
+	if (params.verbose > LOG_INFO)
 		log_info("keyid: %s\n", str);
-	}
 
 	free(pkey);
 }
