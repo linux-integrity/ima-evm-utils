@@ -55,6 +55,7 @@
 #include <keyutils.h>
 #include <ctype.h>
 #include <termios.h>
+#include <assert.h>
 
 #include <openssl/sha.h>
 #include <openssl/pem.h>
@@ -760,13 +761,15 @@ static int cmd_sign_evm(struct command *cmd)
 
 static int verify_evm(const char *file)
 {
-	unsigned char hash[20];
+	unsigned char hash[64];
 	unsigned char sig[1024];
+	int mdlen;
 	int len;
 
-	len = calc_evm_hash(file, hash);
-	if (len <= 1)
-		return len;
+	mdlen = calc_evm_hash(file, hash);
+	assert(mdlen <= sizeof(hash));
+	if (mdlen <= 1)
+		return mdlen;
 
 	len = lgetxattr(file, "security.evm", sig, sizeof(sig));
 	if (len < 0) {
@@ -779,7 +782,7 @@ static int verify_evm(const char *file)
 		return -1;
 	}
 
-	return verify_hash(file, hash, sizeof(hash), sig + 1, len - 1);
+	return verify_hash(file, hash, mdlen, sig + 1, len - 1);
 }
 
 static int cmd_verify_evm(struct command *cmd)
@@ -1135,11 +1138,12 @@ out:
 
 static int hmac_evm(const char *file, const char *key)
 {
-	unsigned char hash[20];
+	unsigned char hash[64];
 	unsigned char sig[1024];
 	int len, err;
 
 	len = calc_evm_hmac(file, key, hash);
+	assert(len <= sizeof(hash));
 	if (len <= 1)
 		return len;
 
