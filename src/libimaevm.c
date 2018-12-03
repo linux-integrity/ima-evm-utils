@@ -49,6 +49,7 @@
 #include <dirent.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <openssl/pem.h>
 #include <openssl/evp.h>
@@ -590,7 +591,7 @@ int verify_hash(const char *file, const unsigned char *hash, int size, unsigned 
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 			 unsigned char *digest, int digestlen)
 {
-	unsigned char hash[64];
+	unsigned char hash[MAX_DIGEST_SIZE];
 	int hashlen, sig_hash_algo;
 
 	if (sig[0] != 0x03) {
@@ -614,6 +615,7 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	    return verify_hash(file, digest, digestlen, sig + 1, siglen - 1);
 
 	hashlen = ima_calc_hash(file, hash);
+	assert(hashlen <= sizeof(hash));
 	if (hashlen <= 1)
 		return hashlen;
 

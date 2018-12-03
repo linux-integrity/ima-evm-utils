@@ -505,15 +505,17 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 static int sign_evm(const char *file, const char *key)
 {
-	unsigned char hash[64];
-	unsigned char sig[1024];
+	unsigned char hash[MAX_DIGEST_SIZE];
+	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len, err;
 
 	len = calc_evm_hash(file, hash);
+	assert(len <= sizeof(hash));
 	if (len <= 1)
 		return len;
 
 	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
+	assert(len < sizeof(sig));
 	if (len <= 1)
 		return len;
 
@@ -543,7 +545,7 @@ static int sign_evm(const char *file, const char *key)
 
 static int hash_ima(const char *file)
 {
-	unsigned char hash[66]; /* MAX hash size + 2 */
+	unsigned char hash[MAX_DIGEST_SIZE + 2]; /* +2 byte xattr header */
 	int len, err, offset;
 	int algo = get_hash_algo(params.hash_algo);
 
@@ -557,6 +559,7 @@ static int hash_ima(const char *file)
 	}
 
 	len = ima_calc_hash(file, hash + offset);
+	assert(len + offset <= sizeof(hash));
 	if (len <= 1)
 		return len;
 
@@ -581,15 +584,17 @@ static int hash_ima(const char *file)
 
 static int sign_ima(const char *file, const char *key)
 {
-	unsigned char hash[64];
-	unsigned char sig[1024];
+	unsigned char hash[MAX_DIGEST_SIZE];
+	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len, err;
 
 	len = ima_calc_hash(file, hash);
+	assert(len <= sizeof(hash));
 	if (len <= 1)
 		return len;
 
 	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
+	assert(len < sizeof(sig));
 	if (len <= 1)
 		return len;
 
@@ -695,8 +700,8 @@ static int cmd_sign_hash(struct command *cmd)
 	int hashlen = 0;
 	size_t line_len;
 	ssize_t len;
-	unsigned char hash[64];
-	unsigned char sig[1024] = "\x03";
+	unsigned char hash[MAX_DIGEST_SIZE];
+	unsigned char sig[MAX_SIGNATURE_SIZE] = "\x03";
 	int siglen;
 
 	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
@@ -711,9 +716,11 @@ static int cmd_sign_hash(struct command *cmd)
 		token = strpbrk(line, ", \t");
 		hashlen = token ? token - line : strlen(line);
 
-		hex2bin(hash, line, hashlen);
+		assert(hashlen / 2 <= sizeof(hash));
+		hex2bin(hash, line, hashlen / 2);
 		siglen = sign_hash(params.hash_algo, hash, hashlen/2,
 				 key, NULL, sig + 1);
+		assert(siglen < sizeof(sig));
 		if (siglen <= 1)
 			return siglen;
 
@@ -761,8 +768,8 @@ static int cmd_sign_evm(struct command *cmd)
 
 static int verify_evm(const char *file)
 {
-	unsigned char hash[64];
-	unsigned char sig[1024];
+	unsigned char hash[MAX_DIGEST_SIZE];
+	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int mdlen;
 	int len;
 
@@ -804,12 +811,13 @@ static int cmd_verify_evm(struct command *cmd)
 
 static int verify_ima(const char *file)
 {
-	unsigned char sig[1024];
+	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len;
 
 	if (sigfile) {
 		void *tmp = file2bin(file, "sig", &len);
 
+		assert(len <= sizeof(sig));
 		memcpy(sig, tmp, len);
 		free(tmp);
 	} else {
@@ -1138,8 +1146,8 @@ out:
 
 static int hmac_evm(const char *file, const char *key)
 {
-	unsigned char hash[64];
-	unsigned char sig[1024];
+	unsigned char hash[MAX_DIGEST_SIZE];
+	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len, err;
 
 	len = calc_evm_hmac(file, key, hash);
@@ -1149,6 +1157,7 @@ static int hmac_evm(const char *file, const char *key)
 
 	log_info("hmac: ");
 	log_dump(hash, len);
+	assert(len < sizeof(sig));
 	memcpy(sig + 1, hash, len);
 
 	if (xattr) {
