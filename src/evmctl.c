@@ -388,7 +388,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	md = EVP_get_digestbyname(params.hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
+		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
 		return 1;
 	}
 
@@ -1064,7 +1064,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	md = EVP_get_digestbyname(params.hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
+		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
 		goto out;
 	}
 
@@ -1653,7 +1653,7 @@ static void usage(void)
 
 	printf(
 		"\n"
-		"  -a, --hashalgo     sha1 (default), sha224, sha256, sha384, sha512\n"
+		"  -a, --hashalgo     sha1 (default), sha224, sha256, sha384, sha512, streebog256, streebog512\n"
 		"  -s, --imasig       make IMA signature\n"
 		"  -d, --imahash      make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"

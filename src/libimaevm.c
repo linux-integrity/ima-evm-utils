@@ -51,6 +51,7 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include <openssl/crypto.h>
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
@@ -67,6 +68,8 @@ const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_SHA384]	= "sha384",
 	[PKEY_HASH_SHA512]	= "sha512",
 	[PKEY_HASH_SHA224]	= "sha224",
+	[PKEY_HASH_STREEBOG_256] = "streebog256",
+	[PKEY_HASH_STREEBOG_512] = "streebog512",
 };
 
 /*
@@ -291,7 +294,7 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 
 	md = EVP_get_digestbyname(params.hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname() failed\n");
+		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
 		return 1;
 	}
 
@@ -509,14 +512,16 @@ int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	asn1 = &RSA_ASN1_templates[hdr->hash_algo];
 
 	if (len < asn1->size || memcmp(out, asn1->data, asn1->size)) {
-		log_err("%s: verification failed: %d\n", file, err);
+		log_err("%s: verification failed: %d (asn1 mismatch)\n",
+			file, err);
 		return -1;
 	}
 
 	len -= asn1->size;
 
 	if (len != size || memcmp(out + asn1->size, hash, len)) {
-		log_err("%s: verification failed: %d\n", file, err);
+		log_err("%s: verification failed: %d (digest mismatch)\n",
+			file, err);
 		return -1;
 	}
 
@@ -528,7 +533,8 @@ int get_hash_algo(const char *algo)
 	int i;
 
 	for (i = 0; i < PKEY_HASH__LAST; i++)
-		if (!strcmp(algo, pkey_hash_algo[i]))
+		if (pkey_hash_algo[i] &&
+		    !strcmp(algo, pkey_hash_algo[i]))
 			return i;
 
 	return PKEY_HASH_SHA1;
@@ -899,5 +905,6 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const c
 static void libinit()
 {
 	OpenSSL_add_all_algorithms();
+	OPENSSL_add_all_algorithms_conf();
 	ERR_load_crypto_strings();
 }
