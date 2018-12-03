@@ -62,6 +62,7 @@
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 #include <openssl/rsa.h>
+#include <openssl/engine.h>
 
 #ifndef XATTR_APPAARMOR_SUFFIX
 #define XATTR_APPARMOR_SUFFIX "apparmor"
@@ -1680,6 +1681,7 @@ static void usage(void)
 		"      --selinux      use custom Selinux label for EVM\n"
 		"      --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)\n"
 		"      --list         measurement list verification\n"
+		"      --engine e     preload OpenSSL engine e (such as: gost)\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
@@ -1732,6 +1734,7 @@ static struct option opts[] = {
 	{"selinux", 1, 0, 136},
 	{"caps", 2, 0, 137},
 	{"list", 0, 0, 138},
+	{"engine", 1, 0, 139},
 	{"xattr-user", 0, 0, 140},
 	{}
 
@@ -1774,6 +1777,7 @@ static char *get_password(void)
 int main(int argc, char *argv[])
 {
 	int err = 0, c, lind;
+	ENGINE *eng = NULL;
 
 	g_argv = argv;
 	g_argc = argc;
@@ -1884,6 +1888,18 @@ int main(int argc, char *argv[])
 		case 138:
 			measurement_list = 1;
 			break;
+		case 139: /* --engine e */
+			eng = ENGINE_by_id(optarg);
+			if (!eng) {
+				log_err("engine %s isn't available\n", optarg);
+				ERR_print_errors_fp(stderr);
+			} else if (!ENGINE_init(eng)) {
+				log_err("engine %s init failed\n", optarg);
+				ERR_print_errors_fp(stderr);
+				ENGINE_free(eng);
+				eng = NULL;
+			}
+			break;
 		case 140: /* --xattr-user */
 			xattr_ima = "user.ima";
 			xattr_evm = "user.evm";
@@ -1914,6 +1930,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (eng) {
+		ENGINE_finish(eng);
+		ENGINE_free(eng);
+#if OPENSSL_API_COMPAT < 0x10100000L
+		ENGINE_cleanup();
+#endif
+	}
 	ERR_free_strings();
 	EVP_cleanup();
 	BIO_free(NULL);

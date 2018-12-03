@@ -58,6 +58,7 @@ OPTIONS
       --smack        use extra SMACK xattrs for EVM
       --m32          force EVM hmac/signature for 32 bit target system
       --m64          force EVM hmac/signature for 64 bit target system
+      --engine e     preload OpenSSL engine e (such as: gost)
   -v                 increase verbosity level
   -h, --help         display this help and exit
 
