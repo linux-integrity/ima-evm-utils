@@ -145,6 +145,9 @@ static int find(const char *path, int dts, find_cb_t func);
 struct command cmds[];
 static void print_usage(struct command *cmd);
 
+static const char *xattr_ima = "security.ima";
+static const char *xattr_evm = "security.evm";
+
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
 {
 	FILE *fp;
@@ -533,7 +536,7 @@ static int sign_evm(const char *file, const char *key)
 		dump(sig, len);
 
 	if (xattr) {
-		err = lsetxattr(file, "security.evm", sig, len, 0);
+		err = lsetxattr(file, xattr_evm, sig, len, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -572,7 +575,7 @@ static int hash_ima(const char *file)
 		dump(hash, len);
 
 	if (xattr) {
-		err = lsetxattr(file, "security.ima", hash, len, 0);
+		err = lsetxattr(file, xattr_ima, hash, len, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -609,7 +612,7 @@ static int sign_ima(const char *file, const char *key)
 		bin2file(file, "sig", sig, len);
 
 	if (xattr) {
-		err = lsetxattr(file, "security.ima", sig, len, 0);
+		err = lsetxattr(file, xattr_ima, sig, len, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -778,14 +781,14 @@ static int verify_evm(const char *file)
 	if (mdlen <= 1)
 		return mdlen;
 
-	len = lgetxattr(file, "security.evm", sig, sizeof(sig));
+	len = lgetxattr(file, xattr_evm, sig, sizeof(sig));
 	if (len < 0) {
 		log_err("getxattr failed: %s\n", file);
 		return len;
 	}
 
 	if (sig[0] != 0x03) {
-		log_err("security.evm has no signature\n");
+		log_err("%s has no signature\n", xattr_evm);
 		return -1;
 	}
 
@@ -821,7 +824,7 @@ static int verify_ima(const char *file)
 		memcpy(sig, tmp, len);
 		free(tmp);
 	} else {
-		len = lgetxattr(file, "security.ima", sig, sizeof(sig));
+		len = lgetxattr(file, xattr_ima, sig, sizeof(sig));
 		if (len < 0) {
 			log_err("getxattr failed: %s\n", file);
 			return len;
@@ -964,7 +967,7 @@ static int setxattr_ima(const char *file, char *sig_file)
 	if (!sig)
 		return 0;
 
-	err = lsetxattr(file, "security.ima", sig, len, 0);
+	err = lsetxattr(file, xattr_ima, sig, len, 0);
 	if (err < 0)
 		log_err("setxattr failed: %s\n", file);
 	free(sig);
@@ -1162,7 +1165,7 @@ static int hmac_evm(const char *file, const char *key)
 
 	if (xattr) {
 		sig[0] = EVM_XATTR_HMAC;
-		err = lsetxattr(file, "security.evm", sig, len + 1, 0);
+		err = lsetxattr(file, xattr_evm, sig, len + 1, 0);
 		if (err < 0) {
 			log_err("setxattr failed: %s\n", file);
 			return err;
@@ -1218,9 +1221,9 @@ static int ima_fix(const char *path)
 		}
 		for (; size > 0; len++, size -= len, list += len) {
 			len = strlen(list);
-			if (!strcmp(list, "security.ima"))
+			if (!strcmp(list, xattr_ima))
 				ima = 1;
-			else if (!strcmp(list, "security.evm"))
+			else if (!strcmp(list, xattr_evm))
 				evm = 1;
 		}
 		if (ima && evm)
@@ -1297,8 +1300,8 @@ static int cmd_ima_fix(struct command *cmd)
 static int ima_clear(const char *path)
 {
 	log_info("%s\n", path);
-	lremovexattr(path, "security.ima");
-	lremovexattr(path, "security.evm");
+	lremovexattr(path, xattr_ima);
+	lremovexattr(path, xattr_evm);
 
 	return 0;
 }
@@ -1654,6 +1657,7 @@ static void usage(void)
 		"  -s, --imasig       make IMA signature\n"
 		"  -d, --imahash      make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
+		"      --xattr-user   store xattrs in user namespace (for testing purposes)\n"
 		"      --rsa          use RSA key type and signing scheme v1\n"
 		"  -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"  -o, --portable     generate portable EVM signatures\n"
@@ -1728,6 +1732,7 @@ static struct option opts[] = {
 	{"selinux", 1, 0, 136},
 	{"caps", 2, 0, 137},
 	{"list", 0, 0, 138},
+	{"xattr-user", 0, 0, 140},
 	{}
 
 };
@@ -1878,6 +1883,10 @@ int main(int argc, char *argv[])
 			break;
 		case 138:
 			measurement_list = 1;
+			break;
+		case 140: /* --xattr-user */
+			xattr_ima = "user.ima";
+			xattr_evm = "user.evm";
 			break;
 		case '?':
 			exit(1);

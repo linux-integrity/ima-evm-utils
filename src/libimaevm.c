@@ -595,7 +595,7 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	int hashlen, sig_hash_algo;
 
 	if (sig[0] != 0x03) {
-		log_err("security.ima has no signature\n");
+		log_err("xattr ima has no signature\n");
 		return -1;
 	}
 
