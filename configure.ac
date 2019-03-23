@@ -27,11 +27,17 @@ AC_HEADER_STDC
 PKG_CHECK_MODULES(OPENSSL, [ openssl >= 0.9.8 ])
 AC_SUBST(OPENSSL_CFLAGS)
 AC_SUBST(OPENSSL_LIBS)
+AC_SUBST(KERNEL_HEADERS)
 AC_CHECK_HEADER(unistd.h)
 AC_CHECK_HEADERS(openssl/conf.h)
 
 AC_CHECK_HEADERS(sys/xattr.h, , [AC_MSG_ERROR([sys/xattr.h header not found. You need the c-library development package.])])
 AC_CHECK_HEADERS(keyutils.h, , [AC_MSG_ERROR([keyutils.h header not found. You need the libkeyutils development package.])])
+
+AC_ARG_WITH(kernel_headers, [AS_HELP_STRING([--with-kernel-headers=PATH],
+	    [specifies the Linux kernel-headers package location or kernel root directory you want to use])],
+	    [KERNEL_HEADERS="$withval"],
+	    [KERNEL_HEADERS=/lib/modules/$(uname -r)/source])
 
 #debug support - yes for a while
 PKG_ARG_ENABLE(debug, "yes", DEBUG, [Enable Debug support])

@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# Generate hash_info.h from kernel headers
+#
+# Copyright (C) 2018 <vt@altlinux.org>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+KERNEL_HEADERS=$1
+HASH_INFO_H=uapi/linux/hash_info.h
+HASH_INFO=$KERNEL_HEADERS/include/$HASH_INFO_H
+
+# Allow to specify kernel-headers past include/
+if [ ! -e $HASH_INFO ]; then
+  HASH_INFO2=$KERNEL_HEADERS/$HASH_INFO_H
+  if [ -e $HASH_INFO2 ]; then
+    HASH_INFO=$HASH_INFO2
+  fi
+fi
+
+if [ ! -e $HASH_INFO ]; then
+  echo "/* $HASH_INFO is not found */"
+  HASH_INFO=/dev/null
+else
+  echo "/* $HASH_INFO is found */"
+fi
+
+echo "enum hash_algo {"
+grep HASH_ALGO_.*, $HASH_INFO
+printf "\tHASH_ALGO__LAST\n"
+echo "};"
+
+echo "const char *const hash_algo_name[HASH_ALGO__LAST] = {"
+sed -n 's/HASH_ALGO_\(.*\),/\1 \L\1\E/p' $HASH_INFO | \
+  while read a b; do
+    # Normalize text hash name: if it contains underscore between
+    # digits replace it with a dash, other underscores are removed.
+    b=$(echo "$b" | sed "s/\([0-9]\)_\([0-9]\)/\1-\2/g;s/_//g")
+    printf '\t%-26s = "%s",\n' "[HASH_ALGO_$a]" "$b"
+  done
+echo "};"

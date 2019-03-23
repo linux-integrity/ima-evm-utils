@@ -9,6 +9,11 @@ libimaevm_la_LIBADD =  $(OPENSSL_LIBS)
 
 include_HEADERS = imaevm.h
 
+nodist_libimaevm_la_SOURCES = hash_info.h
+BUILT_SOURCES = hash_info.h
+hash_info.h: Makefile
+	./hash_info.gen $(KERNEL_HEADERS) >$@
+
 bin_PROGRAMS = evmctl
 
 evmctl_SOURCES = evmctl.c
@@ -18,5 +23,6 @@ evmctl_LDADD =  $(OPENSSL_LIBS) -lkeyutils libimaevm.la
 
 INCLUDES = -I$(top_srcdir) -include config.h
 
+CLEANFILES = hash_info.h
 DISTCLEANFILES = @DISTCLEANFILES@
 

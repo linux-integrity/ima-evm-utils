@@ -50,6 +50,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include <openssl/crypto.h>
 #include <openssl/pem.h>
@@ -58,6 +59,7 @@
 #include <openssl/err.h>
 
 #include "imaevm.h"
+#include "hash_info.h"
 
 const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_MD4]		= "md4",
@@ -151,6 +153,17 @@ void do_dump(FILE *fp, const void *ptr, int len, bool cr)
 void dump(const void *ptr, int len)
 {
 	do_dump(stdout, ptr, len, true);
+}
+
+const char *get_hash_algo_by_id(int algo)
+{
+	if (algo < PKEY_HASH__LAST)
+		return pkey_hash_algo[algo];
+	if (algo < HASH_ALGO__LAST)
+		return hash_algo_name[algo];
+
+	log_err("digest %d not found\n", algo);
+	return "unknown";
 }
 
 int get_filesize(const char *filename)
@@ -532,11 +545,19 @@ int get_hash_algo(const char *algo)
 {
 	int i;
 
+	/* first iterate over builtin algorithms */
 	for (i = 0; i < PKEY_HASH__LAST; i++)
 		if (pkey_hash_algo[i] &&
 		    !strcmp(algo, pkey_hash_algo[i]))
 			return i;
 
+	/* iterate over algorithms provided by kernel-headers */
+	for (i = 0; i < HASH_ALGO__LAST; i++)
+		if (hash_algo_name[i] &&
+		    !strcmp(algo, hash_algo_name[i]))
+			return i;
+
+	log_info("digest %s not found, fall back to sha1\n", algo);
 	return PKEY_HASH_SHA1;
 }
 
@@ -611,7 +632,7 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 		return -1;
 	}
 	/* Use hash algorithm as retrieved from signature */
-	params.hash_algo = pkey_hash_algo[sig_hash_algo];
+	params.hash_algo = get_hash_algo_by_id(sig_hash_algo);
 
 	/*
 	 * Validate the signature based on the digest included in the
