@@ -937,7 +937,7 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const c
 
 static void libinit()
 {
-	OpenSSL_add_all_algorithms();
-	OPENSSL_add_all_algorithms_conf();
+	OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS |
+			    OPENSSL_INIT_ADD_ALL_DIGESTS, NULL);
 	ERR_load_crypto_strings();
 }

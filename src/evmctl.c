@@ -1779,6 +1779,11 @@ int main(int argc, char *argv[])
 	int err = 0, c, lind;
 	ENGINE *eng = NULL;
 
+	OPENSSL_init_crypto(
+#ifndef DISABLE_OPENSSL_CONF
+			    OPENSSL_INIT_LOAD_CONFIG |
+#endif
+			    OPENSSL_INIT_ENGINE_ALL_BUILTIN, NULL);
 	g_argv = argv;
 	g_argc = argc;
 
@@ -1899,6 +1904,7 @@ int main(int argc, char *argv[])
 				ENGINE_free(eng);
 				eng = NULL;
 			}
+			ENGINE_set_default(eng, ENGINE_METHOD_ALL);
 			break;
 		case 140: /* --xattr-user */
 			xattr_ima = "user.ima";

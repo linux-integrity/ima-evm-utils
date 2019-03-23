@@ -39,6 +39,12 @@ AC_ARG_WITH(kernel_headers, [AS_HELP_STRING([--with-kernel-headers=PATH],
 	    [KERNEL_HEADERS="$withval"],
 	    [KERNEL_HEADERS=/lib/modules/$(uname -r)/source])
 
+AC_ARG_ENABLE([openssl_conf],
+	      [AS_HELP_STRING([--disable-openssl-conf], [disable loading of openssl config by evmctl])],
+	      [if test "$enable_openssl_conf" = "no"; then
+		AC_DEFINE(DISABLE_OPENSSL_CONF, 1, [Define to disable loading of openssl config by evmctl.])
+	      fi], [enable_openssl_conf=yes])
+
 #debug support - yes for a while
 PKG_ARG_ENABLE(debug, "yes", DEBUG, [Enable Debug support])
 if test $pkg_cv_enable_debug = yes; then
@@ -65,6 +71,6 @@ AC_OUTPUT
 echo
 echo
 echo	"Configuration:"
-echo	"	debug:	$pkg_cv_enable_debug"
+echo	"          debug: $pkg_cv_enable_debug"
+echo	"   openssl-conf: $enable_openssl_conf"
 echo
-
