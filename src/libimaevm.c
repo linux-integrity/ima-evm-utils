@@ -61,6 +61,7 @@
 #include "imaevm.h"
 #include "hash_info.h"
 
+/* Names that are primary for OpenSSL. */
 const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_MD4]		= "md4",
 	[PKEY_HASH_MD5]		= "md5",
@@ -70,6 +71,12 @@ const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_SHA384]	= "sha384",
 	[PKEY_HASH_SHA512]	= "sha512",
 	[PKEY_HASH_SHA224]	= "sha224",
+	[PKEY_HASH_STREEBOG_256] = "md_gost12_256",
+	[PKEY_HASH_STREEBOG_512] = "md_gost12_512",
+};
+
+/* Names that are primary for the kernel. */
+const char *const pkey_hash_algo_kern[PKEY_HASH__LAST] = {
 	[PKEY_HASH_STREEBOG_256] = "streebog256",
 	[PKEY_HASH_STREEBOG_512] = "streebog512",
 };
@@ -549,6 +556,11 @@ int get_hash_algo(const char *algo)
 	for (i = 0; i < PKEY_HASH__LAST; i++)
 		if (pkey_hash_algo[i] &&
 		    !strcmp(algo, pkey_hash_algo[i]))
+			return i;
+
+	for (i = 0; i < PKEY_HASH__LAST; i++)
+		if (pkey_hash_algo_kern[i] &&
+		    !strcmp(algo, pkey_hash_algo_kern[i]))
 			return i;
 
 	/* iterate over algorithms provided by kernel-headers */
