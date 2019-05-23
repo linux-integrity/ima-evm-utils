@@ -1,7 +1,7 @@
 lib_LTLIBRARIES = libimaevm.la
 
 libimaevm_la_SOURCES = libimaevm.c
-libimaevm_la_CPPFLAGS = $(LIBCRYPTO_CFLAGS)
+libimaevm_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 # current[:revision[:age]]
 # result: [current-age].age.revision
 libimaevm_la_LDFLAGS = -version-info 0:0:0
@@ -17,11 +17,11 @@ hash_info.h: Makefile
 bin_PROGRAMS = evmctl
 
 evmctl_SOURCES = evmctl.c
-evmctl_CPPFLAGS = $(LIBCRYPTO_CFLAGS)
+evmctl_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 evmctl_LDFLAGS = $(LDFLAGS_READLINE)
 evmctl_LDADD =  $(LIBCRYPTO_LIBS) -lkeyutils libimaevm.la
 
-INCLUDES = -I$(top_srcdir) -include config.h
+AM_CPPFLAGS = -I$(top_srcdir) -include config.h
 
 CLEANFILES = hash_info.h
 DISTCLEANFILES = @DISTCLEANFILES@
