@@ -11,8 +11,9 @@ include_HEADERS = imaevm.h
 
 nodist_libimaevm_la_SOURCES = hash_info.h
 BUILT_SOURCES = hash_info.h
+EXTRA_DIST = hash_info.gen
 hash_info.h: Makefile
-	./hash_info.gen $(KERNEL_HEADERS) >$@
+	$(srcdir)/hash_info.gen $(KERNEL_HEADERS) >$@
 
 bin_PROGRAMS = evmctl
 
