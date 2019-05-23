@@ -45,6 +45,7 @@ cscope.*
 ncscope.*
 
 # Generated documentation
+*.1
 *.8
 *.5
 manpage.links
