@@ -460,7 +460,7 @@ int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	const char *st;
 
 	if (params.verbose > LOG_INFO) {
-		log_info("hash: ");
+		log_info("hash(%s): ", params.hash_algo);
 		log_dump(hash, size);
 	}
 
@@ -880,7 +880,7 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 		return -1;
 	}
 
-	log_info("hash: ");
+	log_info("hash(%s): ", params.hash_algo);
 	log_dump(hash, size);
 
 	pkey = read_priv_pkey(keyfile, params.keypass);
