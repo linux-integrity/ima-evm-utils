@@ -1411,6 +1411,34 @@ void ima_show(struct template_entry *entry)
 	log_debug_dump(entry->header.digest, sizeof(entry->header.digest));
 }
 
+/*
+ * Keep track of unknown or malformed template names.
+ *
+ * Return 1 for found, return 0 for not found.
+ */
+static int lookup_template_name_entry(char *template_name)
+{
+	struct template_name_entry {
+		struct template_name_entry *next;
+		char name[];
+	} *entry;
+	static struct template_name_entry *template_names = NULL;
+
+	for (entry = template_names; entry != NULL; entry = entry->next) {
+		if (strcmp(entry->name, template_name) == 0)
+			return 1;
+	}
+
+	entry = malloc(sizeof(struct template_name_entry) +
+			strlen(template_name) + 1);
+	if (entry) {
+		strcpy(entry->name, template_name);
+		entry->next = template_names;
+		template_names = entry;
+	}
+	return 0;
+}
+
 void ima_ng_show(struct template_entry *entry)
 {
 	uint8_t *fieldp = entry->template;
@@ -1418,6 +1446,7 @@ void ima_ng_show(struct template_entry *entry)
 	int total_len = entry->template_len, digest_len, len, sig_len;
 	uint8_t *digest, *sig = NULL;
 	char *algo, *path;
+	int found;
 	int err;
 
 	/* get binary digest */
@@ -1487,8 +1516,12 @@ void ima_ng_show(struct template_entry *entry)
 			log_info("\n");
 	}
 
-	if (total_len)
-		log_err("Remain unprocessed data: %d\n", total_len);
+	if (total_len) {
+		found = lookup_template_name_entry(entry->name);
+		if (!found)
+			log_err("Template \"%s\" contains unprocessed data: "
+				 "%d bytes\n", entry->name, total_len);
+	}
 }
 
 static int ima_measurement(const char *file)
