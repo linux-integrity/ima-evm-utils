@@ -753,6 +753,36 @@ void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
 	free(pkey);
 }
 
+/*
+ * Calculate keyid of the public_key part of EVP_PKEY
+ */
+void calc_pkeyid_v2(uint32_t *keyid, char *str, EVP_PKEY *pkey)
+{
+	X509_PUBKEY *pk = NULL;
+	const unsigned char *public_key = NULL;
+	int len;
+
+	/* This is more generic than i2d_PublicKey() */
+	if (X509_PUBKEY_set(&pk, pkey) &&
+	    X509_PUBKEY_get0_param(NULL, &public_key, &len, NULL, pk)) {
+		uint8_t sha1[SHA_DIGEST_LENGTH];
+
+		SHA1(public_key, len, sha1);
+		/* sha1[12 - 19] is exactly keyid from gpg file */
+		memcpy(keyid, sha1 + 16, 4);
+	} else
+		*keyid = 0;
+
+	log_debug("keyid: ");
+	log_debug_dump(keyid, 4);
+	sprintf(str, "%x", __be32_to_cpup(keyid));
+
+	if (params.verbose > LOG_INFO)
+		log_info("keyid: %s\n", str);
+
+	X509_PUBKEY_free(pk);
+}
+
 static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
 {
 	FILE *fp;
