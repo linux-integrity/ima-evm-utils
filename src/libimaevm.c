@@ -495,7 +495,7 @@ void init_public_keys(const char *keyfiles)
 			continue;
 		}
 
-		calc_pkeyid_v2(&entry->keyid, entry->name, entry->key);
+		calc_keyid_v2(&entry->keyid, entry->name, entry->key);
 		sprintf(entry->name, "%x", __be32_to_cpup(&entry->keyid));
 		log_info("key %d: %s %s\n", i++, entry->name, keyfile);
 		entry->next = public_keys;
@@ -741,32 +741,10 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 		log_info("keyid-v1: %s\n", str);
 }
 
-void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
-{
-	uint8_t sha1[SHA_DIGEST_LENGTH];
-	unsigned char *pkey = NULL;
-	int len;
-
-	len = i2d_RSAPublicKey(key, &pkey);
-
-	SHA1(pkey, len, sha1);
-
-	/* sha1[12 - 19] is exactly keyid from gpg file */
-	memcpy(keyid, sha1 + 16, 4);
-	log_debug("keyid: ");
-	log_debug_dump(keyid, 4);
-	sprintf(str, "%x", __be32_to_cpup(keyid));
-
-	if (params.verbose > LOG_INFO)
-		log_info("keyid: %s\n", str);
-
-	free(pkey);
-}
-
 /*
  * Calculate keyid of the public_key part of EVP_PKEY
  */
-void calc_pkeyid_v2(uint32_t *keyid, char *str, EVP_PKEY *pkey)
+void calc_keyid_v2(uint32_t *keyid, char *str, EVP_PKEY *pkey)
 {
 	X509_PUBKEY *pk = NULL;
 	const unsigned char *public_key = NULL;
@@ -971,7 +949,7 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 
 	hdr->hash_algo = get_hash_algo(algo);
 
-	calc_pkeyid_v2(&hdr->keyid, name, pkey);
+	calc_keyid_v2(&hdr->keyid, name, pkey);
 
 	st = "EVP_PKEY_CTX_new";
 	if (!(ctx = EVP_PKEY_CTX_new(pkey, NULL)))

@@ -934,7 +934,7 @@ static int cmd_import(struct command *cmd)
 			EVP_PKEY_free(pkey);
 			return 1;
 		}
-		calc_pkeyid_v2((uint32_t *)keyid, name, pkey);
+		calc_keyid_v2((uint32_t *)keyid, name, pkey);
 		EVP_PKEY_free(pkey);
 	} else {
 		RSA *key = read_pub_key(inkey, params.x509);
