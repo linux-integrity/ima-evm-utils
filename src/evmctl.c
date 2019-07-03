@@ -514,14 +514,14 @@ static int sign_evm(const char *file, const char *key)
 	int len, err;
 
 	len = calc_evm_hash(file, hash);
-	assert(len <= sizeof(hash));
 	if (len <= 1)
 		return len;
+	assert(len <= sizeof(hash));
 
 	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
-	assert(len < sizeof(sig));
 	if (len <= 1)
 		return len;
+	assert(len < sizeof(sig));
 
 	/* add header */
 	len++;
@@ -563,9 +563,9 @@ static int hash_ima(const char *file)
 	}
 
 	len = ima_calc_hash(file, hash + offset);
-	assert(len + offset <= sizeof(hash));
 	if (len <= 1)
 		return len;
+	assert(len + offset <= sizeof(hash));
 
 	len += offset;
 
@@ -593,14 +593,14 @@ static int sign_ima(const char *file, const char *key)
 	int len, err;
 
 	len = ima_calc_hash(file, hash);
-	assert(len <= sizeof(hash));
 	if (len <= 1)
 		return len;
+	assert(len <= sizeof(hash));
 
 	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
-	assert(len < sizeof(sig));
 	if (len <= 1)
 		return len;
+	assert(len < sizeof(sig));
 
 	/* add header */
 	len++;
@@ -724,9 +724,9 @@ static int cmd_sign_hash(struct command *cmd)
 		hex2bin(hash, line, hashlen / 2);
 		siglen = sign_hash(params.hash_algo, hash, hashlen/2,
 				 key, NULL, sig + 1);
-		assert(siglen < sizeof(sig));
 		if (siglen <= 1)
 			return siglen;
+		assert(siglen < sizeof(sig));
 
 		fwrite(line, len, 1, stdout);
 		fprintf(stdout, " ");
@@ -778,9 +778,9 @@ static int verify_evm(const char *file)
 	int len;
 
 	mdlen = calc_evm_hash(file, hash);
-	assert(mdlen <= sizeof(hash));
 	if (mdlen <= 1)
 		return mdlen;
+	assert(mdlen <= sizeof(hash));
 
 	len = lgetxattr(file, xattr_evm, sig, sizeof(sig));
 	if (len < 0) {
@@ -1160,9 +1160,9 @@ static int hmac_evm(const char *file, const char *key)
 	int len, err;
 
 	len = calc_evm_hmac(file, key, hash);
-	assert(len <= sizeof(hash));
 	if (len <= 1)
 		return len;
+	assert(len <= sizeof(hash));
 
 	log_info("hmac: ");
 	log_dump(hash, len);

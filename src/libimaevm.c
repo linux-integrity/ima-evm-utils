@@ -618,9 +618,9 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	    return verify_hash(file, digest, digestlen, sig + 1, siglen - 1);
 
 	hashlen = ima_calc_hash(file, hash);
-	assert(hashlen <= sizeof(hash));
 	if (hashlen <= 1)
 		return hashlen;
+	assert(hashlen <= sizeof(hash));
 
 	return verify_hash(file, hash, hashlen, sig + 1, siglen - 1);
 }
