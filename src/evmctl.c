@@ -1443,8 +1443,8 @@ void ima_ng_show(struct template_entry *entry)
 {
 	uint8_t *fieldp = entry->template;
 	uint32_t field_len;
-	int total_len = entry->template_len, digest_len, len, sig_len;
-	uint8_t *digest, *sig = NULL;
+	int total_len = entry->template_len, digest_len, len, sig_len, fbuf_len;
+	uint8_t *digest, *sig = NULL, *fbuf = NULL;
 	char *algo, *path;
 	int found;
 	int err;
@@ -1488,6 +1488,18 @@ void ima_ng_show(struct template_entry *entry)
 			fieldp += field_len;
 			total_len -= field_len;
 		}
+	} else if (!strcmp(entry->name, "ima-buf")) {
+		field_len = *(uint32_t *)fieldp;
+		fieldp += sizeof(field_len);
+		total_len -= sizeof(field_len);
+		if (field_len) {
+			fbuf = fieldp;
+			fbuf_len = field_len;
+
+			/* move to next field */
+			fieldp += field_len;
+			total_len -= field_len;
+		}
 	}
 
 	/* ascii_runtime_measurements */
@@ -1497,6 +1509,10 @@ void ima_ng_show(struct template_entry *entry)
 		log_info(" %s %s", entry->name, algo);
 		log_dump_n(digest, digest_len);
 		log_info(" %s", path);
+		if (fbuf) {
+			log_info(" ");
+			log_dump_n(fbuf, fbuf_len);
+		}
 	}
 
 	if (sig) {
