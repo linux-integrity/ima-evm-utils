@@ -753,10 +753,10 @@ void calc_keyid_v2(uint32_t *keyid, char *str, RSA *key)
 	free(pkey);
 }
 
-static RSA *read_priv_key(const char *keyfile, const char *keypass)
+static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
 {
 	FILE *fp;
-	RSA *key;
+	EVP_PKEY *pkey;
 
 	fp = fopen(keyfile, "r");
 	if (!fp) {
@@ -764,15 +764,32 @@ static RSA *read_priv_key(const char *keyfile, const char *keypass)
 		return NULL;
 	}
 	ERR_load_crypto_strings();
-	key = PEM_read_RSAPrivateKey(fp, NULL, NULL, (void *)keypass);
-	if (!key) {
+	pkey = PEM_read_PrivateKey(fp, NULL, NULL, (void *)keypass);
+	if (!pkey) {
 		char str[256];
 
 		ERR_error_string(ERR_get_error(), str);
-		log_err("PEM_read_RSAPrivateKey() failed: %s\n", str);
+		log_err("PEM_read_PrivateKey() failed: %s\n", str);
 	}
 
 	fclose(fp);
+	return pkey;
+}
+
+static RSA *read_priv_key(const char *keyfile, const char *keypass)
+{
+	EVP_PKEY *pkey;
+	RSA *key;
+
+	pkey = read_priv_pkey(keyfile, keypass);
+	if (!pkey)
+		return NULL;
+	key = EVP_PKEY_get1_RSA(pkey);
+	EVP_PKEY_free(pkey);
+	if (!key) {
+		log_err("read_priv_key: unsupported key type\n");
+		return NULL;
+	}
 	return key;
 }
 
