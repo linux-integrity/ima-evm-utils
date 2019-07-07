@@ -421,11 +421,12 @@ static EVP_PKEY *find_keyid(uint32_t keyid)
 void init_public_keys(const char *keyfiles)
 {
 	struct public_key_entry *entry;
-	char *tmp_keyfiles;
+	char *tmp_keyfiles, *keyfiles_free;
 	char *keyfile;
 	int i = 1;
 
 	tmp_keyfiles = strdup(keyfiles);
+	keyfiles_free = tmp_keyfiles;
 
 	while ((keyfile = strsep(&tmp_keyfiles, ", \t")) != NULL) {
 		if (!keyfile)
@@ -452,6 +453,7 @@ void init_public_keys(const char *keyfiles)
 		entry->next = public_keys;
 		public_keys = entry;
 	}
+	free(keyfiles_free);
 }
 
 /*
