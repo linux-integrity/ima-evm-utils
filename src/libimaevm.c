@@ -475,10 +475,12 @@ int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	}
 
 	if (public_keys) {
-		pkey = find_keyid(hdr->keyid);
+		uint32_t keyid = hdr->keyid;
+
+		pkey = find_keyid(keyid);
 		if (!pkey) {
 			log_err("%s: unknown keyid: %x\n", file,
-				__be32_to_cpup(&hdr->keyid));
+				__be32_to_cpup(&keyid));
 			return -1;
 		}
 	} else {
@@ -869,6 +871,7 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 	const EVP_MD *md;
 	size_t sigsize;
 	const char *st;
+	uint32_t keyid;
 
 	if (!hash) {
 		log_err("sign_hash_v2: hash is null\n");
@@ -902,7 +905,8 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 
 	hdr->hash_algo = get_hash_algo(algo);
 
-	calc_keyid_v2(&hdr->keyid, name, pkey);
+	calc_keyid_v2(&keyid, name, pkey);
+	hdr->keyid = keyid;
 
 	st = "EVP_PKEY_CTX_new";
 	if (!(ctx = EVP_PKEY_CTX_new(pkey, NULL)))
