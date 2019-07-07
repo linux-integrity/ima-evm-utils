@@ -850,9 +850,11 @@ static int cmd_verify_ima(struct command *cmd)
 		return -1;
 	}
 
-	err = verify_ima(file);
-	if (!err && params.verbose >= LOG_INFO)
-		log_info("%s: verification is OK\n", file);
+	do {
+		err = verify_ima(file);
+		if (!err && params.verbose >= LOG_INFO)
+			log_info("%s: verification is OK\n", file);
+	} while ((file = g_argv[optind++]));
 	return err;
 }
 
