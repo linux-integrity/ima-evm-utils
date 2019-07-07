@@ -840,6 +840,9 @@ static int cmd_verify_ima(struct command *cmd)
 	char *file = g_argv[optind++];
 	int err;
 
+	if (params.keyfile)
+		init_public_keys(params.keyfile);
+
 	errno = 0;
 	if (!file) {
 		log_err("Parameters missing\n");
