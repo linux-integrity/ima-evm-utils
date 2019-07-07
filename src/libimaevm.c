@@ -252,19 +252,21 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 	err = lstat(file, &st);
 	if (err < 0) {
 		log_err("Failed to stat: %s\n", file);
-		return err;
+		goto err;
 	}
 
 	md = EVP_get_digestbyname(params.hash_algo);
 	if (!md) {
 		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
-		return 1;
+		err = 1;
+		goto err;
 	}
 
 	err = EVP_DigestInit(pctx, md);
 	if (!err) {
 		log_err("EVP_DigestInit() failed\n");
-		return 1;
+		err = 1;
+		goto err;
 	}
 
 	switch (st.st_mode & S_IFMT) {
@@ -283,19 +285,25 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 		break;
 	default:
 		log_errno("Unsupported file type");
-		return -1;
+		err = -1;
+		goto err;
 	}
 
 	if (err)
-		return err;
+		goto err;
 
 	err = EVP_DigestFinal(pctx, hash, &mdlen);
 	if (!err) {
 		log_err("EVP_DigestFinal() failed\n");
-		return 1;
+		err = 1;
+		goto err;
 	}
-
-	return mdlen;
+	err = mdlen;
+err:
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+	EVP_MD_CTX_free(pctx);
+#endif
+	return err;
 }
 
 EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
