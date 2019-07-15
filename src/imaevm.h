@@ -211,7 +211,6 @@ extern struct libevm_params params;
 
 void do_dump(FILE *fp, const void *ptr, int len, bool cr);
 void dump(const void *ptr, int len);
-int get_filesize(const char *filename);
 int ima_calc_hash(const char *file, uint8_t *hash);
 int get_hash_algo(const char *algo);
 RSA *read_pub_key(const char *keyfile, int x509);

@@ -116,14 +116,6 @@ const char *get_hash_algo_by_id(int algo)
 	return "unknown";
 }
 
-int get_filesize(const char *filename)
-{
-	struct stat stats;
-	/*  Need to know the file length */
-	stat(filename, &stats);
-	return (int)stats.st_size;
-}
-
 static inline off_t get_fdsize(int fd)
 {
 	struct stat stats;

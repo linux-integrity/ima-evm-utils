@@ -175,9 +175,10 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 static unsigned char *file2bin(const char *file, const char *ext, int *size)
 {
 	FILE *fp;
-	int len;
+	size_t len;
 	unsigned char *data;
 	char name[strlen(file) + (ext ? strlen(ext) : 0) + 2];
+	struct stat stats;
 
 	if (ext)
 		sprintf(name, "%s.%s", file, ext);
@@ -186,18 +187,33 @@ static unsigned char *file2bin(const char *file, const char *ext, int *size)
 
 	log_info("Reading to %s\n", name);
 
-	len = get_filesize(name);
 	fp = fopen(name, "r");
 	if (!fp) {
 		log_err("Failed to open: %s\n", name);
 		return NULL;
 	}
+	if (fstat(fileno(fp), &stats) == -1) {
+		log_err("Failed to fstat: %s (%s)\n", name, strerror(errno));
+		fclose(fp);
+		return NULL;
+	}
+	len = stats.st_size;
+
 	data = malloc(len);
-	if (!fread(data, len, 1, fp))
-		len = 0;
+	if (!data) {
+		log_err("Failed to malloc %zu bytes: %s\n", len, name);
+		fclose(fp);
+		return NULL;
+	}
+	if (fread(data, len, 1, fp) != len) {
+		log_err("Failed to fread %zu bytes: %s\n", len, name);
+		fclose(fp);
+		free(data);
+		return NULL;
+	}
 	fclose(fp);
 
-	*size = len;
+	*size = (int)len;
 	return data;
 }
 
