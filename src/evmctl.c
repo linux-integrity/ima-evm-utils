@@ -401,16 +401,31 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
 		if (!strcmp(*xattrname, XATTR_NAME_SELINUX) && selinux_str) {
-			strcpy(xattr_value, selinux_str);
 			err = strlen(selinux_str) + 1;
+			if (err > sizeof(xattr_value)) {
+				log_err("selinux[%u] value is too long to fit into xattr[%zu]\n",
+					err, sizeof(xattr_value));
+				return -1;
+			}
+			strcpy(xattr_value, selinux_str);
 		} else if (!strcmp(*xattrname, XATTR_NAME_IMA) && ima_str) {
-			hex2bin(xattr_value, ima_str, strlen(ima_str) / 2);
 			err = strlen(ima_str) / 2;
+			if (err > sizeof(xattr_value)) {
+				log_err("ima[%u] value is too long to fit into xattr[%zu]\n",
+					err, sizeof(xattr_value));
+				return -1;
+			}
+			hex2bin(xattr_value, ima_str, err);
 		} else if (!strcmp(*xattrname, XATTR_NAME_CAPS) && (hmac_flags & HMAC_FLAG_CAPS_SET)) {
 			if (!caps_str)
 				continue;
-			strcpy(xattr_value, caps_str);
 			err = strlen(caps_str);
+			if (err >= sizeof(xattr_value)) {
+				log_err("caps[%u] value is too long to fit into xattr[%zu]\n",
+					err + 1, sizeof(xattr_value));
+				return -1;
+			}
+			strcpy(xattr_value, caps_str);
 		} else {
 			err = lgetxattr(file, *xattrname, xattr_value, sizeof(xattr_value));
 			if (err < 0) {
