@@ -821,7 +821,15 @@ static int verify_ima(const char *file)
 	if (sigfile) {
 		void *tmp = file2bin(file, "sig", &len);
 
-		assert(len <= sizeof(sig));
+		if (!tmp) {
+			log_err("Failed reading: %s\n", file);
+			return -1;
+		}
+		if (len > sizeof(sig)) {
+			log_err("Signature file is too big: %s\n", file);
+			free(tmp);
+			return -1;
+		}
 		memcpy(sig, tmp, len);
 		free(tmp);
 	} else {
