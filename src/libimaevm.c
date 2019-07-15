@@ -116,20 +116,13 @@ const char *get_hash_algo_by_id(int algo)
 	return "unknown";
 }
 
-static inline off_t get_fdsize(int fd)
-{
-	struct stat stats;
-	/*  Need to know the file length */
-	fstat(fd, &stats);
-	return stats.st_size;
-}
-
 static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 {
 	uint8_t *data;
 	int err = -1, bs = DATA_SIZE;
 	off_t size, len;
 	FILE *fp;
+	struct stat stats;
 
 	fp = fopen(file, "r");
 	if (!fp) {
@@ -143,7 +136,12 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 		goto out;
 	}
 
-	for (size = get_fdsize(fileno(fp)); size; size -= len) {
+	if (fstat(fileno(fp), &stats) == -1) {
+		log_err("Failed to fstat: %s (%s)\n", file, strerror(errno));
+		goto out;
+	}
+
+	for (size = stats.st_size; size; size -= len) {
 		len = MIN(size, bs);
 		if (!fread(data, len, 1, fp)) {
 			if (ferror(fp)) {
