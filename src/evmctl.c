@@ -838,6 +838,11 @@ static int cmd_verify_evm(struct command *cmd)
 		return -1;
 	}
 
+	if (params.keyfile)	/* Support multiple public keys */
+		init_public_keys(params.keyfile);
+	else			/* assume read pubkey from x509 cert */
+		init_public_keys("/etc/keys/x509_evm.der");
+
 	err = verify_evm(file);
 	if (!err && params.verbose >= LOG_INFO)
 		log_info("%s: verification is OK\n", file);
@@ -879,8 +884,10 @@ static int cmd_verify_ima(struct command *cmd)
 	char *file = g_argv[optind++];
 	int err;
 
-	if (params.keyfile)
+	if (params.keyfile)	/* Support multiple public keys */
 		init_public_keys(params.keyfile);
+	else			/* assume read pubkey from x509 cert */
+		init_public_keys("/etc/keys/x509_evm.der");
 
 	errno = 0;
 	if (!file) {
@@ -1602,9 +1609,10 @@ static int ima_measurement(const char *file)
 		return -1;
 	}
 
-	/* Support multiple public keys */
-	if (params.keyfile)
+	if (params.keyfile)	/* Support multiple public keys */
 		init_public_keys(params.keyfile);
+	else			/* assume read pubkey from x509 cert */
+		init_public_keys("/etc/keys/x509_evm.der");
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
 		ima_extend_pcr(pcr[entry.header.pcr], entry.header.digest,

@@ -302,6 +302,9 @@ EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
 	X509 *crt = NULL;
 	EVP_PKEY *pkey = NULL;
 
+	if (!keyfile)
+		return NULL;
+
 	fp = fopen(keyfile, "r");
 	if (!fp) {
 		log_err("Failed to open keyfile: %s\n", keyfile);
@@ -569,26 +572,20 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 int verify_hash(const char *file, const unsigned char *hash, int size, unsigned char *sig,
 		int siglen)
 {
-	const char *key;
-	int x509;
+	const char *key = NULL;
 	verify_hash_fn_t verify_hash;
 
 	/* Get signature type from sig header */
 	if (sig[0] == DIGSIG_VERSION_1) {
 		verify_hash = verify_hash_v1;
+
 		/* Read pubkey from RSA key */
-		x509 = 0;
+		if (!params.keyfile)
+			key = "/etc/keys/pubkey_evm.pem";
 	} else if (sig[0] == DIGSIG_VERSION_2) {
 		verify_hash = verify_hash_v2;
-		/* Read pubkey from x509 cert */
-		x509 = 1;
 	} else
 		return -1;
-
-	/* Determine what key to use for verification*/
-	key = params.keyfile ? : x509 ?
-			"/etc/keys/x509_evm.der" :
-			"/etc/keys/pubkey_evm.pem";
 
 	return verify_hash(file, hash, size, sig, siglen, key);
 }
