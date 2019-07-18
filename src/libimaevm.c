@@ -752,7 +752,6 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
 		log_err("Failed to open keyfile: %s\n", keyfile);
 		return NULL;
 	}
-	ERR_load_crypto_strings();
 	pkey = PEM_read_PrivateKey(fp, NULL, NULL, (void *)keypass);
 	if (!pkey) {
 		log_err("Failed to PEM_read_PrivateKey key file: %s\n",
