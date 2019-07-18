@@ -572,22 +572,18 @@ static int get_hash_algo_from_sig(unsigned char *sig)
 int verify_hash(const char *file, const unsigned char *hash, int size, unsigned char *sig,
 		int siglen)
 {
-	const char *key = NULL;
-	verify_hash_fn_t verify_hash;
-
 	/* Get signature type from sig header */
 	if (sig[0] == DIGSIG_VERSION_1) {
-		verify_hash = verify_hash_v1;
+		const char *key = NULL;
 
 		/* Read pubkey from RSA key */
 		if (!params.keyfile)
 			key = "/etc/keys/pubkey_evm.pem";
+		return verify_hash_v1(file, hash, size, sig, siglen, key);
 	} else if (sig[0] == DIGSIG_VERSION_2) {
-		verify_hash = verify_hash_v2;
+		return verify_hash_v2(file, hash, size, sig, siglen, NULL);
 	} else
 		return -1;
-
-	return verify_hash(file, hash, size, sig, siglen, key);
 }
 
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen,

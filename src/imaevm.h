@@ -188,9 +188,6 @@ struct signature_v2_hdr {
 	uint8_t sig[0];		/* signature payload */
 } __packed;
 
-
-typedef int (*verify_hash_fn_t)(const char *file, const unsigned char *hash, int size, unsigned char *sig, int siglen, const char *keyfile);
-
 struct libevm_params {
 	int verbose;
 	int x509;
