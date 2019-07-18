@@ -424,13 +424,29 @@ static struct public_key_entry *public_keys = NULL;
 
 static EVP_PKEY *find_keyid(uint32_t keyid)
 {
-	struct public_key_entry *entry;
+	struct public_key_entry *entry, *tail = public_keys;
+	int i = 1;
 
 	for (entry = public_keys; entry != NULL; entry = entry->next) {
 		if (entry->keyid == keyid)
 			return entry->key;
+		i++;
+		tail = entry;
 	}
-	return NULL;
+
+	/* add unknown keys to list */
+	entry = calloc(1, sizeof(struct public_key_entry));
+	if (!entry) {
+		perror("calloc");
+		return 0;
+	}
+	entry->keyid = keyid;
+	if (tail)
+		tail->next = entry;
+	else
+		public_keys = entry;
+	log_err("key %d: %x (unknown keyid)\n", i, __be32_to_cpup(&keyid));
+	return 0;
 }
 
 void init_public_keys(const char *keyfiles)
@@ -493,8 +509,8 @@ static int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	if (!pkey) {
 		uint32_t keyid = hdr->keyid;
 
-		log_err("%s: unknown keyid: %x\n", file,
-			__be32_to_cpup(&keyid));
+		log_info("%s: verification failed: unknown keyid %x\n",
+			 file, __be32_to_cpup(&keyid));
 		return -1;
 	}
 
