@@ -351,8 +351,8 @@ RSA *read_pub_key(const char *keyfile, int x509)
 	return key;
 }
 
-int verify_hash_v1(const char *file, const unsigned char *hash, int size,
-		   unsigned char *sig, int siglen, const char *keyfile)
+static int verify_hash_v1(const char *file, const unsigned char *hash, int size,
+			  unsigned char *sig, int siglen, const char *keyfile)
 {
 	int err, len;
 	SHA_CTX ctx;
@@ -452,8 +452,8 @@ void init_public_keys(const char *keyfiles)
 /*
  * Return: 0 verification good, 1 verification bad, -1 error.
  */
-int verify_hash_v2(const char *file, const unsigned char *hash, int size,
-		   unsigned char *sig, int siglen, const char *keyfile)
+static int verify_hash_v2(const char *file, const unsigned char *hash, int size,
+			  unsigned char *sig, int siglen)
 {
 	int ret = -1;
 	EVP_PKEY *pkey, *pkey_free = NULL;
@@ -467,20 +467,13 @@ int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 		log_dump(hash, size);
 	}
 
-	if (public_keys) {
+	pkey = find_keyid(hdr->keyid);
+	if (!pkey) {
 		uint32_t keyid = hdr->keyid;
 
-		pkey = find_keyid(keyid);
-		if (!pkey) {
-			log_err("%s: unknown keyid: %x\n", file,
-				__be32_to_cpup(&keyid));
-			return -1;
-		}
-	} else {
-		pkey = read_pub_pkey(keyfile, 1);
-		if (!pkey)
-			return -1;
-		pkey_free = pkey;
+		log_err("%s: unknown keyid: %x\n", file,
+			__be32_to_cpup(&keyid));
+		return -1;
 	}
 
 	st = "EVP_PKEY_CTX_new";
@@ -581,7 +574,7 @@ int verify_hash(const char *file, const unsigned char *hash, int size, unsigned 
 			key = "/etc/keys/pubkey_evm.pem";
 		return verify_hash_v1(file, hash, size, sig, siglen, key);
 	} else if (sig[0] == DIGSIG_VERSION_2) {
-		return verify_hash_v2(file, hash, size, sig, siglen, NULL);
+		return verify_hash_v2(file, hash, size, sig, siglen);
 	} else
 		return -1;
 }
