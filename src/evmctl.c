@@ -1383,10 +1383,8 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 	if (!fp)
 		fp = fopen(misc_pcrs, "r");
 
-	if (!fp) {
-		log_err("Unable to open %s or %s\n", pcrs, misc_pcrs);
+	if (!fp)
 		return -1;
-	}
 
 	for (;;) {
 		p = fgets(buf, sizeof(buf), fp);
@@ -1401,6 +1399,43 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 	fclose(fp);
 	return result;
 }
+
+#ifdef HAVE_TSSPCRREAD
+static int tpm2_pcr_read(int idx, uint8_t *hwpcr, int len, char **errmsg)
+{
+	FILE *fp;
+	char pcr[100];	/* may contain an error */
+	char cmd[50];
+	int ret;
+
+	sprintf(cmd, "tsspcrread -halg sha1 -ha %d -ns 2> /dev/null", idx);
+	fp = popen(cmd, "r");
+	if (!fp) {
+		ret = asprintf(errmsg, "popen failed: %s", strerror(errno));
+		if (ret == -1)	/* the contents of errmsg is undefined */
+			*errmsg = NULL;
+		return -1;
+	}
+
+	if (fgets(pcr, sizeof(pcr), fp) == NULL) {
+		ret = asprintf(errmsg, "tsspcrread failed: %s",
+			       strerror(errno));
+		if (ret == -1)	/* the contents of errmsg is undefined */
+			*errmsg = NULL;
+		ret = pclose(fp);
+		return -1;
+	}
+
+	/* get the popen "cmd" return code */
+	ret = pclose(fp);
+	if (!ret)
+		hex2bin(hwpcr, pcr, SHA_DIGEST_LENGTH);
+	else
+		*errmsg = strndup(pcr, strlen(pcr) - 1); /* remove newline */
+
+	return ret;
+}
+#endif
 
 #define TCG_EVENT_NAME_LEN_MAX	255
 
@@ -1658,8 +1693,22 @@ static int ima_measurement(const char *file)
 		log_info("PCRAgg %.2d: ", i);
 		log_dump(pcr[i], SHA_DIGEST_LENGTH);
 
-		if (tpm_pcr_read(i, hwpcr, sizeof(hwpcr)))
+		if (tpm_pcr_read(i, hwpcr, sizeof(hwpcr))) {
+#ifdef HAVE_TSSPCRREAD
+			char *errmsg = NULL;
+
+			err = tpm2_pcr_read(i, hwpcr, sizeof(hwpcr), &errmsg);
+			if (err) {
+				log_info("Failed to read PCRs: (%s)\n", errmsg);
+				free(errmsg);
+				exit(1);
+			}
+#else
+			log_info("Failed to read TPM 1.2 PCRs.\n");
 			exit(1);
+#endif
+		}
+
 		log_info("HW PCR-%d: ", i);
 		log_dump(hwpcr, sizeof(hwpcr));
 
