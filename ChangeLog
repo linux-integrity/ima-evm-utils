@@ -1,3 +1,38 @@
+
+2019-07-24  Mimi Zohar <zohar@linux.ibm.com>
+
+	version 1.2 new features:
+	* Generate EVM signatures based on the specified hash algorithm
+	* include "security.apparmor" in EVM signature
+	* Add support for writing & verifying "user.xxxx" xattrs for testing
+	* Support Strebog/Gost hash functions
+	* Add OpenSSL engine support
+	* Use of EVP_PKEY OpenSSL API to generate/verify v2 signatures
+	* Support verifying multiple signatures at once
+	* Support new template "buf" field and warn about other unknown fields
+	* Improve OpenSSL error reporting
+	* Support reading TPM 2.0 PCRs using tsspcrread
+
+	Bug fixes and code cleanup:
+	* Update manpage stylesheet detection
+	* Fix xattr.h include file
+	* On error when reading TPM PCRs, don't log gargabe
+	* Properly return keyid string to calc_keyid_v1/v2 callers, caused by
+	  limiting keyid output to verbose mode
+	* Fix hash buffer overflow caused by EVM support for larger hashes,
+	  defined MAX_DIGEST_SIZE and MAX_SIGNATURE_SIZE, and added "asserts".
+	* Linked with libcrypto instead of OpenSSL
+	* Updated Autotools, replacing INCLUDES with AM_CPPFLAGS
+	* Include new "hash-info.gen" in tar
+	* Log the hash algorithm, not just the hash value
+	* Fixed memory leaks in: EV_MD_CTX, init_public_keys
+	* Fixed other warnings/bugs discovered by clang, coverity
+	* Remove indirect calls in verify_hash() to improve code readability
+	* Don't fallback to using sha1
+	* Namespace some too generic object names
+	* Make functions/arrays static if possible
+
+
 2018-01-28  Mimi Zohar <zohar@us.ibm.com>
 
 	version 1.1

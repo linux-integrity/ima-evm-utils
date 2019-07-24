@@ -4,7 +4,7 @@ libimaevm_la_SOURCES = libimaevm.c
 libimaevm_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 # current[:revision[:age]]
 # result: [current-age].age.revision
-libimaevm_la_LDFLAGS = -version-info 0:0:0
+libimaevm_la_LDFLAGS = -version-info 1:0:0
 libimaevm_la_LIBADD =  $(LIBCRYPTO_LIBS)
 
 include_HEADERS = imaevm.h
