@@ -62,7 +62,7 @@
 #include "hash_info.h"
 
 /* Names that are primary for OpenSSL. */
-const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
+static const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_MD4]		= "md4",
 	[PKEY_HASH_MD5]		= "md5",
 	[PKEY_HASH_SHA1]	= "sha1",
@@ -76,7 +76,7 @@ const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 };
 
 /* Names that are primary for the kernel. */
-const char *const pkey_hash_algo_kern[PKEY_HASH__LAST] = {
+static const char *const pkey_hash_algo_kern[PKEY_HASH__LAST] = {
 	[PKEY_HASH_STREEBOG_256] = "streebog256",
 	[PKEY_HASH_STREEBOG_512] = "streebog512",
 };
@@ -105,7 +105,7 @@ void imaevm_hexdump(const void *ptr, int len)
 	imaevm_do_hexdump(stdout, ptr, len, true);
 }
 
-const char *get_hash_algo_by_id(int algo)
+static const char *get_hash_algo_by_id(int algo)
 {
 	if (algo < PKEY_HASH__LAST)
 		return pkey_hash_algo[algo];
@@ -792,7 +792,8 @@ static int get_hash_algo_v1(const char *algo)
 	return -1;
 }
 
-int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+static int sign_hash_v1(const char *hashalgo, const unsigned char *hash,
+			int size, const char *keyfile, unsigned char *sig)
 {
 	int len = -1, hashalgo_idx;
 	SHA_CTX ctx;
@@ -877,7 +878,8 @@ out:
  * @sig is assumed to be of (MAX_SIGNATURE_SIZE - 1) size
  * Return: -1 signing error, >0 length of signature
  */
-int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const char *keyfile, unsigned char *sig)
+static int sign_hash_v2(const char *algo, const unsigned char *hash,
+			int size, const char *keyfile, unsigned char *sig)
 {
 	struct signature_v2_hdr *hdr;
 	int len = -1;
