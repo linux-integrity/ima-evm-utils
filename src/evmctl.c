@@ -584,6 +584,10 @@ static int hash_ima(const char *file)
 	int len, err, offset;
 	int algo = get_hash_algo(params.hash_algo);
 
+	if (algo < 0) {
+		log_err("Unknown hash algo: %s\n", params.hash_algo);
+		return -1;
+	}
 	if (algo > PKEY_HASH_SHA1) {
 		hash[0] = IMA_XATTR_DIGEST_NG;
 		hash[1] = algo;

@@ -571,8 +571,7 @@ int get_hash_algo(const char *algo)
 		    !strcmp(algo, hash_algo_name[i]))
 			return i;
 
-	log_info("digest %s not found, fall back to sha1\n", algo);
-	return PKEY_HASH_SHA1;
+	return -1;
 }
 
 static int get_hash_algo_from_sig(unsigned char *sig)
@@ -920,6 +919,10 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 	hdr->version = (uint8_t) DIGSIG_VERSION_2;
 
 	hdr->hash_algo = get_hash_algo(algo);
+	if (hdr->hash_algo == -1) {
+		log_err("sign_hash_v2: hash algo is unknown: %s\n", algo);
+		return -1;
+	}
 
 	calc_keyid_v2(&keyid, name, pkey);
 	hdr->keyid = keyid;
