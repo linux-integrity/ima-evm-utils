@@ -605,7 +605,7 @@ static int hash_ima(const char *file)
 	len += offset;
 
 	if (params.verbose >= LOG_INFO)
-		log_info("hash: ");
+		log_info("hash(%s): ", params.hash_algo);
 
 	if (sigdump || params.verbose >= LOG_INFO)
 		dump(hash, len);

@@ -822,7 +822,7 @@ int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, cons
 		return -1;
 	}
 
-	log_info("hash: ");
+	log_info("hash(%s): ", hashalgo);
 	log_dump(hash, size);
 
 	key = read_priv_key(keyfile, params.keypass);
