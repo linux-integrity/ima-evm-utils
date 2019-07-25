@@ -81,7 +81,7 @@ const char *const pkey_hash_algo_kern[PKEY_HASH__LAST] = {
 	[PKEY_HASH_STREEBOG_512] = "streebog512",
 };
 
-struct libevm_params params = {
+struct libimaevm_params imaevm_params = {
 	.verbose = LOG_INFO - 1,
 	.x509 = 1,
 	.hash_algo = "sha1",
@@ -89,7 +89,7 @@ struct libevm_params params = {
 
 static void __attribute__ ((constructor)) libinit(void);
 
-void do_dump(FILE *fp, const void *ptr, int len, bool cr)
+void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool cr)
 {
 	int i;
 	uint8_t *data = (uint8_t *) ptr;
@@ -100,9 +100,9 @@ void do_dump(FILE *fp, const void *ptr, int len, bool cr)
 		fprintf(fp, "\n");
 }
 
-void dump(const void *ptr, int len)
+void imaevm_hexdump(const void *ptr, int len)
 {
-	do_dump(stdout, ptr, len, true);
+	imaevm_do_hexdump(stdout, ptr, len, true);
 }
 
 const char *get_hash_algo_by_id(int algo)
@@ -258,9 +258,10 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 		goto err;
 	}
 
-	md = EVP_get_digestbyname(params.hash_algo);
+	md = EVP_get_digestbyname(imaevm_params.hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
+		log_err("EVP_get_digestbyname(%s) failed\n",
+			imaevm_params.hash_algo);
 		err = 1;
 		goto err;
 	}
@@ -500,8 +501,8 @@ static int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	const EVP_MD *md;
 	const char *st;
 
-	if (params.verbose > LOG_INFO) {
-		log_info("hash(%s): ", params.hash_algo);
+	if (imaevm_params.verbose > LOG_INFO) {
+		log_info("hash(%s): ", imaevm_params.hash_algo);
 		log_dump(hash, size);
 	}
 
@@ -521,7 +522,7 @@ static int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	if (!EVP_PKEY_verify_init(ctx))
 		goto err;
 	st = "EVP_get_digestbyname";
-	if (!(md = EVP_get_digestbyname(params.hash_algo)))
+	if (!(md = EVP_get_digestbyname(imaevm_params.hash_algo)))
 		goto err;
 	st = "EVP_PKEY_CTX_set_signature_md";
 	if (!EVP_PKEY_CTX_set_signature_md(ctx, md))
@@ -550,7 +551,7 @@ err:
 	return ret;
 }
 
-int get_hash_algo(const char *algo)
+int imaevm_get_hash_algo(const char *algo)
 {
 	int i;
 
@@ -609,7 +610,7 @@ int verify_hash(const char *file, const unsigned char *hash, int size, unsigned 
 		const char *key = NULL;
 
 		/* Read pubkey from RSA key */
-		if (!params.keyfile)
+		if (!imaevm_params.keyfile)
 			key = "/etc/keys/pubkey_evm.pem";
 		return verify_hash_v1(file, hash, size, sig, siglen, key);
 	} else if (sig[0] == DIGSIG_VERSION_2) {
@@ -635,7 +636,7 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 		return -1;
 	}
 	/* Use hash algorithm as retrieved from signature */
-	params.hash_algo = get_hash_algo_by_id(sig_hash_algo);
+	imaevm_params.hash_algo = get_hash_algo_by_id(sig_hash_algo);
 
 	/*
 	 * Validate the signature based on the digest included in the
@@ -707,7 +708,7 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 	id = __be64_to_cpup((__be64 *) keyid);
 	sprintf(str, "%llX", (unsigned long long)id);
 
-	if (params.verbose > LOG_INFO)
+	if (imaevm_params.verbose > LOG_INFO)
 		log_info("keyid-v1: %s\n", str);
 }
 
@@ -735,7 +736,7 @@ void calc_keyid_v2(uint32_t *keyid, char *str, EVP_PKEY *pkey)
 	log_debug_dump(keyid, 4);
 	sprintf(str, "%x", __be32_to_cpup(keyid));
 
-	if (params.verbose > LOG_INFO)
+	if (imaevm_params.verbose > LOG_INFO)
 		log_info("keyid: %s\n", str);
 
 	X509_PUBKEY_free(pk);
@@ -825,7 +826,7 @@ int sign_hash_v1(const char *hashalgo, const unsigned char *hash, int size, cons
 	log_info("hash(%s): ", hashalgo);
 	log_dump(hash, size);
 
-	key = read_priv_key(keyfile, params.keypass);
+	key = read_priv_key(keyfile, imaevm_params.keypass);
 	if (!key)
 		return -1;
 
@@ -908,17 +909,17 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 		return -1;
 	}
 
-	log_info("hash(%s): ", params.hash_algo);
+	log_info("hash(%s): ", imaevm_params.hash_algo);
 	log_dump(hash, size);
 
-	pkey = read_priv_pkey(keyfile, params.keypass);
+	pkey = read_priv_pkey(keyfile, imaevm_params.keypass);
 	if (!pkey)
 		return -1;
 
 	hdr = (struct signature_v2_hdr *)sig;
 	hdr->version = (uint8_t) DIGSIG_VERSION_2;
 
-	hdr->hash_algo = get_hash_algo(algo);
+	hdr->hash_algo = imaevm_get_hash_algo(algo);
 	if (hdr->hash_algo == -1) {
 		log_err("sign_hash_v2: hash algo is unknown: %s\n", algo);
 		return -1;
@@ -934,7 +935,7 @@ int sign_hash_v2(const char *algo, const unsigned char *hash, int size, const ch
 	if (!EVP_PKEY_sign_init(ctx))
 		goto err;
 	st = "EVP_get_digestbyname";
-	if (!(md = EVP_get_digestbyname(params.hash_algo)))
+	if (!(md = EVP_get_digestbyname(imaevm_params.hash_algo)))
 		goto err;
 	st = "EVP_PKEY_CTX_set_signature_md";
 	if (!EVP_PKEY_CTX_set_signature_md(ctx, md))
@@ -965,10 +966,11 @@ err:
 int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, const char *keypass, unsigned char *sig)
 {
 	if (keypass)
-		params.keypass = keypass;
+		imaevm_params.keypass = keypass;
 
-	return params.x509 ? sign_hash_v2(hashalgo, hash, size, keyfile, sig) :
-			     sign_hash_v1(hashalgo, hash, size, keyfile, sig);
+	return imaevm_params.x509 ?
+		sign_hash_v2(hashalgo, hash, size, keyfile, sig) :
+		sign_hash_v1(hashalgo, hash, size, keyfile, sig);
 }
 
 static void libinit()

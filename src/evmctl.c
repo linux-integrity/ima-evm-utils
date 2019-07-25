@@ -403,9 +403,10 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		return -1;
 	}
 
-	md = EVP_get_digestbyname(params.hash_algo);
+	md = EVP_get_digestbyname(imaevm_params.hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
+		log_err("EVP_get_digestbyname(%s) failed\n",
+			imaevm_params.hash_algo);
 		return 1;
 	}
 
@@ -549,7 +550,7 @@ static int sign_evm(const char *file, const char *key)
 		return len;
 	assert(len <= sizeof(hash));
 
-	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
+	len = sign_hash(imaevm_params.hash_algo, hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 	assert(len < sizeof(sig));
@@ -564,8 +565,8 @@ static int sign_evm(const char *file, const char *key)
 	if (evm_immutable)
 		sig[1] = 3; /* immutable signature version */
 
-	if (sigdump || params.verbose >= LOG_INFO)
-		dump(sig, len);
+	if (sigdump || imaevm_params.verbose >= LOG_INFO)
+		imaevm_hexdump(sig, len);
 
 	if (xattr) {
 		err = lsetxattr(file, xattr_evm, sig, len, 0);
@@ -582,10 +583,10 @@ static int hash_ima(const char *file)
 {
 	unsigned char hash[MAX_DIGEST_SIZE + 2]; /* +2 byte xattr header */
 	int len, err, offset;
-	int algo = get_hash_algo(params.hash_algo);
+	int algo = imaevm_get_hash_algo(imaevm_params.hash_algo);
 
 	if (algo < 0) {
-		log_err("Unknown hash algo: %s\n", params.hash_algo);
+		log_err("Unknown hash algo: %s\n", imaevm_params.hash_algo);
 		return -1;
 	}
 	if (algo > PKEY_HASH_SHA1) {
@@ -604,11 +605,11 @@ static int hash_ima(const char *file)
 
 	len += offset;
 
-	if (params.verbose >= LOG_INFO)
-		log_info("hash(%s): ", params.hash_algo);
+	if (imaevm_params.verbose >= LOG_INFO)
+		log_info("hash(%s): ", imaevm_params.hash_algo);
 
-	if (sigdump || params.verbose >= LOG_INFO)
-		dump(hash, len);
+	if (sigdump || imaevm_params.verbose >= LOG_INFO)
+		imaevm_hexdump(hash, len);
 
 	if (xattr) {
 		err = lsetxattr(file, xattr_ima, hash, len, 0);
@@ -632,7 +633,7 @@ static int sign_ima(const char *file, const char *key)
 		return len;
 	assert(len <= sizeof(hash));
 
-	len = sign_hash(params.hash_algo, hash, len, key, NULL, sig + 1);
+	len = sign_hash(imaevm_params.hash_algo, hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 	assert(len < sizeof(sig));
@@ -641,8 +642,8 @@ static int sign_ima(const char *file, const char *key)
 	len++;
 	sig[0] = EVM_IMA_XATTR_DIGSIG;
 
-	if (sigdump || params.verbose >= LOG_INFO)
-		dump(sig, len);
+	if (sigdump || imaevm_params.verbose >= LOG_INFO)
+		imaevm_hexdump(sig, len);
 
 	if (sigfile)
 		bin2file(file, "sig", sig, len);
@@ -722,7 +723,7 @@ static int sign_ima_file(const char *file)
 {
 	const char *key;
 
-	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	return sign_ima(file, key);
 }
@@ -743,7 +744,7 @@ static int cmd_sign_hash(struct command *cmd)
 	unsigned char sig[MAX_SIGNATURE_SIZE] = "\x03";
 	int siglen;
 
-	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	/* support reading hash (eg. output of shasum) */
 	while ((len = getline(&line, &line_len, stdin)) > 0) {
@@ -757,7 +758,7 @@ static int cmd_sign_hash(struct command *cmd)
 
 		assert(hashlen / 2 <= sizeof(hash));
 		hex2bin(hash, line, hashlen / 2);
-		siglen = sign_hash(params.hash_algo, hash, hashlen/2,
+		siglen = sign_hash(imaevm_params.hash_algo, hash, hashlen / 2,
 				 key, NULL, sig + 1);
 		if (siglen <= 1)
 			return siglen;
@@ -783,7 +784,7 @@ static int sign_evm_path(const char *file)
 	const char *key;
 	int err;
 
-	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
 		err = sign_ima(file, key);
@@ -842,13 +843,13 @@ static int cmd_verify_evm(struct command *cmd)
 		return -1;
 	}
 
-	if (params.keyfile)	/* Support multiple public keys */
-		init_public_keys(params.keyfile);
-	else			/* assume read pubkey from x509 cert */
+	if (imaevm_params.keyfile)	/* Support multiple public keys */
+		init_public_keys(imaevm_params.keyfile);
+	else				/* assume read pubkey from x509 cert */
 		init_public_keys("/etc/keys/x509_evm.der");
 
 	err = verify_evm(file);
-	if (!err && params.verbose >= LOG_INFO)
+	if (!err && imaevm_params.verbose >= LOG_INFO)
 		log_info("%s: verification is OK\n", file);
 	return err;
 }
@@ -888,9 +889,9 @@ static int cmd_verify_ima(struct command *cmd)
 	char *file = g_argv[optind++];
 	int err;
 
-	if (params.keyfile)	/* Support multiple public keys */
-		init_public_keys(params.keyfile);
-	else			/* assume read pubkey from x509 cert */
+	if (imaevm_params.keyfile)	/* Support multiple public keys */
+		init_public_keys(imaevm_params.keyfile);
+	else				/* assume read pubkey from x509 cert */
 		init_public_keys("/etc/keys/x509_evm.der");
 
 	errno = 0;
@@ -902,7 +903,7 @@ static int cmd_verify_ima(struct command *cmd)
 
 	do {
 		err = verify_ima(file);
-		if (!err && params.verbose >= LOG_INFO)
+		if (!err && imaevm_params.verbose >= LOG_INFO)
 			log_info("%s: verification is OK\n", file);
 	} while ((file = g_argv[optind++]));
 	return err;
@@ -917,15 +918,15 @@ static int cmd_convert(struct command *cmd)
 	uint8_t keyid[8];
 	RSA *key;
 
-	params.x509 = 0;
+	imaevm_params.x509 = 0;
 
 	inkey = g_argv[optind++];
 	if (!inkey) {
-		inkey = params.x509 ? "/etc/keys/x509_evm.der" :
-				      "/etc/keys/pubkey_evm.pem";
+		inkey = imaevm_params.x509 ? "/etc/keys/x509_evm.der" :
+					     "/etc/keys/pubkey_evm.pem";
 	}
 
-	key = read_pub_key(inkey, params.x509);
+	key = read_pub_key(inkey, imaevm_params.x509);
 	if (!key)
 		return 1;
 
@@ -949,8 +950,8 @@ static int cmd_import(struct command *cmd)
 
 	inkey = g_argv[optind++];
 	if (!inkey) {
-		inkey = params.x509 ? "/etc/keys/x509_evm.der" :
-				      "/etc/keys/pubkey_evm.pem";
+		inkey = imaevm_params.x509 ? "/etc/keys/x509_evm.der" :
+					     "/etc/keys/pubkey_evm.pem";
 	} else
 		ring = g_argv[optind++];
 
@@ -979,8 +980,8 @@ static int cmd_import(struct command *cmd)
 		}
 	}
 
-	if (params.x509) {
-		EVP_PKEY *pkey = read_pub_pkey(inkey, params.x509);
+	if (imaevm_params.x509) {
+		EVP_PKEY *pkey = read_pub_pkey(inkey, imaevm_params.x509);
 
 		if (!pkey)
 			return 1;
@@ -992,7 +993,7 @@ static int cmd_import(struct command *cmd)
 		calc_keyid_v2((uint32_t *)keyid, name, pkey);
 		EVP_PKEY_free(pkey);
 	} else {
-		RSA *key = read_pub_key(inkey, params.x509);
+		RSA *key = read_pub_key(inkey, imaevm_params.x509);
 
 		if (!key)
 			return 1;
@@ -1003,7 +1004,8 @@ static int cmd_import(struct command *cmd)
 
 	log_info("Importing public key %s from file %s into keyring %d\n", name, inkey, id);
 
-	id = add_key(params.x509 ? "asymmetric" : "user", params.x509 ? NULL : name, pub, len, id);
+	id = add_key(imaevm_params.x509 ? "asymmetric" : "user",
+		     imaevm_params.x509 ? NULL : name, pub, len, id);
 	if (id < 0) {
 		log_err("add_key failed\n");
 		err = id;
@@ -1011,7 +1013,7 @@ static int cmd_import(struct command *cmd)
 		log_info("keyid: %d\n", id);
 		printf("%d\n", id);
 	}
-	if (params.x509)
+	if (imaevm_params.x509)
 		free(pub);
 	return err;
 }
@@ -1123,9 +1125,10 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		goto out;
 	}
 
-	md = EVP_get_digestbyname(params.hash_algo);
+	md = EVP_get_digestbyname(imaevm_params.hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname(%s) failed\n", params.hash_algo);
+		log_err("EVP_get_digestbyname(%s) failed\n",
+			imaevm_params.hash_algo);
 		goto out;
 	}
 
@@ -1247,7 +1250,7 @@ static int cmd_hmac_evm(struct command *cmd)
 		return -1;
 	}
 
-	key = params.keyfile ? : "/etc/keys/privkey_evm.pem";
+	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
 		err = sign_ima(file, key);
@@ -1588,7 +1591,7 @@ void ima_ng_show(struct template_entry *entry)
 	}
 
 	/* ascii_runtime_measurements */
-	if (params.verbose > LOG_INFO) {
+	if (imaevm_params.verbose > LOG_INFO) {
 		log_info("%d ", entry->header.pcr);
 		log_dump_n(entry->header.digest, sizeof(entry->header.digest));
 		log_info(" %s %s", entry->name, algo);
@@ -1601,7 +1604,7 @@ void ima_ng_show(struct template_entry *entry)
 	}
 
 	if (sig) {
-		if (params.verbose > LOG_INFO) {
+		if (imaevm_params.verbose > LOG_INFO) {
 			log_info(" ");
 			log_dump(sig, sig_len);
 		}
@@ -1610,10 +1613,10 @@ void ima_ng_show(struct template_entry *entry)
 						   digest, digest_len);
 		else
 			err = ima_verify_signature(path, sig, sig_len, NULL, 0);
-		if (!err && params.verbose > LOG_INFO)
+		if (!err && imaevm_params.verbose > LOG_INFO)
 			log_info("%s: verification is OK\n", path);
 	} else {
-		if (params.verbose > LOG_INFO)
+		if (imaevm_params.verbose > LOG_INFO)
 			log_info("\n");
 	}
 
@@ -1648,9 +1651,9 @@ static int ima_measurement(const char *file)
 		return -1;
 	}
 
-	if (params.keyfile)	/* Support multiple public keys */
-		init_public_keys(params.keyfile);
-	else			/* assume read pubkey from x509 cert */
+	if (imaevm_params.keyfile)	/* Support multiple public keys */
+		init_public_keys(imaevm_params.keyfile);
+	else				/* assume read pubkey from x509 cert */
 		init_public_keys("/etc/keys/x509_evm.der");
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
@@ -1959,7 +1962,7 @@ int main(int argc, char *argv[])
 			exit(0);
 			break;
 		case 'v':
-			params.verbose++;
+			imaevm_params.verbose++;
 			break;
 		case 'd':
 			digest = 1;
@@ -1973,13 +1976,13 @@ int main(int argc, char *argv[])
 			sigdump = 1;
 			break;
 		case 'a':
-			params.hash_algo = optarg;
+			imaevm_params.hash_algo = optarg;
 			break;
 		case 'p':
 			if (optarg)
-				params.keypass = optarg;
+				imaevm_params.keypass = optarg;
 			else
-				params.keypass = get_password();
+				imaevm_params.keypass = get_password();
 			break;
 		case 'f':
 			sigfile = 1;
@@ -1990,10 +1993,10 @@ int main(int argc, char *argv[])
 				hmac_flags |= HMAC_FLAG_NO_UUID;
 			break;
 		case '1':
-			params.x509 = 0;
+			imaevm_params.x509 = 0;
 			break;
 		case 'k':
-			params.keyfile = optarg;
+			imaevm_params.keyfile = optarg;
 			break;
 		case 'i':
 			if (evm_portable)

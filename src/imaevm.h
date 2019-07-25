@@ -50,8 +50,10 @@
 #include <openssl/rsa.h>
 
 #ifdef USE_FPRINTF
-#define do_log(level, fmt, args...)	({ if (level <= params.verbose) fprintf(stderr, fmt, ##args); })
-#define do_log_dump(level, p, len, cr)	({ if (level <= params.verbose) do_dump(stderr, p, len, cr); })
+#define do_log(level, fmt, args...)	\
+	({ if (level <= imaevm_params.verbose) fprintf(stderr, fmt, ##args); })
+#define do_log_dump(level, p, len, cr)	\
+	({ if (level <= imaevm_params.verbose) imaevm_do_hexdump(stderr, p, len, cr); })
 #else
 #define do_log(level, fmt, args...)	syslog(level, fmt, ##args)
 #define do_log_dump(level, p, len, cr)
@@ -188,7 +190,7 @@ struct signature_v2_hdr {
 	uint8_t sig[0];		/* signature payload */
 } __packed;
 
-struct libevm_params {
+struct libimaevm_params {
 	int verbose;
 	int x509;
 	const char *hash_algo;
@@ -204,12 +206,12 @@ struct RSA_ASN1_template {
 #define	NUM_PCRS 20
 #define DEFAULT_PCR 10
 
-extern struct libevm_params params;
+extern struct libimaevm_params imaevm_params;
 
-void do_dump(FILE *fp, const void *ptr, int len, bool cr);
-void dump(const void *ptr, int len);
+void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool cr);
+void imaevm_hexdump(const void *ptr, int len);
 int ima_calc_hash(const char *file, uint8_t *hash);
-int get_hash_algo(const char *algo);
+int imaevm_get_hash_algo(const char *algo);
 RSA *read_pub_key(const char *keyfile, int x509);
 EVP_PKEY *read_pub_pkey(const char *keyfile, int x509);
 
