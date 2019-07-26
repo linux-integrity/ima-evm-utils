@@ -612,6 +612,8 @@ int verify_hash(const char *file, const unsigned char *hash, int size, unsigned 
 		/* Read pubkey from RSA key */
 		if (!imaevm_params.keyfile)
 			key = "/etc/keys/pubkey_evm.pem";
+		else
+			key = imaevm_params.keyfile;
 		return verify_hash_v1(file, hash, size, sig, siglen, key);
 	} else if (sig[0] == DIGSIG_VERSION_2) {
 		return verify_hash_v2(file, hash, size, sig, siglen);
