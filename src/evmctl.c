@@ -887,7 +887,7 @@ static int verify_ima(const char *file)
 static int cmd_verify_ima(struct command *cmd)
 {
 	char *file = g_argv[optind++];
-	int err;
+	int err, fails = 0;
 
 	if (imaevm_params.keyfile)	/* Support multiple public keys */
 		init_public_keys(imaevm_params.keyfile);
@@ -903,10 +903,12 @@ static int cmd_verify_ima(struct command *cmd)
 
 	do {
 		err = verify_ima(file);
+		if (err)
+			fails++;
 		if (!err && imaevm_params.verbose >= LOG_INFO)
 			log_info("%s: verification is OK\n", file);
 	} while ((file = g_argv[optind++]));
-	return err;
+	return fails > 0;
 }
 
 static int cmd_convert(struct command *cmd)
