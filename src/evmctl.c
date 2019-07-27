@@ -2114,6 +2114,8 @@ int main(int argc, char *argv[])
 				break;
 			log_err("%s\n", ERR_error_string(error, NULL));
 		}
+		if (err < 0)
+			err = 125;
 	}
 
 	if (eng) {
