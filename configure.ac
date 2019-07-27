@@ -32,7 +32,7 @@ AC_CHECK_HEADERS(openssl/conf.h)
 
 AC_CHECK_PROG(TSSPCRREAD, [tsspcrread], yes, no)
 if test "x$TSSPCRREAD" = "xyes"; then
-	AC_DEFINE(HAVE_TSSPCRREAD, 1, [Define to 1 if you have tsspcrread binary installed])],
+	AC_DEFINE(HAVE_TSSPCRREAD, 1, [Define to 1 if you have tsspcrread binary installed])
 fi
 
 AC_CHECK_HEADERS(sys/xattr.h, , [AC_MSG_ERROR([sys/xattr.h header not found. You need the c-library development package.])])
