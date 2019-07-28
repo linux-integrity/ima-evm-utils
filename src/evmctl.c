@@ -843,10 +843,12 @@ static int cmd_verify_evm(struct command *cmd)
 		return -1;
 	}
 
-	if (imaevm_params.keyfile)	/* Support multiple public keys */
-		init_public_keys(imaevm_params.keyfile);
-	else				/* assume read pubkey from x509 cert */
-		init_public_keys("/etc/keys/x509_evm.der");
+	if (imaevm_params.x509) {
+		if (imaevm_params.keyfile) /* Support multiple public keys */
+			init_public_keys(imaevm_params.keyfile);
+		else			   /* assume read pubkey from x509 cert */
+			init_public_keys("/etc/keys/x509_evm.der");
+	}
 
 	err = verify_evm(file);
 	if (!err && imaevm_params.verbose >= LOG_INFO)
@@ -889,10 +891,12 @@ static int cmd_verify_ima(struct command *cmd)
 	char *file = g_argv[optind++];
 	int err, fails = 0;
 
-	if (imaevm_params.keyfile)	/* Support multiple public keys */
-		init_public_keys(imaevm_params.keyfile);
-	else				/* assume read pubkey from x509 cert */
-		init_public_keys("/etc/keys/x509_evm.der");
+	if (imaevm_params.x509) {
+		if (imaevm_params.keyfile) /* Support multiple public keys */
+			init_public_keys(imaevm_params.keyfile);
+		else			   /* assume read pubkey from x509 cert */
+			init_public_keys("/etc/keys/x509_evm.der");
+	}
 
 	errno = 0;
 	if (!file) {
