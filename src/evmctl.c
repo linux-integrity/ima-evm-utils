@@ -810,13 +810,9 @@ static int verify_evm(const char *file)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
+	int sig_hash_algo;
 	int mdlen;
 	int len;
-
-	mdlen = calc_evm_hash(file, hash);
-	if (mdlen <= 1)
-		return mdlen;
-	assert(mdlen <= sizeof(hash));
 
 	len = lgetxattr(file, xattr_evm, sig, sizeof(sig));
 	if (len < 0) {
@@ -828,6 +824,18 @@ static int verify_evm(const char *file)
 		log_err("%s has no signature\n", xattr_evm);
 		return -1;
 	}
+
+	sig_hash_algo = imaevm_hash_algo_from_sig(sig + 1);
+	if (sig_hash_algo < 0) {
+		log_err("unknown hash algo: %s\n", file);
+		return -1;
+	}
+	imaevm_params.hash_algo = imaevm_hash_algo_by_id(sig_hash_algo);
+
+	mdlen = calc_evm_hash(file, hash);
+	if (mdlen <= 1)
+		return mdlen;
+	assert(mdlen <= sizeof(hash));
 
 	return verify_hash(file, hash, mdlen, sig + 1, len - 1);
 }

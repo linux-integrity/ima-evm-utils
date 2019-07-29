@@ -223,5 +223,7 @@ int sign_hash(const char *algo, const unsigned char *hash, int size, const char 
 int verify_hash(const char *file, const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen, unsigned char *digest, int digestlen);
 void init_public_keys(const char *keyfiles);
+int imaevm_hash_algo_from_sig(unsigned char *sig);
+const char *imaevm_hash_algo_by_id(int algo);
 
 #endif

@@ -105,7 +105,7 @@ void imaevm_hexdump(const void *ptr, int len)
 	imaevm_do_hexdump(stdout, ptr, len, true);
 }
 
-static const char *get_hash_algo_by_id(int algo)
+const char *imaevm_hash_algo_by_id(int algo)
 {
 	if (algo < PKEY_HASH__LAST)
 		return pkey_hash_algo[algo];
@@ -113,7 +113,7 @@ static const char *get_hash_algo_by_id(int algo)
 		return hash_algo_name[algo];
 
 	log_err("digest %d not found\n", algo);
-	return "unknown";
+	return NULL;
 }
 
 /* Output all remaining openssl error messages. */
@@ -575,7 +575,7 @@ int imaevm_get_hash_algo(const char *algo)
 	return -1;
 }
 
-static int get_hash_algo_from_sig(unsigned char *sig)
+int imaevm_hash_algo_from_sig(unsigned char *sig)
 {
 	uint8_t hashalgo;
 
@@ -632,13 +632,13 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 		return -1;
 	}
 
-	sig_hash_algo = get_hash_algo_from_sig(sig + 1);
+	sig_hash_algo = imaevm_hash_algo_from_sig(sig + 1);
 	if (sig_hash_algo < 0) {
 		log_err("Invalid signature\n");
 		return -1;
 	}
 	/* Use hash algorithm as retrieved from signature */
-	imaevm_params.hash_algo = get_hash_algo_by_id(sig_hash_algo);
+	imaevm_params.hash_algo = imaevm_hash_algo_by_id(sig_hash_algo);
 
 	/*
 	 * Validate the signature based on the digest included in the
