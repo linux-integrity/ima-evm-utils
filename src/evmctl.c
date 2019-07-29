@@ -1943,11 +1943,13 @@ int main(int argc, char *argv[])
 	int err = 0, c, lind;
 	ENGINE *eng = NULL;
 
+#if !(OPENSSL_VERSION_NUMBER < 0x10100000)
 	OPENSSL_init_crypto(
 #ifndef DISABLE_OPENSSL_CONF
 			    OPENSSL_INIT_LOAD_CONFIG |
 #endif
 			    OPENSSL_INIT_ENGINE_ALL_BUILTIN, NULL);
+#endif
 	g_argv = argv;
 	g_argc = argc;
 
