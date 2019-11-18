@@ -628,13 +628,13 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	int hashlen, sig_hash_algo;
 
 	if (sig[0] != 0x03) {
-		log_err("xattr ima has no signature\n");
+		log_err("%s: xattr ima has no signature\n", file);
 		return -1;
 	}
 
 	sig_hash_algo = imaevm_hash_algo_from_sig(sig + 1);
 	if (sig_hash_algo < 0) {
-		log_err("Invalid signature\n");
+		log_err("%s: Invalid signature\n", file);
 		return -1;
 	}
 	/* Use hash algorithm as retrieved from signature */
