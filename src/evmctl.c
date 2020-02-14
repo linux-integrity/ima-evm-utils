@@ -63,6 +63,7 @@
 #include <openssl/err.h>
 #include <openssl/rsa.h>
 #include <openssl/engine.h>
+#include "hash_info.h"
 
 #ifndef XATTR_APPAARMOR_SUFFIX
 #define XATTR_APPARMOR_SUFFIX "apparmor"
@@ -1647,8 +1648,165 @@ void ima_ng_show(struct template_entry *entry)
 	}
 }
 
+struct tpm_bank_info {
+	int digest_size;
+	int supported;
+	const char *algo_name;
+	uint8_t digest[MAX_DIGEST_SIZE];
+	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
+};
+
+static void set_bank_info(struct tpm_bank_info *bank, const char *algo_name)
+{
+	const EVP_MD *md;
+
+	bank->algo_name = algo_name;
+	md = EVP_get_digestbyname(bank->algo_name);
+	if (!md)
+		return;
+
+	bank->supported = 1;
+	bank->digest_size = EVP_MD_size(md);
+}
+
+static struct tpm_bank_info *init_tpm_banks(int *num_banks)
+{
+	struct tpm_bank_info *banks = NULL;
+	const char *default_algos[] = {"sha1", "sha256"};
+	int num_algos = sizeof(default_algos) / sizeof(default_algos[0]);
+	int i, j;
+
+	banks = calloc(num_algos, sizeof(struct tpm_bank_info));
+	if (!banks)
+		return banks;
+
+	/* re-calculate the PCRs digests for only known algorithms */
+	*num_banks = num_algos;
+	for (i = 0; i < num_algos; i++) {
+		for (j = 0; j < HASH_ALGO__LAST; j++) {
+			if (!strcmp(default_algos[i], hash_algo_name[j]))
+				set_bank_info(&banks[i], hash_algo_name[j]);
+		}
+	}
+	return banks;
+}
+
+/* Calculate the template hash for a particular hash algorithm */
+static int calculate_template_digest(EVP_MD_CTX *pctx, const EVP_MD *md,
+				     struct template_entry *entry,
+				     struct tpm_bank_info *bank)
+{
+	unsigned int mdlen;
+	int err;
+
+	err = EVP_DigestInit(pctx, md);
+	if (!err) {
+		printf("EVP_DigestInit() failed\n");
+		goto out;
+	}
+
+	err = EVP_DigestUpdate(pctx, entry->template, entry->template_len);
+	if (!err) {
+		printf("EVP_DigestUpdate() failed\n");
+		goto out;
+	}
+
+	err = EVP_DigestFinal(pctx, bank->digest, &mdlen);
+	if (!err)
+		printf("EVP_DigestUpdate() failed\n");
+out:
+	if (!err)
+		err = 1;
+	return err;
+}
+
+/* Extend a specific TPM bank with the template hash */
+static int extend_tpm_bank(EVP_MD_CTX *pctx, const EVP_MD *md,
+			   struct template_entry *entry,
+			   struct tpm_bank_info *bank)
+{
+	unsigned int mdlen;
+	int err;
+
+	err = EVP_DigestInit(pctx, md);
+	if (!err) {
+		printf("EVP_DigestInit() failed\n");
+		goto out;
+	}
+
+	err = EVP_DigestUpdate(pctx, bank->pcr[entry->header.pcr],
+			       bank->digest_size);
+	if (!err) {
+		printf("EVP_DigestUpdate() failed\n");
+		goto out;
+	}
+
+	if (validate && !memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH))
+		err = EVP_DigestUpdate(pctx, fox, bank->digest_size);
+	else
+		err = EVP_DigestUpdate(pctx, bank->digest, bank->digest_size);
+	if (!err) {
+		printf("EVP_DigestUpdate() failed\n");
+		goto out;
+	}
+
+	err = EVP_DigestFinal(pctx, bank->pcr[entry->header.pcr], &mdlen);
+	if (!err)
+		printf("EVP_DigestFinal() failed\n");
+
+out:
+	if (!err)
+		err = 1;
+	return err;
+}
+
+/* Calculate and extend the template hash for multiple hash algorithms */
+static void extend_tpm_banks(struct template_entry *entry, int num_banks,
+			     struct tpm_bank_info *bank)
+{
+	EVP_MD_CTX *pctx;
+	const EVP_MD *md;
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	EVP_MD_CTX ctx;
+	pctx = &ctx;
+#else
+	pctx = EVP_MD_CTX_new();
+#endif
+	int err;
+	int i;
+
+	for (i = 0; i < num_banks; i++) {
+		if (!bank[i].supported)
+			continue;
+		md = EVP_get_digestbyname(bank[i].algo_name);
+		if (!md) {
+			printf("EVP_get_digestbyname(%s) failed\n",
+				bank[i].algo_name);
+			bank[i].supported = 0;
+			continue;
+		}
+
+		err = calculate_template_digest(pctx, md, entry, &bank[i]);
+		if (!err) {
+			bank[i].supported = 0;
+			continue;
+		}
+
+		/* extend TPM BANK with template digest */
+		err = extend_tpm_bank(pctx, md, entry, &bank[i]);
+		if (!err)
+			bank[i].supported = 0;
+	}
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+	EVP_MD_CTX_free(pctx);
+#endif
+}
+
 static int ima_measurement(const char *file)
 {
+	struct tpm_bank_info *pseudo_banks;
+	int num_banks = 0;
+
 	uint8_t pcr[NUM_PCRS][SHA_DIGEST_LENGTH] = {{0}};
 	uint8_t hwpcr[SHA_DIGEST_LENGTH];
 	struct template_entry entry = { .template = 0 };
@@ -1663,6 +1821,8 @@ static int ima_measurement(const char *file)
 
 	log_debug("Initial PCR value: ");
 	log_debug_dump(pcr, sizeof(pcr));
+
+	pseudo_banks = init_tpm_banks(&num_banks);
 
 	fp = fopen(file, "rb");
 	if (!fp) {
@@ -1701,6 +1861,8 @@ static int ima_measurement(const char *file)
 			log_err("Unable to read template\n");
 			goto out;
 		}
+
+		extend_tpm_banks(&entry, num_banks, pseudo_banks);
 
 		if (validate)
 			ima_verify_template_hash(&entry);
