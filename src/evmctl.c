@@ -1423,6 +1423,7 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 }
 
 #ifdef HAVE_TSSPCRREAD
+static int tpm2_pcrread = 1;
 static int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
 			 int len, char **errmsg)
 {
@@ -1463,6 +1464,13 @@ static int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
 		*errmsg = strndup(pcr, strlen(pcr) - 1); /* remove newline */
 
 	return ret;
+}
+#else
+static int tpm2_pcrread = 0;
+static int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
+			 int len, char **errmsg)
+{
+	return -1;
 }
 #endif
 
@@ -1804,9 +1812,47 @@ static void extend_tpm_banks(struct template_entry *entry, int num_banks,
 #endif
 }
 
+/*
+ * Attempt to read TPM PCRs from the multiple TPM 2.0 banks.
+ *
+ * On success reading from any TPM bank, return 0.
+ */
+static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
+{
+	int tpm_enabled = 0;
+	char *errmsg = NULL;
+	int i, j;
+	int err;
+
+	/* Any userspace applications available for reading TPM 2.0 PCRs? */
+	if (!tpm2_pcrread) {
+		log_info("Failed to read TPM 2.0 PCRs\n");
+		return 1;
+	}
+
+	for (i = 0; i < num_banks; i++) {
+		err = 0;
+		for (j = 0; j < NUM_PCRS && !err; j++) {
+			err = tpm2_pcr_read(bank[i].algo_name, j,
+					    bank[i].pcr[j], bank[i].digest_size,
+					    &errmsg);
+			if (err) {
+				log_info("Failed to read %s PCRs: (%s)\n",
+					 bank[i].algo_name, errmsg);
+				free(errmsg);
+				bank[i].supported = 0;
+			}
+		}
+		if (bank[i].supported)
+			tpm_enabled = 1;
+	}
+	return tpm_enabled ? 0 : 1;
+}
+
 static int ima_measurement(const char *file)
 {
 	struct tpm_bank_info *pseudo_banks;
+	struct tpm_bank_info *tpm_banks;
 	int num_banks = 0;
 
 	uint8_t pcr[NUM_PCRS][SHA_DIGEST_LENGTH] = {{0}};
@@ -1825,6 +1871,7 @@ static int ima_measurement(const char *file)
 	log_debug_dump(pcr, sizeof(pcr));
 
 	pseudo_banks = init_tpm_banks(&num_banks);
+	tpm_banks = init_tpm_banks(&num_banks);
 
 	fp = fopen(file, "rb");
 	if (!fp) {
@@ -1912,6 +1959,9 @@ static int ima_measurement(const char *file)
 
 	if (!verify_failed)
 		err = 0;
+	else
+		read_tpm_banks(num_banks, tpm_banks);
+
 out:
 	fclose(fp);
 	return err;
