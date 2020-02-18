@@ -1449,6 +1449,11 @@ static int tpm2_pcr_read(int idx, uint8_t *hwpcr, int len, char **errmsg)
 
 	/* get the popen "cmd" return code */
 	ret = pclose(fp);
+
+	/* Treat an unallocated bank as an error */
+	if (!ret && (strlen(pcr) < SHA_DIGEST_LENGTH))
+		ret = -1;
+
 	if (!ret)
 		hex2bin(hwpcr, pcr, SHA_DIGEST_LENGTH);
 	else
