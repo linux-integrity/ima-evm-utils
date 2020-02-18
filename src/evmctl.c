@@ -1423,14 +1423,16 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 }
 
 #ifdef HAVE_TSSPCRREAD
-static int tpm2_pcr_read(int idx, uint8_t *hwpcr, int len, char **errmsg)
+static int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
+			 int len, char **errmsg)
 {
 	FILE *fp;
 	char pcr[100];	/* may contain an error */
 	char cmd[50];
 	int ret;
 
-	sprintf(cmd, "tsspcrread -halg sha1 -ha %d -ns 2> /dev/null", idx);
+	sprintf(cmd, "tsspcrread -halg %s -ha %d -ns 2> /dev/null",
+		algo_name, idx);
 	fp = popen(cmd, "r");
 	if (!fp) {
 		ret = asprintf(errmsg, "popen failed: %s", strerror(errno));
@@ -1456,7 +1458,7 @@ static int tpm2_pcr_read(int idx, uint8_t *hwpcr, int len, char **errmsg)
 		ret = -1;
 
 	if (!ret)
-		hex2bin(hwpcr, pcr, SHA_DIGEST_LENGTH);
+		hex2bin(hwpcr, pcr, len);
 	else
 		*errmsg = strndup(pcr, strlen(pcr) - 1); /* remove newline */
 
@@ -1885,7 +1887,8 @@ static int ima_measurement(const char *file)
 #ifdef HAVE_TSSPCRREAD
 			char *errmsg = NULL;
 
-			err = tpm2_pcr_read(i, hwpcr, sizeof(hwpcr), &errmsg);
+			err = tpm2_pcr_read("sha1", i, hwpcr, sizeof(hwpcr),
+					    &errmsg);
 			if (err) {
 				log_info("Failed to read PCRs: (%s)\n", errmsg);
 				free(errmsg);
