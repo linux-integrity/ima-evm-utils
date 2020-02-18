@@ -1701,6 +1701,38 @@ static struct tpm_bank_info *init_tpm_banks(int *num_banks)
 	return banks;
 }
 
+static int compare_tpm_banks(int num_banks, struct tpm_bank_info *bank,
+			     struct tpm_bank_info *tpm_bank)
+{
+	int i, j;
+	int ret = 0;
+
+	for (i = 0; i < num_banks; i++) {
+		if (!bank[i].supported || !tpm_bank[i].supported)
+			continue;
+		for (j = 0; j < NUM_PCRS; j++) {
+			if (memcmp(bank[i].pcr[j], zero, bank[i].digest_size)
+			    == 0)
+				continue;
+			log_info("%s: PCRAgg  %d: ", bank[i].algo_name, j);
+			log_dump(bank[i].pcr[j], bank[i].digest_size);
+
+			log_info("%s: TPM PCR-%d: ", tpm_bank[i].algo_name, j);
+			log_dump(tpm_bank[i].pcr[j], tpm_bank[i].digest_size);
+
+			ret = memcmp(bank[i].pcr[j], tpm_bank[i].pcr[j],
+				     bank[i].digest_size);
+			if (!ret)
+				log_info("%s PCR-%d: succeed\n",
+					 bank[i].algo_name, j);
+			else
+				log_info("%s: PCRAgg %d does not match TPM PCR-%d\n",
+					 bank[i].algo_name, i, i);
+		}
+	}
+	return ret;
+}
+
 /* Calculate the template hash for a particular hash algorithm */
 static int calculate_template_digest(EVP_MD_CTX *pctx, const EVP_MD *md,
 				     struct template_entry *entry,
@@ -1959,8 +1991,10 @@ static int ima_measurement(const char *file)
 
 	if (!verify_failed)
 		err = 0;
+	else if (read_tpm_banks(num_banks, tpm_banks) != 0)
+		log_info("Failed to read TPM 2.0 PCRs\n");
 	else
-		read_tpm_banks(num_banks, tpm_banks);
+		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
 
 out:
 	fclose(fp);
