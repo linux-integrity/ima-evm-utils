@@ -1477,8 +1477,8 @@ struct template_entry {
 	int template_buf_len;
 };
 
-static uint8_t zero[SHA_DIGEST_LENGTH];
-static uint8_t fox[SHA_DIGEST_LENGTH];
+static uint8_t zero[MAX_DIGEST_SIZE];
+static uint8_t fox[MAX_DIGEST_SIZE];
 
 int validate = 1;
 
@@ -1499,7 +1499,7 @@ static int ima_verify_template_hash(struct template_entry *entry)
 {
 	uint8_t digest[SHA_DIGEST_LENGTH];
 
-	if (!memcmp(zero, entry->header.digest, sizeof(zero)))
+	if (!memcmp(zero, entry->header.digest, sizeof(digest)))
 		return 0;
 
 	SHA1(entry->template, entry->template_len, digest);
@@ -1658,8 +1658,8 @@ static int ima_measurement(const char *file)
 	int i;
 
 	errno = 0;
-	memset(zero, 0, SHA_DIGEST_LENGTH);
-	memset(fox, 0xff, SHA_DIGEST_LENGTH);
+	memset(zero, 0, MAX_DIGEST_SIZE);
+	memset(fox, 0xff, MAX_DIGEST_SIZE);
 
 	log_debug("Initial PCR value: ");
 	log_debug_dump(pcr, sizeof(pcr));
