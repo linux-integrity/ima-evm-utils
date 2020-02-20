@@ -1493,19 +1493,6 @@ static uint8_t fox[MAX_DIGEST_SIZE];
 
 int validate = 1;
 
-void ima_extend_pcr(uint8_t *pcr, uint8_t *digest, int length)
-{
-	SHA_CTX ctx;
-
-	SHA1_Init(&ctx);
-	SHA1_Update(&ctx, pcr, length);
-	if (validate && !memcmp(digest, zero, length))
-		SHA1_Update(&ctx, fox, length);
-	else
-		SHA1_Update(&ctx, digest, length);
-	SHA1_Final(pcr, &ctx);
-}
-
 static int ima_verify_template_hash(struct template_entry *entry)
 {
 	uint8_t digest[SHA_DIGEST_LENGTH];
@@ -1910,20 +1897,13 @@ static int ima_measurement(const char *file)
 	struct tpm_bank_info *tpm_banks;
 	int num_banks = 0;
 
-	uint8_t pcr[NUM_PCRS][SHA_DIGEST_LENGTH] = {{0}};
-	uint8_t hwpcr[SHA_DIGEST_LENGTH];
 	struct template_entry entry = { .template = 0 };
 	FILE *fp;
 	int err = -1;
-	bool verify_failed = false;
-	int i;
 
 	errno = 0;
 	memset(zero, 0, MAX_DIGEST_SIZE);
 	memset(fox, 0xff, MAX_DIGEST_SIZE);
-
-	log_debug("Initial PCR value: ");
-	log_debug_dump(pcr, sizeof(pcr));
 
 	pseudo_banks = init_tpm_banks(&num_banks);
 	tpm_banks = init_tpm_banks(&num_banks);
@@ -1940,9 +1920,6 @@ static int ima_measurement(const char *file)
 		init_public_keys("/etc/keys/x509_evm.der");
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
-		ima_extend_pcr(pcr[entry.header.pcr], entry.header.digest,
-			       SHA_DIGEST_LENGTH);
-
 		if (!fread(entry.name, entry.header.name_len, 1, fp)) {
 			log_err("Unable to read template name\n");
 			goto out;
@@ -1977,47 +1954,12 @@ static int ima_measurement(const char *file)
 			ima_ng_show(&entry);
 	}
 
-
-	for (i = 0; i < NUM_PCRS; i++) {
-		if (memcmp(pcr[i], zero, SHA_DIGEST_LENGTH) == 0)
-			continue;
-
-		log_info("PCRAgg %.2d: ", i);
-		log_dump(pcr[i], SHA_DIGEST_LENGTH);
-
-		if (tpm_pcr_read(i, hwpcr, sizeof(hwpcr))) {
-#ifdef HAVE_TSSPCRREAD
-			char *errmsg = NULL;
-
-			err = tpm2_pcr_read("sha1", i, hwpcr, sizeof(hwpcr),
-					    &errmsg);
-			if (err) {
-				log_info("Failed to read PCRs: (%s)\n", errmsg);
-				free(errmsg);
-				exit(1);
-			}
-#else
-			log_info("Failed to read TPM 1.2 PCRs.\n");
-			exit(1);
-#endif
-		}
-
-		log_info("HW PCR-%d: ", i);
-		log_dump(hwpcr, sizeof(hwpcr));
-
-		if (memcmp(pcr[i], hwpcr, sizeof(SHA_DIGEST_LENGTH)) != 0) {
-			log_err("PCRAgg %d does not match HW PCR-%d\n", i, i);
-
-			verify_failed = true;
-		}
-	}
-
-	if (!verify_failed)
+	if (read_tpm_banks(num_banks, tpm_banks) != 0) {
 		err = 0;
-	if (read_tpm_banks(num_banks, tpm_banks) != 0)
 		log_info("Failed to read any TPM PCRs\n");
-	else
+	} else {
 		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
+	}
 
 out:
 	fclose(fp);
