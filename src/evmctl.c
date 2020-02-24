@@ -64,6 +64,8 @@
 #include <openssl/rsa.h>
 #include <openssl/engine.h>
 #include "hash_info.h"
+#include "pcr.h"
+#include "utils.h"
 
 #ifndef XATTR_APPAARMOR_SUFFIX
 #define XATTR_APPARMOR_SUFFIX "apparmor"
@@ -226,35 +228,6 @@ static int find_xattr(const char *list, int list_size, const char *xattr)
 		len = strlen(list);
 		if (!strcmp(list, xattr))
 			return 1;
-	}
-	return 0;
-}
-
-static int hex_to_bin(char ch)
-{
-	if ((ch >= '0') && (ch <= '9'))
-		return ch - '0';
-	ch = tolower(ch);
-	if ((ch >= 'a') && (ch <= 'f'))
-		return ch - 'a' + 10;
-	return -1;
-}
-
-static int hex2bin(void *dst, const char *src, size_t count)
-{
-	int hi, lo;
-
-	while (count--) {
-		if (*src == ' ')
-			src++;
-
-		hi = hex_to_bin(*src++);
-		lo = hex_to_bin(*src++);
-
-		if ((hi < 0) || (lo < 0))
-			return -1;
-
-		*(uint8_t *)dst++ = (hi << 4) | lo;
 	}
 	return 0;
 }
@@ -1422,58 +1395,6 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 	return result;
 }
 
-#ifdef HAVE_TSSPCRREAD
-static int tpm2_pcrread = 1;
-static int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
-			 int len, char **errmsg)
-{
-	FILE *fp;
-	char pcr[100];	/* may contain an error */
-	char cmd[50];
-	int ret;
-
-	sprintf(cmd, "tsspcrread -halg %s -ha %d -ns 2> /dev/null",
-		algo_name, idx);
-	fp = popen(cmd, "r");
-	if (!fp) {
-		ret = asprintf(errmsg, "popen failed: %s", strerror(errno));
-		if (ret == -1)	/* the contents of errmsg is undefined */
-			*errmsg = NULL;
-		return -1;
-	}
-
-	if (fgets(pcr, sizeof(pcr), fp) == NULL) {
-		ret = asprintf(errmsg, "tsspcrread failed: %s",
-			       strerror(errno));
-		if (ret == -1)	/* the contents of errmsg is undefined */
-			*errmsg = NULL;
-		ret = pclose(fp);
-		return -1;
-	}
-
-	/* get the popen "cmd" return code */
-	ret = pclose(fp);
-
-	/* Treat an unallocated bank as an error */
-	if (!ret && (strlen(pcr) < SHA_DIGEST_LENGTH))
-		ret = -1;
-
-	if (!ret)
-		hex2bin(hwpcr, pcr, len);
-	else
-		*errmsg = strndup(pcr, strlen(pcr) - 1); /* remove newline */
-
-	return ret;
-}
-#else
-static int tpm2_pcrread = 0;
-static int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
-			 int len, char **errmsg)
-{
-	return -1;
-}
-#endif
-
 #define TCG_EVENT_NAME_LEN_MAX	255
 
 struct template_entry {
@@ -1866,7 +1787,7 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 		return 0;
 
 	/* Any userspace applications available for reading TPM 2.0 PCRs? */
-	if (!tpm2_pcrread) {
+	if (!tpm2_pcr_supported()) {
 		log_debug("Failed to read TPM 2.0 PCRs\n");
 		return 1;
 	}

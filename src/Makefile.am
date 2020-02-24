@@ -17,10 +17,20 @@ hash_info.h: Makefile
 
 bin_PROGRAMS = evmctl
 
-evmctl_SOURCES = evmctl.c
+evmctl_SOURCES = evmctl.c utils.c
 evmctl_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 evmctl_LDFLAGS = $(LDFLAGS_READLINE)
 evmctl_LDADD =  $(LIBCRYPTO_LIBS) -lkeyutils libimaevm.la
+
+if USE_PCRTSS
+evmctl_SOURCES += pcr_tss.c
+else
+if USE_PCRTSSPCRREAD
+evmctl_SOURCES += pcr_tsspcrread.c
+else
+evmctl_SOURCES += pcr_none.c
+endif
+endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -include config.h
 
