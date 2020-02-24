@@ -1900,6 +1900,77 @@ static int cmd_ima_measurement(struct command *cmd)
 	return ima_measurement(file);
 }
 
+static void calc_bootaggr(struct tpm_bank_info *bank)
+{
+	EVP_MD_CTX *pctx;
+	unsigned int mdlen;
+	const EVP_MD *md;
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	EVP_MD_CTX ctx;
+	pctx = &ctx;
+#else
+	pctx = EVP_MD_CTX_new();
+#endif
+	int err = 0;
+	int i;
+
+	md = EVP_get_digestbyname(bank->algo_name);
+
+	err = EVP_DigestInit(pctx, md);
+	if (!err) {
+		printf("EVP_DigestInit() failed\n");
+		goto out;
+	}
+
+	for (i = 0; i < 8;  i++) {
+		err = EVP_DigestUpdate(pctx, bank->pcr[i], bank->digest_size);
+		if (!err) {
+			log_err("EVP_DigestUpdate() failed\n");
+			return;
+		}
+	}
+
+	err = EVP_DigestFinal(pctx, bank->digest, &mdlen);
+	if (!err) {
+		log_err("EVP_DigestFinal() failed\n");
+		goto out;
+	}
+
+out:
+	printf("%s:", bank->algo_name);
+	imaevm_hexdump(bank->digest, bank->digest_size);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+	EVP_MD_CTX_free(pctx);
+#endif
+}
+
+/*
+ * The IMA measurement list boot_aggregate is the link between the preboot
+ * event log and the IMA measurement list.  Read and calculate all the
+ * possible per TPM bank boot_aggregate digests based on the existing
+ * PCRs 0 - 7 to validate against the IMA boot_aggregate record.
+ */
+static int cmd_ima_bootaggr(struct command *cmd)
+{
+	struct tpm_bank_info *tpm_banks;
+	int num_banks = 0;
+	int i;
+
+	tpm_banks = init_tpm_banks(&num_banks);
+
+	if (read_tpm_banks(num_banks, tpm_banks) != 0) {
+		log_info("Failed to read any TPM PCRs\n");
+		return -1;
+	}
+
+	for (i = 0; i < num_banks; i++) {
+		if (!tpm_banks[i].supported)
+			continue;
+		calc_bootaggr(&tpm_banks[i]);
+	}
+	return 0;
+}
+
 static void print_usage(struct command *cmd)
 {
 	printf("usage: %s %s\n", cmd->name, cmd->arg ? cmd->arg : "");
@@ -2015,6 +2086,7 @@ struct command cmds[] = {
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
+	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
 	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass [password]", "Sign hashes from shaXsum output.\n"},
