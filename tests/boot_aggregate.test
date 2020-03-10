@@ -1,0 +1,149 @@
+#!/bin/bash
+
+#
+# Calculate the boot_aggregate for each TPM bank, verifying that the
+# boot_aggregate in the IMA measurement list matches one of them.
+#
+# A software TPM may be used to verify the boot_aggregate.  If a
+# software TPM is not already running on the system, this test
+# starts one and initializes the TPM PCR banks by walking the sample
+# binary_bios_measurements event log, included in this directory, and
+# extending the TPM PCRs.  The associated ascii_runtime_measurements
+# for verifying the calculated boot_aggregate is included in this
+# directory as well.
+
+trap cleanup SIGINT SIGTERM EXIT
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+
+cd "$(dirname "$0")"
+export PATH=../src:$PATH
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+. ./functions.sh
+_require evmctl
+TSSDIR="$(dirname -- "$(which tssstartup)")"
+
+if [ "$(id -u)" = 0 ] && [ -c "/dev/tpm0" ]; then
+	ASCII_RUNTIME_MEASUREMENTS="/sys/kernel/security/ima/ascii_runtime_measurements"
+else
+	BINARY_BIOS_MEASUREMENTS="./sample-binary_bios_measurements-pcrs-8-9"
+	ASCII_RUNTIME_MEASUREMENTS="./sample-ascii_runtime_measurements-pcrs-8-9"
+	export TPM_INTERFACE_TYPE="socsim"
+	export TPM_COMMAND_PORT=2321
+fi
+
+# Only stop this test's software TPM.  Preferred method: "tsstpmcmd -stop"
+cleanup() {
+	if [ ! -z "${SWTPM_PPID}" ]; then
+		if [ -f "${TSSDIR}/tsstpmcmd" ]; then
+			"${TSSDIR}/tsstpmcmd" -stop
+		else
+			pkill -P "${SWTPM_PPID}"
+		fi
+	fi
+}
+
+# Try to start a software TPM if needed.
+swtpm_start() {
+	local swtpm
+
+	swtpm="$(which tpm_server)"
+	if [ -z "${swtpm}" ]; then
+		echo "SKIP: Softare TPM (tpm_server) not found"
+		return "$SKIP"
+	fi
+
+	pgrep tpm_server
+	if [ $? -eq 0 ]; then
+		echo "INFO: Software TPM (tpm_server) already running"
+		return 114
+	else
+		echo "INFO: Starting software TPM: ${swtpm}"
+		${swtpm} > /dev/null 2>&1 &
+		SWTPM_PPID=$!
+	fi
+	return 0
+}
+
+# Initialize the software TPM using the sample binary_bios_measurements log.
+swtpm_init() {
+	if [ ! -f "${TSSDIR}/tssstartup" ] || [ ! -f "${TSSDIR}/tsseventextend" ]; then
+		echo "SKIP: tssstartup and tsseventextend needed for test"
+		return "$SKIP"
+	fi
+
+	echo "INFO: Walking ${BINARY_BIOS_MEASUREMENTS} initializing the software TPM"
+	"${TSSDIR}/tssstartup"
+#	$(${TSSDIR}/tsseventextend -tpm -if "${BINARY_BIOS_MEASUREMENTS}" -v) 2>&1 > /dev/null
+	"${TSSDIR}/tsseventextend" -tpm -if "${BINARY_BIOS_MEASUREMENTS}" -v > /dev/null 2>&1
+}
+
+# In VERBOSE mode, display the calculated TPM PCRs for the different banks.
+display_pcrs() {
+	local PCRMAX=7
+	local banks=("sha1" "sha256")
+	local i;
+
+	for bank in "${banks[@]}"; do
+		echo "INFO: Displaying ${bank} TPM bank (PCRs 0 - 7)"
+		for i in $(seq 0 $PCRMAX); do
+			rc=0
+			pcr=$("${TSSDIR}/tsspcrread" -halg "${bank}" -ha "${i}" -ns)
+			if [ $rc -ne 0 ]; then
+				echo "INFO: tsspcrread failed: $pcr"
+				break
+			fi
+			echo "$i: $pcr"
+		done
+	done
+}
+
+# The first entry in the IMA measuremnet list is the "boot_aggregate".
+check() {
+	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 7) for multiple banks"
+	bootaggr=$(evmctl ima_boot_aggregate)
+	if [ $? -ne 0 ]; then
+		echo "SKIP: evmctl ima_boot_aggregate: $bootaggr"
+		exit "$SKIP"
+	fi
+
+	boot_aggr=( $bootaggr )
+
+	echo "INFO: Searching for the boot_aggregate in ${ASCII_RUNTIME_MEASUREMENTS}"
+	for hash in "${boot_aggr[@]}"; do
+		if [ "$VERBOSE" != "0" ]; then
+			echo "$hash"
+		fi
+		if grep -q "${hash}" "${ASCII_RUNTIME_MEASUREMENTS}"; then
+			echo "SUCCESS: boot_aggregate ${hash} found"
+			return "$OK"
+		fi
+	done
+	echo "FAILURE: boot_aggregate not found"
+	echo "$bootaggr"
+	return "$FAIL"
+}
+
+# Start and initialize a software TPM as needed
+if [ "$(id -u)" != 0 ] || [ ! -c "/dev/tpm0" ]; then
+	swtpm_start
+	error=$?
+	if [ $error -eq "$SKIP" ]; then
+		echo "skip: swtpm not installed"
+		exit "$SKIP"
+	fi
+
+	if [ $error -eq 0 ]; then
+		swtpm_init
+		if [ $? -eq "$SKIP" ]; then
+			echo "testing boot_aggregate without entries"
+			exit "$SKIP"
+		fi
+	fi
+	if [ "$VERBOSE" != "0" ]; then
+		display_pcrs
+	fi
+fi
+
+expect_pass check
