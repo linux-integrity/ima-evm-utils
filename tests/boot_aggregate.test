@@ -100,6 +100,12 @@ display_pcrs() {
 }
 
 # The first entry in the IMA measuremnet list is the "boot_aggregate".
+# For each kexec, an additional "boot_aggregate" will appear in the
+# measurement list, assuming the previous measurement list is carried
+# across the kexec.
+#
+# Verify that the last "boot_aggregate" record in the IMA measurement
+# list matches.
 check() {
 	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 7) for multiple banks"
 	bootaggr=$(evmctl ima_boot_aggregate)
@@ -115,7 +121,7 @@ check() {
 		if [ "$VERBOSE" != "0" ]; then
 			echo "$hash"
 		fi
-		if grep -q "${hash}" "${ASCII_RUNTIME_MEASUREMENTS}"; then
+		if grep -e "boot_aggregate$" -e "boot_aggregate.$" "${ASCII_RUNTIME_MEASUREMENTS}" | tail -n 1 | grep -q "${hash}"; then
 			echo "SUCCESS: boot_aggregate ${hash} found"
 			return "$OK"
 		fi
