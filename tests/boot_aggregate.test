@@ -50,7 +50,7 @@ swtpm_start() {
 
 	swtpm="$(which tpm_server)"
 	if [ -z "${swtpm}" ]; then
-		echo "SKIP: Softare TPM (tpm_server) not found"
+		echo "${CYAN}SKIP: Softare TPM (tpm_server) not found${NORM}"
 		return "$SKIP"
 	fi
 
@@ -69,7 +69,7 @@ swtpm_start() {
 # Initialize the software TPM using the sample binary_bios_measurements log.
 swtpm_init() {
 	if [ ! -f "${TSSDIR}/tssstartup" ] || [ ! -f "${TSSDIR}/tsseventextend" ]; then
-		echo "SKIP: tssstartup and tsseventextend needed for test"
+		echo "${CYAN}SKIP: tssstartup and tsseventextend needed for test${NORM}"
 		return "$SKIP"
 	fi
 
@@ -110,7 +110,7 @@ check() {
 	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 7) for multiple banks"
 	bootaggr=$(evmctl ima_boot_aggregate)
 	if [ $? -ne 0 ]; then
-		echo "SKIP: evmctl ima_boot_aggregate: $bootaggr"
+		echo "${CYAN}SKIP: evmctl ima_boot_aggregate: $bootaggr${NORM}"
 		exit "$SKIP"
 	fi
 
@@ -122,11 +122,11 @@ check() {
 			echo "$hash"
 		fi
 		if grep -e "boot_aggregate$" -e "boot_aggregate.$" "${ASCII_RUNTIME_MEASUREMENTS}" | tail -n 1 | grep -q "${hash}"; then
-			echo "SUCCESS: boot_aggregate ${hash} found"
+			echo "${GREEN}SUCCESS: boot_aggregate ${hash} found${NORM}"
 			return "$OK"
 		fi
 	done
-	echo "FAILURE: boot_aggregate not found"
+	echo "${RED}FAILURE: boot_aggregate not found${NORM}"
 	echo "$bootaggr"
 	return "$FAIL"
 }
