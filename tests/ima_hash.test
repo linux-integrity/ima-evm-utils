@@ -1,0 +1,80 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# evmctl ima_hash tests
+#
+# Copyright (C) 2020 Vitaly Chikunov <vt@altlinux.org>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+cd "$(dirname "$0")" || exit 1
+PATH=../src:$PATH
+source ./functions.sh
+_require evmctl openssl getfattr
+
+trap _report_exit EXIT
+set -f # disable globbing
+
+check() {
+  local alg=$1 prefix=$2 chash=$3 hash
+  local file=$alg-hash.txt
+
+  rm -f "$file"
+  touch "$file"
+  # Generate hash with openssl, if it failed skip test,
+  # unless it's negative test, then pass to evmctl
+  cmd="openssl dgst $OPENSSL_ENGINE -$alg $file"
+  echo - "$cmd"
+  hash=$(set -o pipefail; $cmd 2>/dev/null | cut -d' ' -f2)
+  if [ $? -ne 0 ] && _test_expected_to_pass; then
+    echo "${CYAN}$alg test is skipped$NORM"
+    rm "$file"
+    return "$SKIP"
+  fi
+  if [ "$chash" ] && [ "$chash" != "$hash" ]; then
+    color_red
+    echo "Invalid hash for $alg from openssl"
+    echo "Expected: $chash"
+    echo "Returned: $hash"
+    color_restore
+    rm "$file"
+    return "$HARDFAIL"
+  fi
+
+  ADD_TEXT_FOR=$alg ADD_DEL=$file \
+    _evmctl_run ima_hash --hashalgo "$alg" --xattr-user "$file" || return
+  ADD_TEXT_FOR=$alg \
+    _test_xattr "$file" user.ima "$prefix$hash" || return
+  rm "$file"
+  return "$OK"
+}
+
+# check args: algo hdr-prefix canonic-hash
+expect_pass check  md4        0x01 31d6cfe0d16ae931b73c59d7e0c089c0
+expect_pass check  md5        0x01 d41d8cd98f00b204e9800998ecf8427e
+expect_pass check  sha1       0x01 da39a3ee5e6b4b0d3255bfef95601890afd80709
+expect_fail check  SHA1       0x01 # uppercase
+expect_fail check  sha512-224 0x01 # valid for pkcs1
+expect_fail check  sha512-256 0x01 # valid for pkcs1
+expect_fail check  unknown    0x01 # nonexistent
+expect_pass check  sha224     0x0407 d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f
+expect_pass check  sha256     0x0404 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+expect_pass check  sha384     0x0405 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b
+expect_pass check  sha512     0x0406 cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+expect_pass check  rmd160     0x0403 9c1185a5c5e9fc54612808977ee8f548b2258d31
+expect_fail check  sm3        0x01
+expect_fail check  sm3-256    0x01
+_enable_gost_engine
+expect_pass check  md_gost12_256 0x0412 3f539a213e97c802cc229d474c6aa32a825a360b2a933a949fd925208d9ce1bb
+expect_pass check  streebog256   0x0412 3f539a213e97c802cc229d474c6aa32a825a360b2a933a949fd925208d9ce1bb
+expect_pass check  md_gost12_512 0x0413 8e945da209aa869f0455928529bcae4679e9873ab707b55315f56ceb98bef0a7362f715528356ee83cda5f2aac4c6ad2ba3a715c1bcd81cb8e9f90bf4c1c1a8a
+expect_pass check  streebog512   0x0413 8e945da209aa869f0455928529bcae4679e9873ab707b55315f56ceb98bef0a7362f715528356ee83cda5f2aac4c6ad2ba3a715c1bcd81cb8e9f90bf4c1c1a8a
+

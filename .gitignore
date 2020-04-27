@@ -21,7 +21,7 @@ missing
 compile
 libtool
 ltmain.sh
-
+test-driver
 
 # Compiled executables
 *.o

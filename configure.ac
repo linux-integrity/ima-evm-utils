@@ -72,6 +72,7 @@ EVMCTL_MANPAGE_DOCBOOK_XSL
 
 AC_CONFIG_FILES([Makefile
 		src/Makefile
+		tests/Makefile
 		packaging/ima-evm-utils.spec
 		])
 AC_OUTPUT
