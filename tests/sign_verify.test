@@ -1,0 +1,370 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# evmctl {,ima_}{sign,verify} tests
+#
+# Copyright (C) 2020 Vitaly Chikunov <vt@altlinux.org>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+cd "$(dirname "$0")" || exit 1
+PATH=../src:$PATH
+source ./functions.sh
+_require evmctl openssl xxd getfattr
+./gen-keys.sh >/dev/null 2>&1
+
+trap _report_exit EXIT
+set -f # disable globbing
+
+# Determine keyid from a cert
+_keyid_from_cert() {
+  local cer=${1%.*}.cer cmd
+  local tmp
+
+  cer=test-${cer#test-}
+  # shellcheck disable=SC2086
+  cmd="openssl x509 $OPENSSL_ENGINE \
+          -in $cer -inform DER -pubkey -noout"
+  id=$($cmd 2>/dev/null \
+    | openssl asn1parse \
+    | grep BIT.STRING \
+    | cut -d: -f1)
+  if [ -z "$id" ]; then
+    echo - "$cmd" >&2
+    echo "Cannot asn1parse $cer to determine keyid" >&2
+    exit 1
+  fi
+  tmp=$(mktemp)
+  # shellcheck disable=SC2086
+  openssl x509 $OPENSSL_ENGINE \
+      -in "$cer" -inform DER -pubkey -noout 2>/dev/null \
+    | openssl asn1parse -strparse "$id" -out "$tmp" -noout
+  # shellcheck disable=SC2002
+  cat "$tmp" \
+    | openssl dgst -c -sha1 \
+    | cut -d' ' -f2 \
+    | grep -o ":..:..:..:..$" \
+    | tr -d :
+  rm -f "$tmp"
+}
+
+# Convert test $type into evmctl op prefix
+_op() {
+  if [ "$1" = ima ]; then
+    echo ima_
+  fi
+}
+
+# Convert test $type into xattr name
+_xattr() {
+  if [ "$1" = ima ]; then
+    echo user.ima
+  else
+    echo user.evm
+  fi
+}
+
+# Check that detached signature matches xattr signature
+_test_sigfile() {
+  local file=$1 attr=$2 file_sig=$3 file_sig2=$4
+
+  if [ ! -e "$file_sig" ]; then
+    color_red
+    echo "evmctl ima_sign: no detached signature $file_sig"
+    color_restore
+    rm "$file"
+    return "$FAIL"
+  fi
+
+  _extract_xattr "$file" "$attr" "$file_sig2"
+  if ! cmp -bl "$file_sig" "$file_sig2"; then
+    color_red
+    echo "evmctl ima_sign: xattr signature on $file differ from detached $file_sig"
+    color_restore
+    rm "$file" "$file_sig" "$file_sig2"
+    return "$FAIL"
+  fi
+
+  rm "$file_sig" "$file_sig2"
+}
+
+# Run single sign command
+_evmctl_sign() {
+  local type=$1 key=$2 alg=$3 file=$4 opts=$5
+
+  # Can check --sigfile for ima_sign
+  [ "$type" = ima ] && opts+=" --sigfile"
+
+  # shellcheck disable=SC2086
+  ADD_TEXT_FOR="$alg ($key)" ADD_DEL=$file \
+    _evmctl_run "$(_op "$type")sign" $opts \
+    --hashalgo "$alg" --key "$key" --xattr-user "$file" || return
+
+  if [ "$type" = ima ]; then
+    _test_sigfile "$file" "$(_xattr "$type")" "$file.sig" "$file.sig2"
+  fi
+}
+
+# Run and test {ima_,}sign operation
+check_sign() {
+  # Arguments are passed via global vars:
+  # TYPE (ima or evm),
+  # KEY,
+  # ALG (hash algo),
+  # PREFIX (signature header prefix in hex),
+  # OPTS (additional options for evmctl),
+  # FILE (working file to sign).
+  local "$@"
+  local KEY=${KEY%.*}.key
+  local FILE=${FILE:-$ALG.txt}
+
+  # Normalize key filename
+  KEY=test-${KEY#test-}
+
+  # Append suffix to files for negative tests, because we may
+  # leave only good files for verify tests.
+  _test_expected_to_fail && FILE+='~'
+
+  rm -f $FILE
+  if ! touch $FILE; then
+    color_red
+    echo "Can't create test file: $FILE"
+    color_restore
+    return "$HARDFAIL"
+  fi
+
+  if _test_expected_to_pass; then
+    # Can openssl work with this digest?
+    cmd="openssl dgst $OPENSSL_ENGINE -$ALG $FILE"
+    echo - "$cmd"
+    if ! $cmd >/dev/null; then
+      echo "${CYAN}$ALG ($KEY) test is skipped (openssl is unable to digest)$NORM"
+      return "$SKIP"
+    fi
+
+    if [ ! -e "$KEY" ]; then
+      echo "${CYAN}$ALG ($KEY) test is skipped (key file not found)$NORM"
+      return "$SKIP"
+    fi
+
+    # Can openssl sign with this digest and key?
+    cmd="openssl dgst $OPENSSL_ENGINE -$ALG -sign $KEY -hex $FILE"
+    echo - "$cmd"
+    if ! $cmd >/dev/null; then
+      echo "${CYAN}$ALG ($KEY) test is skipped (openssl is unable to sign)$NORM"
+      return "$SKIP"
+    fi
+  fi
+
+  # Insert keyid from cert into PREFIX in-place of marker `:K:'
+  if [[ $PREFIX =~ :K: ]]; then
+    keyid=$(_keyid_from_cert "$KEY")
+    if [ $? -ne 0 ]; then
+      color_red
+      echo "Unable to determine keyid for $KEY"
+      color_restore
+      return "$HARDFAIL"
+    fi
+    [ "$VERBOSE" -gt 2 ] && echo "  Expected keyid: $keyid"
+    PREFIX=${PREFIX/:K:/$keyid}
+  fi
+
+  # Perform signing by evmctl
+  _evmctl_sign "$TYPE" "$KEY" "$ALG" "$FILE" "$OPTS" || return
+
+  # First simple pattern match the signature.
+  ADD_TEXT_FOR=$ALG \
+    _test_xattr "$FILE" "$(_xattr "$TYPE")" "$PREFIX.*" || return
+
+  # This is all we can do for v1 signatures.
+  [[ "$OPTS" =~ --rsa ]] && return "$OK"
+
+  # This is all we can do for evm.
+  [[ "$TYPE" =~ evm ]] && return "$OK"
+
+  # Extract signature to a file
+  _extract_xattr "$FILE" "$(_xattr "$TYPE")" "$FILE.sig2" "$PREFIX"
+
+  # Verify extracted signature with openssl
+  cmd="openssl dgst $OPENSSL_ENGINE -$ALG -verify ${KEY%.*}.pub \
+	-signature $FILE.sig2 $FILE"
+  echo - "$cmd"
+  if ! $cmd; then
+    color_red_on_failure
+    echo "Signature v2 verification with openssl is failed."
+    color_restore
+    rm "$FILE.sig2"
+    return "$FAIL"
+  fi
+
+  rm "$FILE.sig2"
+  return "$OK"
+}
+
+# Test verify operation
+check_verify() {
+  # Arguments are passed via global vars:
+  # TYPE (ima or evm),
+  # KEY,
+  # ALG (hash algo),
+  # OPTS (additional options for evmctl),
+  # FILE (filename to verify).
+  local "$@"
+
+  # shellcheck disable=SC2086
+  if ! openssl dgst $OPENSSL_ENGINE -"$ALG" /dev/null >/dev/null 2>&1; then
+    echo $CYAN"$ALG ($KEY) test is skipped (openssl does not support $ALG)"$NORM
+    return $SKIP
+  fi
+
+  # shellcheck disable=SC2086
+  ADD_TEXT_FOR="$FILE ($KEY)" \
+    _evmctl_run "$(_op "$TYPE")verify" --key "$KEY" --xattr-user $OPTS "$FILE"
+}
+
+# Test runners
+
+# Perform sign and verify ima and evm testing
+sign_verify() {
+  local key=$1 alg=$2 prefix="$3" opts="$4"
+  local file=$alg.txt
+
+  # Set defaults:
+  # Public key is different for v1 and v2 (where x509 cert is used).
+  if [[ $opts =~ --rsa ]]; then
+    KEY=test-$key.pub
+  else
+    KEY=test-$key.cer
+  fi
+  ALG=$alg
+  PREFIX=$prefix
+  OPTS=$opts
+  FILE=$file
+
+  TYPE=ima
+  if expect_pass check_sign; then
+
+    # Normal verify with proper key should pass
+    expect_pass check_verify
+
+    # Multiple files and some don't verify
+    expect_fail check_verify FILE="/dev/null $file"
+  fi
+
+  TYPE=evm
+  # Avoid running blkid for evm tests which may require root
+  # No generation on overlayfs:
+  # ioctl(3, FS_IOC_GETVERSION, 0x7ffd8e0bd628) = -1 ENOTTY (Inappropriate ioctl for device)
+  OPTS="$opts --uuid --generation 0"
+  if expect_pass check_sign; then
+
+    # Normal verify with proper key
+    expect_pass check_verify
+
+    # Verify with wrong key
+    expect_fail check_verify KEY=rsa2048
+  fi
+
+  # Note: Leaving TYPE=evm and file is evm signed
+}
+
+# Test --keys
+try_different_keys() {
+  # This run after sign_verify which leaves
+  # TYPE=evm and file is evm signed
+
+  # v2 signing can work with multiple keys in --key option
+  if [[ ! $OPTS =~ --rsa ]]; then
+
+    # Have correct key in the key list
+    expect_pass check_verify KEY="test-rsa2048.cer,$KEY"
+    expect_pass check_verify KEY="/dev/null,$KEY,"
+  fi
+
+  # Try key that is not used for signing
+  expect_fail check_verify KEY=rsa2048
+
+  # Try completely wrong key files
+  expect_fail check_verify KEY=/dev/null
+  expect_fail check_verify KEY=/dev/zero
+}
+
+try_different_sigs() {
+  # TYPE=evm and file is evm signed
+
+  # Test --imasig
+  if expect_pass check_sign OPTS="$OPTS --imasig"; then
+
+    # Verify both evm and ima sigs
+    expect_pass check_verify
+    expect_pass check_verify TYPE=ima
+  fi
+
+  # Test --imahash
+  if expect_pass check_sign OPTS="$OPTS --imahash"; then
+
+    expect_pass check_verify
+
+    # IMA hash is not verifiable by ima_verify
+    expect_fail check_verify TYPE=ima
+  fi
+
+  # Test --portable
+  expect_pass check_sign OPTS="$OPTS --portable" PREFIX=0x05
+  # Cannot be verified for now, until that support is added to evmctl
+
+  # Test -i (immutable)
+  expect_pass check_sign OPTS="$OPTS -i" PREFIX=0x0303
+  # Cannot be verified for now
+}
+
+# Single test args: type key hash signature-prefix "evmctl-options"
+# sign_verify args:      key hash signature-prefix "evmctl-options"
+# Only single test can be prefixed with expect_{fail,pass}
+# `sign_verify' can not be prefixed with expect_{fail,pass} because
+# it runs multiple tests inside. See more tests there.
+# signature-prefix can contain `:K:' which will be resolved to keyid (v2 only)
+
+## Test v1 signatures
+# Signature v1 only supports sha1 and sha256 so any other should fail
+expect_fail \
+  check_sign TYPE=ima KEY=rsa1024 ALG=md5 PREFIX=0x0301 OPTS=--rsa
+
+sign_verify  rsa1024  sha1    0x0301 --rsa
+sign_verify  rsa1024  sha256  0x0301 --rsa
+  try_different_keys
+  try_different_sigs
+
+## Test v2 signatures with RSA PKCS#1
+# List of allowed hashes much greater but not all are supported.
+sign_verify  rsa1024  md5     0x030201:K:0080
+sign_verify  rsa1024  sha1    0x030202:K:0080
+sign_verify  rsa1024  sha224  0x030207:K:0080
+sign_verify  rsa1024  sha256  0x030204:K:0080
+  try_different_keys
+  try_different_sigs
+sign_verify  rsa1024  sha384  0x030205:K:0080
+sign_verify  rsa1024  sha512  0x030206:K:0080
+sign_verify  rsa1024  rmd160  0x030203:K:0080
+
+# Test v2 signatures with EC-RDSA
+_enable_gost_engine
+sign_verify  gost2012_256-A md_gost12_256 0x030212:K:0040
+sign_verify  gost2012_256-B md_gost12_256 0x030212:K:0040
+sign_verify  gost2012_256-C md_gost12_256 0x030212:K:0040
+sign_verify  gost2012_512-A md_gost12_512 0x030213:K:0080
+sign_verify  gost2012_512-B md_gost12_512 0x030213:K:0080
+# Test if signing with wrong key length does not work.
+expect_fail \
+  check_sign TYPE=ima KEY=gost2012_512-B ALG=md_gost12_256 PREFIX=0x0302 OPTS=
+expect_fail \
+  check_sign TYPE=ima KEY=gost2012_256-B ALG=md_gost12_512 PREFIX=0x0302 OPTS=
+
