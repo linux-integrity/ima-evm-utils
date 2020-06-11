@@ -1937,11 +1937,36 @@ static void calc_bootaggr(struct tpm_bank_info *bank)
 	}
 
 out:
-	printf("%s:", bank->algo_name);
-	imaevm_hexdump(bank->digest, bank->digest_size);
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
 	EVP_MD_CTX_free(pctx);
 #endif
+
+}
+
+/*
+ * The "boot_aggregate" format is the TPM PCR bank algorithm, a colon
+ * separator, followed by a per bank TPM PCR bank specific digest.
+ * Store the TPM PCR bank specific "boot_aggregate" value as a newline
+ * terminated string in the provided buffer.
+ */
+static int append_bootaggr(char *bootaggr, struct tpm_bank_info *tpm_banks)
+{
+	uint8_t *buf;
+	int j;
+
+	strcpy(bootaggr, tpm_banks->algo_name);
+	j = strlen(tpm_banks->algo_name);
+	bootaggr[j++] = ':';
+
+	for (buf = tpm_banks->digest;
+	     buf < (tpm_banks->digest + tpm_banks->digest_size);
+	     buf++) {
+		bootaggr[j++] = hex_asc_hi(*buf);
+		bootaggr[j++] = hex_asc_lo(*buf);
+	}
+
+	bootaggr[j++] = '\n';
+	return j;
 }
 
 /*
@@ -1953,7 +1978,10 @@ out:
 static int cmd_ima_bootaggr(struct command *cmd)
 {
 	struct tpm_bank_info *tpm_banks;
+	int bootaggr_len = 0;
+	char *bootaggr;
 	int num_banks = 0;
+	int offset = 0;
 	int i;
 
 	tpm_banks = init_tpm_banks(&num_banks);
@@ -1963,11 +1991,34 @@ static int cmd_ima_bootaggr(struct command *cmd)
 		return -1;
 	}
 
+	/*
+	 * Allocate enough memory for the per TPM 2.0 PCR bank algorithm,
+	 * the colon separator, the boot_aggregate digest and newline.
+	 *
+	 * Format: <hash algorithm name>:<boot_aggregate digest>\n ...
+	 */
+	for (i = 0; i < num_banks; i++) {
+		if (!tpm_banks[i].supported)
+			continue;
+		bootaggr_len += strlen(tpm_banks[i].algo_name) + 1;
+		bootaggr_len += (tpm_banks[i].digest_size * 2) + 1;
+	}
+	bootaggr = malloc(bootaggr_len);
+
+	/*
+	 * Calculate and convert the per TPM 2.0 PCR bank algorithm
+	 * "boot_aggregate" digest from binary to asciihex.  Store the
+	 * "boot_aggregate" values as a list of newline terminated
+	 * strings.
+	 */
 	for (i = 0; i < num_banks; i++) {
 		if (!tpm_banks[i].supported)
 			continue;
 		calc_bootaggr(&tpm_banks[i]);
+		offset += append_bootaggr(bootaggr + offset, tpm_banks + i);
 	}
+	printf("%s", bootaggr);
+	free(bootaggr);
 	return 0;
 }
 
