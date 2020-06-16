@@ -81,12 +81,12 @@ swtpm_init() {
 
 # In VERBOSE mode, display the calculated TPM PCRs for the different banks.
 display_pcrs() {
-	local PCRMAX=7
+	local PCRMAX=9
 	local banks=("sha1" "sha256")
 	local i;
 
 	for bank in "${banks[@]}"; do
-		echo "INFO: Displaying ${bank} TPM bank (PCRs 0 - 7)"
+		echo "INFO: Displaying ${bank} TPM bank (PCRs 0 - 9)"
 		for i in $(seq 0 $PCRMAX); do
 			rc=0
 			pcr=$("${TSSDIR}/tsspcrread" -halg "${bank}" -ha "${i}" -ns)
@@ -107,7 +107,7 @@ display_pcrs() {
 # Verify that the last "boot_aggregate" record in the IMA measurement
 # list matches.
 check() {
-	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 7) for multiple banks"
+	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 9) for multiple banks"
 	bootaggr=$(evmctl ima_boot_aggregate)
 	if [ $? -ne 0 ]; then
 		echo "${CYAN}SKIP: evmctl ima_boot_aggregate: $bootaggr${NORM}"
