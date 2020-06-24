@@ -1930,6 +1930,16 @@ static void calc_bootaggr(struct tpm_bank_info *bank)
 		}
 	}
 
+	if (strcmp(bank->algo_name, "sha1") != 0) {
+		for (i = 8; i < 10; i++) {
+			err = EVP_DigestUpdate(pctx, bank->pcr[i], bank->digest_size);
+			if (!err) {
+				log_err("EVP_DigestUpdate() failed\n");
+				return;
+			}
+		}
+	}
+
 	err = EVP_DigestFinal(pctx, bank->digest, &mdlen);
 	if (!err) {
 		log_err("EVP_DigestFinal() failed\n");
@@ -1972,8 +1982,9 @@ static int append_bootaggr(char *bootaggr, struct tpm_bank_info *tpm_banks)
 /*
  * The IMA measurement list boot_aggregate is the link between the preboot
  * event log and the IMA measurement list.  Read and calculate all the
- * possible per TPM bank boot_aggregate digests based on the existing
- * PCRs 0 - 7 to validate against the IMA boot_aggregate record.
+ * possible per TPM bank boot_aggregate digests based on the existing PCRs
+ * 0 - 9 to validate against the IMA boot_aggregate record. If the digest
+ * algorithm is SHA1, only PCRs 0 - 7 are considered to avoid ambiguity.
  */
 static int cmd_ima_bootaggr(struct command *cmd)
 {
