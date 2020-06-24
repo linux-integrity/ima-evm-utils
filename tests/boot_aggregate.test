@@ -23,6 +23,8 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 . ./functions.sh
 _require evmctl
 TSSDIR="$(dirname -- "$(which tssstartup)")"
+PCRFILE="/sys/class/tpm/tpm0/device/pcrs"
+MISC_PCRFILE="/sys/class/misc/tpm0/device/pcrs"
 
 if [ "$(id -u)" = 0 ] && [ -c "/dev/tpm0" ]; then
 	ASCII_RUNTIME_MEASUREMENTS="/sys/kernel/security/ima/ascii_runtime_measurements"
@@ -133,6 +135,11 @@ check() {
 
 # Start and initialize a software TPM as needed
 if [ "$(id -u)" != 0 ] || [ ! -c "/dev/tpm0" ]; then
+	if [ -f "$PCRFILE" ] || [ -f "$MISC_PCRFILE" ]; then
+		echo "${CYAN}SKIP: system has discrete TPM 1.2, sample TPM 2.0 event log test not supported.${NORM}"
+		exit "$SKIP"
+	fi
+
 	swtpm_start
 	error=$?
 	if [ $error -eq "$SKIP" ]; then
