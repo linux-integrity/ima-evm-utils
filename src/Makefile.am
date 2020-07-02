@@ -34,5 +34,5 @@ endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -include config.h
 
-CLEANFILES = hash_info.h
+CLEANFILES = hash_info.h tmp_hash_info.h
 DISTCLEANFILES = @DISTCLEANFILES@
