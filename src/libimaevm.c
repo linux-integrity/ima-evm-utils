@@ -924,7 +924,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	hdr->version = (uint8_t) DIGSIG_VERSION_2;
 
 	hdr->hash_algo = imaevm_get_hash_algo(algo);
-	if (hdr->hash_algo == -1) {
+	if (hdr->hash_algo == (uint8_t)-1) {
 		log_err("sign_hash_v2: hash algo is unknown: %s\n", algo);
 		return -1;
 	}
