@@ -1736,10 +1736,19 @@ static void extend_tpm_banks(struct template_entry *entry, int num_banks,
 			continue;
 		}
 
-		err = calculate_template_digest(pctx, md, entry, &bank[i]);
-		if (!err) {
-			bank[i].supported = 0;
-			continue;
+		/*
+		 * Measurement violations are 0x00 digests.  No need to
+		 * calculate the per TPM bank template digests.
+		 */
+		if (memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH) == 0)
+			memset(bank[i].digest, 0x00, bank[i].digest_size);
+		else {
+			err = calculate_template_digest(pctx, md, entry,
+							&bank[i]);
+			if (!err) {
+				bank[i].supported = 0;
+				continue;
+			}
 		}
 
 		/* extend TPM BANK with template digest */
