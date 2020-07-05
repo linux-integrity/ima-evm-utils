@@ -1413,6 +1413,7 @@ static uint8_t zero[MAX_DIGEST_SIZE];
 static uint8_t fox[MAX_DIGEST_SIZE];
 
 static int validate = 0;
+static int verify = 0;
 
 static int ima_verify_template_hash(struct template_entry *entry)
 {
@@ -1875,7 +1876,7 @@ static int ima_measurement(const char *file)
 
 		extend_tpm_banks(&entry, num_banks, pseudo_banks);
 
-		if (validate)
+		if (verify)
 			ima_verify_template_hash(&entry);
 
 		if (!strcmp(entry.name, "ima"))
@@ -2156,7 +2157,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2196,6 +2197,7 @@ static struct option opts[] = {
 	{"engine", 1, 0, 139},
 	{"xattr-user", 0, 0, 140},
 	{"validate", 0, 0, 141},
+	{"verify", 0, 0, 142},
 	{}
 
 };
@@ -2376,6 +2378,9 @@ int main(int argc, char *argv[])
 			break;
 		case 141: /* --validate */
 			validate = 1;
+			break;
+		case 142: /* --verify */
+			verify = 1;
 			break;
 		case '?':
 			exit(1);
