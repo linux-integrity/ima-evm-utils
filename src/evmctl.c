@@ -1424,18 +1424,22 @@ static int ima_verify_template_hash(struct template_entry *entry)
 
 	SHA1(entry->template, entry->template_len, digest);
 
-	if (memcmp(digest, entry->header.digest, sizeof(digest))) {
-		log_err("template hash error\n");
+	if (memcmp(digest, entry->header.digest, sizeof(digest)))
 		return 1;
-	}
 
 	return 0;
 }
 
 void ima_show(struct template_entry *entry)
 {
-	log_debug("ima, digest: ");
-	log_debug_dump(entry->header.digest, sizeof(entry->header.digest));
+	if (imaevm_params.verbose <= LOG_INFO)
+		return;
+
+	log_info("%d ", entry->header.pcr);
+	log_dump_n(entry->header.digest, sizeof(entry->header.digest));
+	log_info(" %s ", entry->name);
+	log_dump_n(entry->template, SHA_DIGEST_LENGTH);
+	log_info(" %s\n", entry->template + SHA_DIGEST_LENGTH);
 }
 
 /*
@@ -1826,6 +1830,7 @@ static int ima_measurement(const char *file)
 {
 	struct tpm_bank_info *pseudo_banks;
 	struct tpm_bank_info *tpm_banks;
+	int is_ima_template;
 	int num_banks = 0;
 
 	struct template_entry entry = { .template = 0 };
@@ -1851,16 +1856,31 @@ static int ima_measurement(const char *file)
 		init_public_keys("/etc/keys/x509_evm.der");
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
+		if (entry.header.name_len > TCG_EVENT_NAME_LEN_MAX) {
+			log_err("%d ERROR: event name too long!\n",
+				entry.header.name_len);
+		       fclose(fp);
+		       exit(1);
+		}
+
+		memset(entry.name, 0x00, sizeof(entry.name));
 		if (!fread(entry.name, entry.header.name_len, 1, fp)) {
 			log_err("Unable to read template name\n");
 			goto out;
 		}
 
-		entry.name[entry.header.name_len] = '\0';
+		is_ima_template = strcmp(entry.name, "ima") == 0 ? 1 : 0;
 
-		if (!fread(&entry.template_len, sizeof(entry.template_len), 1, fp)) {
-			log_err("Unable to read template length\n");
-			goto out;
+		/* The "ima" template data is not length prefixed.  Skip it. */
+		if (!is_ima_template) {
+			if (!fread(&entry.template_len,
+				   sizeof(entry.template_len), 1, fp)) {
+				log_err("Unable to read template length\n");
+				goto out;
+			}
+		} else {
+			entry.template_len = SHA_DIGEST_LENGTH +
+					     TCG_EVENT_NAME_LEN_MAX + 1;
 		}
 
 		if (entry.template_buf_len < entry.template_len) {
@@ -1869,9 +1889,42 @@ static int ima_measurement(const char *file)
 			entry.template = malloc(entry.template_len);
 		}
 
-		if (!fread(entry.template, entry.template_len, 1, fp)) {
-			log_err("Unable to read template\n");
-			goto out;
+		if (!is_ima_template) {
+			if (!fread(entry.template, entry.template_len, 1, fp)) {
+				log_errno("Unable to read template\n");
+				goto out;
+			}
+		} else {
+			uint32_t field_len;
+			uint32_t len;
+
+			/*
+			 * The "ima" template data format is digest,
+			 * filename length, filename.
+			 */
+			if (!fread(entry.template, SHA_DIGEST_LENGTH, 1, fp)) {
+				log_errno("Unable to read file data hash\n");
+				goto out;
+			}
+
+			/*
+			 * Read the filename length, but it isn't included
+			 * in the template data hash calculation.
+			 */
+			len = fread(&field_len, sizeof(field_len), 1, fp);
+			if (field_len > TCG_EVENT_NAME_LEN_MAX)
+				log_err("file pathname is too long\n");
+
+			fread(entry.template + SHA_DIGEST_LENGTH,
+			      field_len, 1, fp);
+
+			/*
+			 * The template data is fixed sized, zero out
+			 * the remaining memory.
+			 */
+			len = SHA_DIGEST_LENGTH + field_len;
+			memset(entry.template + len, 0x00,
+			       entry.template_buf_len - len);
 		}
 
 		extend_tpm_banks(&entry, num_banks, pseudo_banks);
@@ -1879,7 +1932,7 @@ static int ima_measurement(const char *file)
 		if (verify)
 			ima_verify_template_hash(&entry);
 
-		if (!strcmp(entry.name, "ima"))
+		if (is_ima_template)
 			ima_show(&entry);
 		else
 			ima_ng_show(&entry);
