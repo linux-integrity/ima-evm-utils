@@ -1635,7 +1635,7 @@ static int compare_tpm_banks(int num_banks, struct tpm_bank_info *bank,
 					 bank[i].algo_name, j);
 			else
 				log_info("%s: PCRAgg %d does not match TPM PCR-%d\n",
-					 bank[i].algo_name, i, i);
+					 bank[i].algo_name, j, j);
 		}
 	}
 	return ret;
