@@ -1412,7 +1412,7 @@ struct template_entry {
 static uint8_t zero[MAX_DIGEST_SIZE];
 static uint8_t fox[MAX_DIGEST_SIZE];
 
-int validate = 1;
+static int validate = 0;
 
 static int ima_verify_template_hash(struct template_entry *entry)
 {
@@ -2156,7 +2156,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2195,6 +2195,7 @@ static struct option opts[] = {
 	{"list", 0, 0, 138},
 	{"engine", 1, 0, 139},
 	{"xattr-user", 0, 0, 140},
+	{"validate", 0, 0, 141},
 	{}
 
 };
@@ -2372,6 +2373,9 @@ int main(int argc, char *argv[])
 		case 140: /* --xattr-user */
 			xattr_ima = "user.ima";
 			xattr_evm = "user.evm";
+			break;
+		case 141: /* --validate */
+			validate = 1;
 			break;
 		case '?':
 			exit(1);
