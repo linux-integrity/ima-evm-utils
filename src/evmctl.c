@@ -1830,8 +1830,9 @@ static int ima_measurement(const char *file)
 {
 	struct tpm_bank_info *pseudo_banks;
 	struct tpm_bank_info *tpm_banks;
-	int is_ima_template;
+	int is_ima_template, cur_template_fmt;
 	int num_banks = 0;
+	int first_record = 1;
 
 	struct template_entry entry = { .template = 0 };
 	FILE *fp;
@@ -1869,7 +1870,21 @@ static int ima_measurement(const char *file)
 			goto out;
 		}
 
-		is_ima_template = strcmp(entry.name, "ima") == 0 ? 1 : 0;
+	       /*
+		* The "ima" template format can not be mixed with other
+		* template formats records.
+		*/
+		if (!first_record) {
+			cur_template_fmt = strcmp(entry.name, "ima") == 0 ? 1 : 0;
+			if ((is_ima_template && !cur_template_fmt) ||
+			    (!is_ima_template && cur_template_fmt)) {
+				log_err("Mixed measurement list containing \"ima\" and other template formats not supported.\n");
+				goto out;
+			}
+		} else {
+			first_record = 0;
+			is_ima_template = strcmp(entry.name, "ima") == 0 ? 1 : 0;
+		}
 
 		/* The "ima" template data is not length prefixed.  Skip it. */
 		if (!is_ima_template) {
