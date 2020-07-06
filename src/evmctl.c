@@ -1404,9 +1404,9 @@ struct template_entry {
 		uint32_t name_len;
 	} header  __packed;
 	char name[TCG_EVENT_NAME_LEN_MAX + 1];
-	int template_len;
+	uint32_t template_buf_len;
+	uint32_t template_len;
 	uint8_t *template;
-	int template_buf_len;
 };
 
 static uint8_t zero[MAX_DIGEST_SIZE];
