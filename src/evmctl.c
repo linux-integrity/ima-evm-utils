@@ -1963,6 +1963,67 @@ static int cmd_ima_measurement(struct command *cmd)
 	return ima_measurement(file);
 }
 
+#define MAX_EVENT_DATA_SIZE 200000
+static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
+{
+	struct {
+		struct {
+			uint32_t pcr;
+			int type;
+			unsigned char digest[SHA_DIGEST_LENGTH];
+			uint32_t len;
+		} header;
+		unsigned char data[MAX_EVENT_DATA_SIZE];
+	} event;
+	FILE *fp;
+	SHA_CTX c;
+	int err = 0;
+	int i;
+
+	fp = fopen(file, "r");
+	if (!fp) {
+		log_errno("Failed to open TPM 1.2 event log.\n");
+		return 1;
+	}
+
+	if (imaevm_params.verbose > LOG_INFO)
+		log_info("Reading the TPM 1.2 event log %s.\n", file);
+
+	/* Extend the pseudo TPM PCRs with the event digest */
+	while (fread(&event, sizeof(event.header), 1, fp)) {
+		if (imaevm_params.verbose > LOG_INFO) {
+			log_info("%02u ", event.header.pcr);
+			log_dump(event.header.digest, SHA_DIGEST_LENGTH);
+		}
+		if (event.header.pcr > NUM_PCRS) {
+			log_err("Invalid PCR %d.\n", event.header.pcr);
+			err = 1;
+			break;
+		}
+		SHA1_Init(&c);
+		SHA1_Update(&c, bank->pcr[event.header.pcr], 20);
+		SHA1_Update(&c, event.header.digest, 20);
+		SHA1_Final(bank->pcr[event.header.pcr], &c);
+		if (event.header.len > MAX_EVENT_DATA_SIZE) {
+			log_err("Event data event too long.\n");
+			err = 1;
+			break;
+		}
+		fread(event.data, event.header.len, 1, fp);
+	}
+	fclose(fp);
+
+	if (imaevm_params.verbose <= LOG_INFO)
+		return err;
+
+	for (i = 0; i < NUM_PCRS; i++) {
+		log_info("PCR-%2.2x ", i);
+		log_dump(bank->pcr[i], SHA_DIGEST_LENGTH);
+
+	}
+	return err;
+}
+
 static void calc_bootaggr(struct tpm_bank_info *bank)
 {
 	EVP_MD_CTX *pctx;
@@ -2056,13 +2117,34 @@ static int cmd_ima_bootaggr(struct command *cmd)
 	char *bootaggr;
 	int num_banks = 0;
 	int offset = 0;
+	int err = 0;
 	int i;
 
-	tpm_banks = init_tpm_banks(&num_banks);
+	char *file = g_argv[optind++];
 
-	if (read_tpm_banks(num_banks, tpm_banks) != 0) {
-		log_info("Failed to read any TPM PCRs\n");
-		return -1;
+	/*
+	 * Instead of just reading the TPM 1.2 PCRs, walk the exported
+	 * TPM 1.2 SHA1 event log, calculating the PCRs.
+	 */
+	if (file) {
+		tpm_banks = init_tpm_banks(&num_banks);
+
+		/* TPM 1.2 only supports SHA1.*/
+		for (i = 1; i < num_banks; i++)
+			tpm_banks[i].supported = 0;
+
+		err = read_binary_bios_measurements(file, tpm_banks);
+		if (err) {
+			log_info("Failed reading the TPM 1.2 event log %s.\n",
+				 file);
+			return -1;
+		}
+	} else {
+		tpm_banks = init_tpm_banks(&num_banks);
+		if (read_tpm_banks(num_banks, tpm_banks) != 0) {
+			log_info("Failed to read any TPM PCRs\n");
+			return -1;
+		}
 	}
 
 	/*
@@ -2211,7 +2293,7 @@ struct command cmds[] = {
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] file", "Verify measurement list (experimental).\n"},
-	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "", "Calculate per TPM bank boot_aggregate digests\n"},
+	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[file]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
 	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass [password]", "Sign hashes from shaXsum output.\n"},
