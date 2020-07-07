@@ -1417,7 +1417,6 @@ struct template_entry {
 };
 
 static uint8_t zero[MAX_DIGEST_SIZE];
-static uint8_t fox[MAX_DIGEST_SIZE];
 
 static int validate = 0;
 static int verify = 0;
@@ -1613,6 +1612,10 @@ static struct tpm_bank_info *init_tpm_banks(int *num_banks)
 	return banks;
 }
 
+/*
+ * Compare the calculated TPM PCR banks against the PCR values read.
+ * On failure to match any TPM bank, fail comparison.
+ */
 static int compare_tpm_banks(int num_banks, struct tpm_bank_info *bank,
 			     struct tpm_bank_info *tpm_bank)
 {
@@ -1632,14 +1635,15 @@ static int compare_tpm_banks(int num_banks, struct tpm_bank_info *bank,
 			log_info("%s: TPM PCR-%d: ", tpm_bank[i].algo_name, j);
 			log_dump(tpm_bank[i].pcr[j], tpm_bank[i].digest_size);
 
-			ret = memcmp(bank[i].pcr[j], tpm_bank[i].pcr[j],
-				     bank[i].digest_size);
-			if (!ret)
+			if (memcmp(bank[i].pcr[j], tpm_bank[i].pcr[j],
+				     bank[i].digest_size) == 0) {
 				log_info("%s PCR-%d: succeed\n",
 					 bank[i].algo_name, j);
-			else
+			} else {
+				ret = 1;
 				log_info("%s: PCRAgg %d does not match TPM PCR-%d\n",
 					 bank[i].algo_name, j, j);
+			}
 		}
 	}
 	return ret;
@@ -1695,10 +1699,7 @@ static int extend_tpm_bank(EVP_MD_CTX *pctx, const EVP_MD *md,
 		goto out;
 	}
 
-	if (validate && !memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH))
-		err = EVP_DigestUpdate(pctx, fox, bank->digest_size);
-	else
-		err = EVP_DigestUpdate(pctx, bank->digest, bank->digest_size);
+	err = EVP_DigestUpdate(pctx, bank->digest, bank->digest_size);
 	if (!err) {
 		printf("EVP_DigestUpdate() failed\n");
 		goto out;
@@ -1716,7 +1717,8 @@ out:
 
 /* Calculate and extend the template hash for multiple hash algorithms */
 static void extend_tpm_banks(struct template_entry *entry, int num_banks,
-			     struct tpm_bank_info *bank)
+			     struct tpm_bank_info *bank,
+			     struct tpm_bank_info *padded_bank)
 {
 	EVP_MD_CTX *pctx;
 	const EVP_MD *md;
@@ -1741,24 +1743,53 @@ static void extend_tpm_banks(struct template_entry *entry, int num_banks,
 		}
 
 		/*
-		 * Measurement violations are 0x00 digests.  No need to
-		 * calculate the per TPM bank template digests.
+		 * Measurement violations are 0x00 digests, which are extended
+		 * into the TPM as 0xff.  Verifying the IMA measurement list
+		 * will fail, unless the 0x00 digests are converted to 0xff's.
+		 *
+		 * Initially the sha1 digest, including violations, was padded
+		 * with zeroes before being extended into the TPM.  With the
+		 * per TPM bank digest, violations are the full per bank digest
+		 * size.
 		 */
-		if (memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH) == 0)
-			memset(bank[i].digest, 0x00, bank[i].digest_size);
-		else {
+		if (memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH) == 0) {
+			if (!validate) {
+				memset(bank[i].digest, 0x00, bank[i].digest_size);
+				memset(padded_bank[i].digest, 0x00, padded_bank[i].digest_size);
+			} else {
+				memset(bank[i].digest, 0xff,
+				       bank[i].digest_size);
+
+				memset(padded_bank[i].digest, 0x00,
+				       padded_bank[i].digest_size);
+				memset(padded_bank[i].digest, 0xff,
+				       SHA_DIGEST_LENGTH);
+			}
+		} else {
 			err = calculate_template_digest(pctx, md, entry,
 							&bank[i]);
 			if (!err) {
 				bank[i].supported = 0;
 				continue;
 			}
+
+			/*
+			 * calloc set the memory to zero, so just copy the
+			 * sha1 digest.
+			 */
+			memcpy(padded_bank[i].digest, entry->header.digest,
+			       SHA_DIGEST_LENGTH);
 		}
 
 		/* extend TPM BANK with template digest */
 		err = extend_tpm_bank(pctx, md, entry, &bank[i]);
 		if (!err)
 			bank[i].supported = 0;
+
+		/* extend TPM BANK with zero padded sha1 template digest */
+		err = extend_tpm_bank(pctx, md, entry, &padded_bank[i]);
+		if (!err)
+			padded_bank[i].supported = 0;
 	}
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
 	EVP_MD_CTX_free(pctx);
@@ -1825,6 +1856,7 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 
 static int ima_measurement(const char *file)
 {
+	struct tpm_bank_info *pseudo_padded_banks;
 	struct tpm_bank_info *pseudo_banks;
 	struct tpm_bank_info *tpm_banks;
 	int is_ima_template, cur_template_fmt;
@@ -1837,8 +1869,8 @@ static int ima_measurement(const char *file)
 
 	errno = 0;
 	memset(zero, 0, MAX_DIGEST_SIZE);
-	memset(fox, 0xff, MAX_DIGEST_SIZE);
 
+	pseudo_padded_banks = init_tpm_banks(&num_banks);
 	pseudo_banks = init_tpm_banks(&num_banks);
 	tpm_banks = init_tpm_banks(&num_banks);
 
@@ -1939,7 +1971,8 @@ static int ima_measurement(const char *file)
 			       entry.template_buf_len - len);
 		}
 
-		extend_tpm_banks(&entry, num_banks, pseudo_banks);
+		extend_tpm_banks(&entry, num_banks, pseudo_banks,
+				 pseudo_padded_banks);
 
 		if (verify)
 			ima_verify_template_hash(&entry);
@@ -1954,7 +1987,15 @@ static int ima_measurement(const char *file)
 		err = 0;
 		log_info("Failed to read any TPM PCRs\n");
 	} else {
+		log_info("Comparing with per TPM digest\n");
 		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
+
+		/* On failure, check older SHA1 zero padded hashes */
+		if (err) {
+			log_info("Comparing with SHA1 padded digest\n");
+			err = compare_tpm_banks(num_banks, pseudo_padded_banks,
+						tpm_banks);
+		}
 	}
 
 out:
