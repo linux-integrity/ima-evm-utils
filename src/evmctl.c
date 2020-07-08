@@ -160,6 +160,8 @@ struct tpm_bank_info {
 	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
 };
 
+static char *pcrfile;
+
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
 {
 	FILE *fp;
@@ -1377,12 +1379,18 @@ static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
 /* Read all of the TPM 1.2 PCRs */
 static int tpm_pcr_read(struct tpm_bank_info *tpm_banks, int len)
 {
-	FILE *fp;
+	FILE *fp = NULL;
 	char *p, pcr_str[7], buf[70]; /* length of the TPM string */
 	int result = -1;
 	int i = 0;
 
-	fp = fopen(pcrs, "r");
+	/* Use the provided TPM 1.2 pcrs file */
+	if (pcrfile)
+		fp = fopen(pcrfile, "r");
+
+	if (!fp)
+		fp = fopen(pcrs, "r");
+
 	if (!fp)
 		fp = fopen(misc_pcrs, "r");
 
@@ -2345,7 +2353,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] [--pcrs file] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[file]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2386,6 +2394,7 @@ static struct option opts[] = {
 	{"xattr-user", 0, 0, 140},
 	{"validate", 0, 0, 141},
 	{"verify", 0, 0, 142},
+	{"pcrs", 1, 0, 143},
 	{}
 
 };
@@ -2569,6 +2578,9 @@ int main(int argc, char *argv[])
 			break;
 		case 142: /* --verify */
 			verify = 1;
+			break;
+		case 143:
+			pcrfile = optarg;
 			break;
 		case '?':
 			exit(1);
