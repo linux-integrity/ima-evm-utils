@@ -152,6 +152,14 @@ static void print_usage(struct command *cmd);
 static const char *xattr_ima = "security.ima";
 static const char *xattr_evm = "security.evm";
 
+struct tpm_bank_info {
+	int digest_size;
+	int supported;
+	const char *algo_name;
+	uint8_t digest[MAX_DIGEST_SIZE];
+	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
+};
+
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
 {
 	FILE *fp;
@@ -1366,13 +1374,13 @@ static int cmd_ima_clear(struct command *cmd)
 static char *pcrs = "/sys/class/tpm/tpm0/device/pcrs";  /* Kernels >= 4.0 */
 static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
 
-static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
+/* Read all of the TPM 1.2 PCRs */
+static int tpm_pcr_read(struct tpm_bank_info *tpm_banks, int len)
 {
 	FILE *fp;
 	char *p, pcr_str[7], buf[70]; /* length of the TPM string */
 	int result = -1;
-
-	sprintf(pcr_str, "PCR-%2.2d", idx);
+	int i = 0;
 
 	fp = fopen(pcrs, "r");
 	if (!fp)
@@ -1385,11 +1393,10 @@ static int tpm_pcr_read(int idx, uint8_t *pcr, int len)
 		p = fgets(buf, sizeof(buf), fp);
 		if (!p)
 			break;
-		if (!strncmp(p, pcr_str, 6)) {
-			hex2bin(pcr, p + 7, len);
-			result = 0;
-			break;
-		}
+		sprintf(pcr_str, "PCR-%2.2d", i);
+		if (!strncmp(p, pcr_str, 6))
+			hex2bin(tpm_banks[0].pcr[i++], p + 7, len);
+		result = 0;
 	}
 	fclose(fp);
 	return result;
@@ -1570,14 +1577,6 @@ void ima_ng_show(struct template_entry *entry)
 				 "%d bytes\n", entry->name, total_len);
 	}
 }
-
-struct tpm_bank_info {
-	int digest_size;
-	int supported;
-	const char *algo_name;
-	uint8_t digest[MAX_DIGEST_SIZE];
-	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
-};
 
 static void set_bank_info(struct tpm_bank_info *bank, const char *algo_name)
 {
@@ -1771,11 +1770,9 @@ static int read_tpm_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 {
 	int i;
 
-	for (i = 0; i < NUM_PCRS; i++) {
-		if (tpm_pcr_read(i, tpm_banks[0].pcr[i], SHA_DIGEST_LENGTH)) {
-			log_debug("Failed to read TPM 1.2 PCRs.\n");
-			return -1;
-		}
+	if (tpm_pcr_read(tpm_banks, SHA_DIGEST_LENGTH)) {
+		log_debug("Failed to read TPM 1.2 PCRs.\n");
+		return -1;
 	}
 
 	tpm_banks[0].supported = 1;
@@ -1796,7 +1793,7 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 	int i, j;
 	int err;
 
-	/* First try reading PCRs from exported TPM 1.2 securityfs file */
+	/* First try reading PCRs from exported TPM 1.2 sysfs file */
 	if (read_tpm_pcrs(num_banks, bank) == 0)
 		return 0;
 
