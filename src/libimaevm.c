@@ -579,7 +579,7 @@ int imaevm_hash_algo_from_sig(unsigned char *sig)
 {
 	uint8_t hashalgo;
 
-	if (sig[0] == 1) {
+	if (sig[0] == DIGSIG_VERSION_1) {
 		hashalgo = ((struct signature_hdr *)sig)->hash;
 
 		if (hashalgo >= DIGEST_ALGO_MAX)
@@ -593,7 +593,7 @@ int imaevm_hash_algo_from_sig(unsigned char *sig)
 		default:
 			return -1;
 		}
-	} else if (sig[0] == 2) {
+	} else if (sig[0] == DIGSIG_VERSION_2) {
 		hashalgo = ((struct signature_v2_hdr *)sig)->hash_algo;
 		if (hashalgo >= PKEY_HASH__LAST)
 			return -1;
@@ -627,7 +627,7 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	unsigned char hash[MAX_DIGEST_SIZE];
 	int hashlen, sig_hash_algo;
 
-	if (sig[0] != 0x03) {
+	if (sig[0] != EVM_IMA_XATTR_DIGSIG) {
 		log_err("%s: xattr ima has no signature\n", file);
 		return -1;
 	}
