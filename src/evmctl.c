@@ -1637,21 +1637,27 @@ static int compare_tpm_banks(int num_banks, struct tpm_bank_info *bank,
 			if (memcmp(bank[i].pcr[j], zero, bank[i].digest_size)
 			    == 0)
 				continue;
+
+			if (memcmp(bank[i].pcr[j], tpm_bank[i].pcr[j],
+				     bank[i].digest_size) != 0)
+				ret = 1;
+
+			if ((!ret && imaevm_params.verbose <= LOG_INFO) ||
+			    (ret && imaevm_params.verbose <= LOG_DEBUG))
+				continue;
+
 			log_info("%s: PCRAgg  %d: ", bank[i].algo_name, j);
 			log_dump(bank[i].pcr[j], bank[i].digest_size);
 
 			log_info("%s: TPM PCR-%d: ", tpm_bank[i].algo_name, j);
 			log_dump(tpm_bank[i].pcr[j], tpm_bank[i].digest_size);
 
-			if (memcmp(bank[i].pcr[j], tpm_bank[i].pcr[j],
-				     bank[i].digest_size) == 0) {
+			if (!ret)
 				log_info("%s PCR-%d: succeed\n",
 					 bank[i].algo_name, j);
-			} else {
-				ret = 1;
+			else
 				log_info("%s: PCRAgg %d does not match TPM PCR-%d\n",
 					 bank[i].algo_name, j, j);
-			}
 		}
 	}
 	return ret;
@@ -1995,15 +2001,20 @@ static int ima_measurement(const char *file)
 		err = 0;
 		log_info("Failed to read any TPM PCRs\n");
 	} else {
-		log_info("Comparing with per TPM digest\n");
 		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
+		if (!err)
+			log_info("Matched per TPM bank calculated digest(s).\n");
 
 		/* On failure, check older SHA1 zero padded hashes */
 		if (err) {
-			log_info("Comparing with SHA1 padded digest\n");
 			err = compare_tpm_banks(num_banks, pseudo_padded_banks,
 						tpm_banks);
+			if (!err)
+				log_info("Matched SHA1 padded TPM digest(s).\n");
 		}
+
+		if (err)
+			log_info("Failed to match per TPM bank or SHA1 padded TPM digest(s).\n");
 	}
 
 out:
