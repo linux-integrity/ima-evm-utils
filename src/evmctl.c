@@ -1875,6 +1875,7 @@ static int ima_measurement(const char *file)
 	struct tpm_bank_info *tpm_banks;
 	int is_ima_template, cur_template_fmt;
 	int num_banks = 0;
+	int tpmbanks = 1;
 	int first_record = 1;
 
 	struct template_entry entry = { .template = 0 };
@@ -1898,6 +1899,14 @@ static int ima_measurement(const char *file)
 		init_public_keys(imaevm_params.keyfile);
 	else				/* assume read pubkey from x509 cert */
 		init_public_keys("/etc/keys/x509_evm.der");
+
+	/*
+	 * Reading the PCRs before walking the IMA measurement list
+	 * guarantees that all of the measurements are included in
+	 * the PCRs.
+	 */
+	if (read_tpm_banks(num_banks, tpm_banks) != 0)
+		tpmbanks = 0;
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
 		if (entry.header.name_len > TCG_EVENT_NAME_LEN_MAX) {
@@ -1997,10 +2006,9 @@ static int ima_measurement(const char *file)
 			ima_ng_show(&entry);
 	}
 
-	if (read_tpm_banks(num_banks, tpm_banks) != 0) {
-		err = 0;
+	if (tpmbanks == 0)
 		log_info("Failed to read any TPM PCRs\n");
-	} else {
+	else {
 		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
 		if (!err)
 			log_info("Matched per TPM bank calculated digest(s).\n");
