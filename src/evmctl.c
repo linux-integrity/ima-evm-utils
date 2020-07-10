@@ -125,7 +125,7 @@ static char *caps_str;
 static char *ima_str;
 static char *selinux_str;
 static char *search_type;
-static int measurement_list;
+static int verify_list_sig;
 static int recursive;
 static int msize;
 static dev_t fs_dev;
@@ -1565,7 +1565,7 @@ void ima_ng_show(struct template_entry *entry)
 			log_info(" ");
 			log_dump(sig, sig_len);
 		}
-		if (measurement_list)
+		if (verify_list_sig)
 			err = ima_verify_signature(path, sig, sig_len,
 						   digest, digest_len);
 		else
@@ -2365,7 +2365,7 @@ static void usage(void)
 		"      --ima          use custom IMA signature for EVM\n"
 		"      --selinux      use custom Selinux label for EVM\n"
 		"      --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)\n"
-		"      --list         measurement list verification\n"
+		"      --verify-sig   verify measurement list signatures\n"
 		"      --engine e     preload OpenSSL engine e (such as: gost)\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
@@ -2383,7 +2383,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] [--pcrs file] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] [--verify-sig [--key key1, key2, ...]] [--pcrs file] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[file]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2419,7 +2419,7 @@ static struct option opts[] = {
 	{"ima", 1, 0, 135},
 	{"selinux", 1, 0, 136},
 	{"caps", 2, 0, 137},
-	{"list", 0, 0, 138},
+	{"verify-sig", 0, 0, 138},
 	{"engine", 1, 0, 139},
 	{"xattr-user", 0, 0, 140},
 	{"validate", 0, 0, 141},
@@ -2584,7 +2584,7 @@ int main(int argc, char *argv[])
 			hmac_flags |= HMAC_FLAG_CAPS_SET;
 			break;
 		case 138:
-			measurement_list = 1;
+			verify_list_sig = 1;
 			break;
 		case 139: /* --engine e */
 			eng = ENGINE_by_id(optarg);
