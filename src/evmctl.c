@@ -1880,6 +1880,7 @@ static int ima_measurement(const char *file)
 
 	struct template_entry entry = { .template = 0 };
 	FILE *fp;
+	int err_padded = -1;
 	int err = -1;
 
 	errno = 0;
@@ -2004,24 +2005,34 @@ static int ima_measurement(const char *file)
 			ima_show(&entry);
 		else
 			ima_ng_show(&entry);
+
+		if (!tpmbanks)
+			continue;
+
+		/* The measurement list might contain too many entries,
+		 * compare the re-calculated TPM PCR values after each
+		 * extend.
+		 */
+		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
+		if (!err)
+			break;
+
+		/* Compare against original SHA1 zero padded TPM PCR values */
+		err_padded = compare_tpm_banks(num_banks, pseudo_padded_banks,
+					       tpm_banks);
+		if (!err_padded)
+			break;
 	}
 
 	if (tpmbanks == 0)
 		log_info("Failed to read any TPM PCRs\n");
 	else {
-		err = compare_tpm_banks(num_banks, pseudo_banks, tpm_banks);
 		if (!err)
 			log_info("Matched per TPM bank calculated digest(s).\n");
-
-		/* On failure, check older SHA1 zero padded hashes */
-		if (err) {
-			err = compare_tpm_banks(num_banks, pseudo_padded_banks,
-						tpm_banks);
-			if (!err)
-				log_info("Matched SHA1 padded TPM digest(s).\n");
-		}
-
-		if (err)
+		else if (!err_padded) {
+			log_info("Matched SHA1 padded TPM digest(s).\n");
+			err = 0;
+		} else
 			log_info("Failed to match per TPM bank or SHA1 padded TPM digest(s).\n");
 	}
 
