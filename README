@@ -31,7 +31,7 @@ COMMANDS
  ima_sign [--sigfile] [--key key] [--pass password] file
  ima_verify file
  ima_hash file
- ima_measurement [--verify-sig [--key "key1, key2, ..."]] file
+ ima_measurement [--validate] [--verify] [--verify-sig [--key "key1, key2, ..."]]  [--pcrs file] file
  ima_fix [-t fdsxm] path
  sign_hash [--key key] [--pass password]
  hmac [--imahash | --imasig ] file
@@ -59,6 +59,9 @@ OPTIONS
       --m32          force EVM hmac/signature for 32 bit target system
       --m64          force EVM hmac/signature for 64 bit target system
       --engine e     preload OpenSSL engine e (such as: gost)
+      --pcrs         file containing TPM 1.2 pcrs
+      --validate     ignore ToMToU measurement violations
+      --verify       verify the template data digest
       --verify-sig   verify the file signature based on the file hash, both
                      stored in the template data.
   -v                 increase verbosity level
