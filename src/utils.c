@@ -1,3 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * utils: set of common functions
+ *
+ * Copyright (C) 2020 Patrick Uiterwijk <patrick@puiterwijk.org>
+ * Copyright (C) 2010 Cyril Hrubis <chrubis@suse.cz>
+ */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
