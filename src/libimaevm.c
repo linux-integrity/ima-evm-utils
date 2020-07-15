@@ -323,7 +323,8 @@ EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
 
 	fp = fopen(keyfile, "r");
 	if (!fp) {
-		log_err("Failed to open keyfile: %s\n", keyfile);
+		if (imaevm_params.verbose > LOG_INFO)
+			log_info("Failed to open keyfile: %s\n", keyfile);
 		return NULL;
 	}
 
