@@ -1380,7 +1380,7 @@ static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
 static int tpm_pcr_read(struct tpm_bank_info *tpm_banks, int len)
 {
 	FILE *fp = NULL;
-	char *p, pcr_str[7], buf[70]; /* length of the TPM string */
+	char *p, pcr_str[8], buf[70]; /* length of the TPM string */
 	int result = -1;
 	int i = 0;
 
@@ -1399,7 +1399,7 @@ static int tpm_pcr_read(struct tpm_bank_info *tpm_banks, int len)
 
 	for (;;) {
 		p = fgets(buf, sizeof(buf), fp);
-		if (!p)
+		if (!p || i > 99)
 			break;
 		sprintf(pcr_str, "PCR-%2.2d", i);
 		if (!strncmp(p, pcr_str, 6))
@@ -1980,11 +1980,21 @@ static int ima_measurement(const char *file)
 			 * in the template data hash calculation.
 			 */
 			len = fread(&field_len, sizeof(field_len), 1, fp);
-			if (field_len > TCG_EVENT_NAME_LEN_MAX)
+			if (len <= 0) {
+				log_errno("Failed reading file name length\n");
+				goto out;
+			}
+			if (field_len > TCG_EVENT_NAME_LEN_MAX) {
 				log_err("file pathname is too long\n");
+				goto out;
+			}
 
-			fread(entry.template + SHA_DIGEST_LENGTH,
-			      field_len, 1, fp);
+			len = fread(entry.template + SHA_DIGEST_LENGTH,
+				    field_len, 1, fp);
+			if (len != 1) {
+				log_errno("Failed reading file name\n");
+				goto out;
+			}
 
 			/*
 			 * The template data is fixed sized, zero out
@@ -2069,6 +2079,7 @@ static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
 	FILE *fp;
 	SHA_CTX c;
 	int err = 0;
+	int len;
 	int i;
 
 	fp = fopen(file, "r");
@@ -2100,7 +2111,11 @@ static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
 			err = 1;
 			break;
 		}
-		fread(event.data, event.header.len, 1, fp);
+		len = fread(event.data, event.header.len, 1, fp);
+		if (len != 1) {
+			log_errno("Failed reading event data (short read)\n");
+			break;
+		}
 	}
 	fclose(fp);
 
