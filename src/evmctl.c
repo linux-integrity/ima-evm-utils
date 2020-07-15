@@ -2265,7 +2265,8 @@ static int cmd_ima_bootaggr(struct command *cmd)
 		bootaggr_len += strlen(tpm_banks[i].algo_name) + 1;
 		bootaggr_len += (tpm_banks[i].digest_size * 2) + 1;
 	}
-	bootaggr = malloc(bootaggr_len);
+	/* Make room for the trailing null */
+	bootaggr = malloc(bootaggr_len + 1);
 
 	/*
 	 * Calculate and convert the per TPM 2.0 PCR bank algorithm
@@ -2279,6 +2280,7 @@ static int cmd_ima_bootaggr(struct command *cmd)
 		calc_bootaggr(&tpm_banks[i]);
 		offset += append_bootaggr(bootaggr + offset, tpm_banks + i);
 	}
+	bootaggr[bootaggr_len] = '\0';
 	printf("%s", bootaggr);
 	free(bootaggr);
 	return 0;
