@@ -39,16 +39,32 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
 #include <openssl/sha.h>
 
+#define USE_FPRINTF
 #include "utils.h"
+#include "imaevm.h"
+
+#define CMD "tsspcrread"
+
+static char path[PATH_MAX];
 
 int tpm2_pcr_supported(void)
 {
+	if (imaevm_params.verbose > LOG_INFO)
+		log_info("Using %s to read PCRs.\n", CMD);
+
+	if (get_cmd_path(CMD, path, sizeof(path))) {
+		log_debug("Couldn't find '%s' in $PATH", CMD);
+		return 0;
+	}
+
+	log_debug("Found '%s' in $PATH", CMD);
 	return 1;
 }
 
@@ -57,11 +73,11 @@ int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
 {
 	FILE *fp;
 	char pcr[100];	/* may contain an error */
-	char cmd[50];
+	char cmd[PATH_MAX + 50];
 	int ret;
 
-	sprintf(cmd, "tsspcrread -halg %s -ha %d -ns 2> /dev/null",
-		algo_name, idx);
+	sprintf(cmd, "%s -halg %s -ha %d -ns 2> /dev/null",
+		path, algo_name, idx);
 	fp = popen(cmd, "r");
 	if (!fp) {
 		ret = asprintf(errmsg, "popen failed: %s", strerror(errno));

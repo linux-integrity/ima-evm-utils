@@ -44,15 +44,25 @@
 #include <openssl/sha.h>
 
 #ifdef HAVE_LIBTSS2_ESYS
-#include <tss2/tss2_esys.h>
+# include <tss2/tss2_esys.h>
 
-#ifdef HAVE_LIBTSS2_RC
-#include <tss2/tss2_rc.h>
-#endif
-#endif
+# ifdef HAVE_LIBTSS2_RC
+#  include <tss2/tss2_rc.h>
+#  define LIB "tss2-rc-decode"
+# else
+#  define LIB "tss2-esys"
+# endif
+
+#endif /* HAVE_LIBTSS2_ESYS */
+
+#define USE_FPRINTF
+#include "imaevm.h"
 
 int tpm2_pcr_supported(void)
 {
+	if (imaevm_params.verbose > LOG_INFO)
+		log_info("Using %s to read PCRs.\n", LIB);
+
 	return 1;
 }
 

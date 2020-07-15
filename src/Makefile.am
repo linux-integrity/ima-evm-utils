@@ -25,11 +25,7 @@ evmctl_LDADD =  $(LIBCRYPTO_LIBS) -lkeyutils libimaevm.la
 if USE_PCRTSS
 evmctl_SOURCES += pcr_tss.c
 else
-if USE_PCRTSSPCRREAD
 evmctl_SOURCES += pcr_tsspcrread.c
-else
-evmctl_SOURCES += pcr_none.c
-endif
 endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -include config.h
