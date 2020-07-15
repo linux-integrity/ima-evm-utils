@@ -2180,7 +2180,7 @@ out:
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
 	EVP_MD_CTX_free(pctx);
 #endif
-
+	return;
 }
 
 /*
