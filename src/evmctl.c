@@ -2156,7 +2156,7 @@ static void calc_bootaggr(struct tpm_bank_info *bank)
 		err = EVP_DigestUpdate(pctx, bank->pcr[i], bank->digest_size);
 		if (!err) {
 			log_err("EVP_DigestUpdate() failed\n");
-			return;
+			goto out;
 		}
 	}
 
@@ -2165,7 +2165,7 @@ static void calc_bootaggr(struct tpm_bank_info *bank)
 			err = EVP_DigestUpdate(pctx, bank->pcr[i], bank->digest_size);
 			if (!err) {
 				log_err("EVP_DigestUpdate() failed\n");
-				return;
+				goto out;
 			}
 		}
 	}
