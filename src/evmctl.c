@@ -1379,14 +1379,26 @@ static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
 /* Read all of the TPM 1.2 PCRs */
 static int tpm_pcr_read(struct tpm_bank_info *tpm_banks, int len)
 {
+	struct stat s;
 	FILE *fp = NULL;
 	char *p, pcr_str[8], buf[70]; /* length of the TPM string */
 	int result = -1;
 	int i = 0;
 
 	/* Use the provided TPM 1.2 pcrs file */
-	if (pcrfile)
+	if (pcrfile) {
+		if (stat(pcrfile, &s) == -1) {
+			errno = 0;
+			return 1;
+		}
+
+		if (!S_ISREG(s.st_mode)) {
+			log_info("TPM 1.2 PCR file: not a regular file or link to regular file\n");
+			return 1;
+		}
+
 		fp = fopen(pcrfile, "r");
+	}
 
 	if (!fp)
 		fp = fopen(pcrs, "r");
