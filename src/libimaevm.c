@@ -512,8 +512,9 @@ static int verify_hash_v2(const char *file, const unsigned char *hash, int size,
 	if (!pkey) {
 		uint32_t keyid = hdr->keyid;
 
-		log_info("%s: verification failed: unknown keyid %x\n",
-			 file, __be32_to_cpup(&keyid));
+		if (imaevm_params.verbose > LOG_INFO)
+			log_info("%s: verification failed: unknown keyid %x\n",
+				 file, __be32_to_cpup(&keyid));
 		return -1;
 	}
 
