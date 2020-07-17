@@ -2076,11 +2076,22 @@ static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
 		} header;
 		unsigned char data[MAX_EVENT_DATA_SIZE];
 	} event;
+	struct stat s;
 	FILE *fp;
 	SHA_CTX c;
 	int err = 0;
 	int len;
 	int i;
+
+	if (stat(file, &s) == -1) {
+		errno = 0;
+		return 1;
+	}
+
+	if (!S_ISREG(s.st_mode)) {
+		log_info("Bios event log: not a regular file or link to regular file\n");
+		return 1;
+	}
 
 	fp = fopen(file, "r");
 	if (!fp) {
