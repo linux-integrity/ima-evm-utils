@@ -1444,14 +1444,21 @@ static int verify = 0;
 static int ima_verify_template_hash(struct template_entry *entry)
 {
 	uint8_t digest[SHA_DIGEST_LENGTH];
+	static int line = 0;
+
+	line++;
 
 	if (!memcmp(zero, entry->header.digest, sizeof(digest)))
 		return 0;
 
 	SHA1(entry->template, entry->template_len, digest);
 
-	if (memcmp(digest, entry->header.digest, sizeof(digest)))
+	if (memcmp(digest, entry->header.digest, sizeof(digest))) {
+		if (imaevm_params.verbose > LOG_INFO)
+			log_info("Failed to verify template data digest(line %d).\n",
+				  line);
 		return 1;
+	}
 
 	return 0;
 }
@@ -1892,6 +1899,7 @@ static int ima_measurement(const char *file)
 
 	struct template_entry entry = { .template = 0 };
 	FILE *fp;
+	int verified_template_digest = 0;
 	int err_padded = -1;
 	int err = -1;
 
@@ -2020,8 +2028,12 @@ static int ima_measurement(const char *file)
 		extend_tpm_banks(&entry, num_banks, pseudo_banks,
 				 pseudo_padded_banks);
 
-		if (verify)
-			ima_verify_template_hash(&entry);
+		/* Recalculate and verify template data digest */
+		if (verify) {
+			err = ima_verify_template_hash(&entry);
+			if (err)
+				verified_template_digest = 1;
+		}
 
 		if (is_ima_template)
 			ima_show(&entry);
@@ -2056,6 +2068,11 @@ static int ima_measurement(const char *file)
 			err = 0;
 		} else
 			log_info("Failed to match per TPM bank or SHA1 padded TPM digest(s).\n");
+	}
+
+	if (verified_template_digest) {
+		log_info("Failed to verify template data digest.\n");
+		err = 1;
 	}
 
 out:
