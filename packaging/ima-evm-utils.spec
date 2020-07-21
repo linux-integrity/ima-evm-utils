@@ -1,5 +1,5 @@
 Name:		ima-evm-utils
-Version:	1.2
+Version:	1.3
 Release:	1%{?dist}
 Summary:	ima-evm-utils - IMA/EVM control utility
 Group:		System/Libraries
