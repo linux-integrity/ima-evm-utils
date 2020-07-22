@@ -68,14 +68,17 @@ int tpm2_pcr_supported(void)
 
 static int pcr_selections_match(TPML_PCR_SELECTION *a, TPML_PCR_SELECTION *b)
 {
+	int i, j;
+
 	if (a->count != b->count)
 		return 0;
-	for (int i = 0; i < a->count; i++) {
+
+	for (i = 0; i < a->count; i++) {
 		if (a->pcrSelections[i].hash != b->pcrSelections[i].hash)
 			return 0;
 		if (a->pcrSelections[i].sizeofSelect != b->pcrSelections[i].sizeofSelect)
 			return 0;
-		for (int j = 0; j < a->pcrSelections[i].sizeofSelect; j++) {
+		for (j = 0; j < a->pcrSelections[i].sizeofSelect; j++) {
 			if (a->pcrSelections[i].pcrSelect[j] != b->pcrSelections[i].pcrSelect[j])
 				return 0;
 		}
