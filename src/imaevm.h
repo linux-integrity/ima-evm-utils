@@ -46,7 +46,7 @@
 #include <syslog.h>
 #include <stdbool.h>
 #include <errno.h>
-
+#include <sys/types.h>
 #include <openssl/rsa.h>
 
 #ifdef USE_FPRINTF
