@@ -160,7 +160,10 @@ struct tpm_bank_info {
 	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
 };
 
-static char *pcrfile;
+/* One --pcrs file per hash-algorithm/bank */
+#define MAX_PCRFILE 2
+static char *pcrfile[MAX_PCRFILE];
+static unsigned npcrfile;
 
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
 {
@@ -1373,55 +1376,6 @@ static int cmd_ima_clear(struct command *cmd)
 	return do_cmd(cmd, ima_clear);
 }
 
-static char *pcrs = "/sys/class/tpm/tpm0/device/pcrs";  /* Kernels >= 4.0 */
-static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
-
-/* Read all of the TPM 1.2 PCRs */
-static int tpm_pcr_read(struct tpm_bank_info *tpm_banks, int len)
-{
-	struct stat s;
-	FILE *fp = NULL;
-	char *p, pcr_str[8], buf[70]; /* length of the TPM string */
-	int result = -1;
-	int i = 0;
-
-	/* Use the provided TPM 1.2 pcrs file */
-	if (pcrfile) {
-		if (stat(pcrfile, &s) == -1) {
-			errno = 0;
-			return 1;
-		}
-
-		if (!S_ISREG(s.st_mode)) {
-			log_info("TPM 1.2 PCR file: not a regular file or link to regular file\n");
-			return 1;
-		}
-
-		fp = fopen(pcrfile, "r");
-	}
-
-	if (!fp)
-		fp = fopen(pcrs, "r");
-
-	if (!fp)
-		fp = fopen(misc_pcrs, "r");
-
-	if (!fp)
-		return -1;
-
-	for (;;) {
-		p = fgets(buf, sizeof(buf), fp);
-		if (!p || i > 99)
-			break;
-		sprintf(pcr_str, "PCR-%2.2d", i);
-		if (!strncmp(p, pcr_str, 6))
-			hex2bin(tpm_banks[0].pcr[i++], p + 7, len);
-		result = 0;
-	}
-	fclose(fp);
-	return result;
-}
-
 #define TCG_EVENT_NAME_LEN_MAX	255
 
 struct template_entry {
@@ -1829,19 +1783,107 @@ static void extend_tpm_banks(struct template_entry *entry, int num_banks,
 #endif
 }
 
-/* Read TPM 1.2 PCRs */
-static int read_tpm_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
+static int read_one_bank(struct tpm_bank_info *tpm_bank, FILE *fp)
 {
-	int i;
-
-	if (tpm_pcr_read(tpm_banks, SHA_DIGEST_LENGTH)) {
-		log_debug("Failed to read TPM 1.2 PCRs.\n");
-		return -1;
+	char *p, pcr_str[8], buf[MAX_DIGEST_SIZE * 2 + 8];
+	int i = 0;
+	int result = -1;
+	for (;;) {
+		p = fgets(buf, sizeof(buf), fp);
+		if (!p || i >= NUM_PCRS)
+			break;
+		sprintf(pcr_str, "PCR-%2.2d", i);
+		if (!strncmp(p, pcr_str, 6))
+			hex2bin(tpm_bank->pcr[i++], p + 7, tpm_bank->digest_size);
+		result = 0;
 	}
+	return result;
+}
 
+static char *pcrs = "/sys/class/tpm/tpm0/device/pcrs";  /* Kernels >= 4.0 */
+static char *misc_pcrs = "/sys/class/misc/tpm0/device/pcrs";
+
+/* Read one of the TPM 1.2 sysfs files if present */
+static int read_sysfs_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
+{
+	FILE *fp;
+	int i, result;
+
+	fp = fopen(pcrs, "r");
+	if (!fp)
+		fp = fopen(misc_pcrs, "r");
+	if (!fp)
+		return -1;
+
+	result = read_one_bank(&tpm_banks[0], fp);
+	fclose(fp);
+	if (result < 0)
+		return result;
 	tpm_banks[0].supported = 1;
 	for (i = 1; i < num_banks; i++)
 		tpm_banks[i].supported = 0;
+	return 0;
+
+}
+
+/* Read PCRs from per-bank file(s) specified via --pcrs */
+static int read_file_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
+{
+	struct stat s;
+	FILE *fp;
+	char *p;
+	const char *alg, *path;
+	int i, j, bank, result;
+
+	for (i = 0; i < num_banks; i++)
+		tpm_banks[i].supported = 0;
+
+	for (i = 0; i < npcrfile; i++) {
+		p = strchr(pcrfile[i], ',');
+		if (p) {
+			*p = 0;
+			alg = pcrfile[i];
+			path = ++p;
+		} else {
+			alg = "sha1";
+			path = pcrfile[i];
+		}
+
+		bank = -1;
+		for (j = 0; j < num_banks; j++) {
+			if (!strcmp(tpm_banks[j].algo_name, alg)) {
+				bank = j;
+				break;
+			}
+		}
+		if (bank < 0) {
+			log_err("Unknown algorithm '%s'\n", alg);
+			return -1;
+		}
+
+		if (stat(path, &s) == -1) {
+			log_err("Could not stat '%s'\n", path);
+			return -1;
+		}
+
+		if (!S_ISREG(s.st_mode)) {
+			log_err("PCR file: not a regular file or link to regular file\n");
+			return -1;
+		}
+
+		fp = fopen(path, "r");
+		if (!fp) {
+			log_err("Could not open '%s'\n", path);
+			return -1;
+		}
+
+		result = read_one_bank(&tpm_banks[bank], fp);
+		fclose(fp);
+		if (result < 0)
+			return result;
+		tpm_banks[bank].supported = 1;
+	}
+
 	return 0;
 }
 
@@ -1857,8 +1899,12 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 	int i, j;
 	int err;
 
-	/* First try reading PCRs from exported TPM 1.2 sysfs file */
-	if (read_tpm_pcrs(num_banks, bank) == 0)
+	/* If --pcrs was specified, read only from the specified file(s) */
+	if (npcrfile)
+		return read_file_pcrs(num_banks, bank);
+
+	/* Else try reading PCRs from the sysfs file if present */
+	if (read_sysfs_pcrs(num_banks, bank) == 0)
 		return 0;
 
 	/* Any userspace applications available for reading TPM 2.0 PCRs? */
@@ -2440,7 +2486,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] [--verify-sig [--key key1, key2, ...]] [--pcrs file] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[file]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2667,7 +2713,11 @@ int main(int argc, char *argv[])
 			verify = 1;
 			break;
 		case 143:
-			pcrfile = optarg;
+			if (npcrfile >= MAX_PCRFILE) {
+				log_err("too many --pcrfile options\n");
+				exit(1);
+			}
+			pcrfile[npcrfile++] = optarg;
 			break;
 		case '?':
 			exit(1);

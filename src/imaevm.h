@@ -203,7 +203,7 @@ struct RSA_ASN1_template {
 	size_t size;
 };
 
-#define	NUM_PCRS 20
+#define	NUM_PCRS 24
 #define DEFAULT_PCR 10
 
 extern struct libimaevm_params imaevm_params;
