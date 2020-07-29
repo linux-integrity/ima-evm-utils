@@ -1393,7 +1393,6 @@ struct template_entry {
 static uint8_t zero[MAX_DIGEST_SIZE];
 
 static int validate = 0;
-static int verify = 0;
 
 static int ima_verify_template_hash(struct template_entry *entry)
 {
@@ -1945,7 +1944,7 @@ static int ima_measurement(const char *file)
 
 	struct template_entry entry = { .template = 0 };
 	FILE *fp;
-	int verified_template_digest = 0;
+	int invalid_template_digest = 0;
 	int err_padded = -1;
 	int err = -1;
 
@@ -2075,11 +2074,9 @@ static int ima_measurement(const char *file)
 				 pseudo_padded_banks);
 
 		/* Recalculate and verify template data digest */
-		if (verify) {
-			err = ima_verify_template_hash(&entry);
-			if (err)
-				verified_template_digest = 1;
-		}
+		err = ima_verify_template_hash(&entry);
+		if (err)
+			invalid_template_digest = 1;
 
 		if (is_ima_template)
 			ima_show(&entry);
@@ -2116,7 +2113,7 @@ static int ima_measurement(const char *file)
 			log_info("Failed to match per TPM bank or SHA1 padded TPM digest(s).\n");
 	}
 
-	if (verified_template_digest) {
+	if (invalid_template_digest) {
 		log_info("Failed to verify template data digest.\n");
 		err = 1;
 	}
@@ -2486,7 +2483,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[file]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2526,8 +2523,7 @@ static struct option opts[] = {
 	{"engine", 1, 0, 139},
 	{"xattr-user", 0, 0, 140},
 	{"validate", 0, 0, 141},
-	{"verify", 0, 0, 142},
-	{"pcrs", 1, 0, 143},
+	{"pcrs", 1, 0, 142},
 	{}
 
 };
@@ -2709,10 +2705,7 @@ int main(int argc, char *argv[])
 		case 141: /* --validate */
 			validate = 1;
 			break;
-		case 142: /* --verify */
-			verify = 1;
-			break;
-		case 143:
+		case 142:
 			if (npcrfile >= MAX_PCRFILE) {
 				log_err("too many --pcrfile options\n");
 				exit(1);
