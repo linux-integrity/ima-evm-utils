@@ -1392,7 +1392,7 @@ struct template_entry {
 
 static uint8_t zero[MAX_DIGEST_SIZE];
 
-static int validate = 0;
+static int ignore_violations = 0;
 
 static int ima_verify_template_hash(struct template_entry *entry)
 {
@@ -1739,7 +1739,7 @@ static void extend_tpm_banks(struct template_entry *entry, int num_banks,
 		 * size.
 		 */
 		if (memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH) == 0) {
-			if (!validate) {
+			if (!ignore_violations) {
 				memset(bank[i].digest, 0x00, bank[i].digest_size);
 				memset(padded_bank[i].digest, 0x00, padded_bank[i].digest_size);
 			} else {
@@ -2467,6 +2467,7 @@ static void usage(void)
 		"      --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)\n"
 		"      --verify-sig   verify measurement list signatures\n"
 		"      --engine e     preload OpenSSL engine e (such as: gost)\n"
+		"      --ignore-violations ignore ToMToU measurement violations"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n");
@@ -2483,7 +2484,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--validate] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--ignore-violations] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[file]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2522,7 +2523,7 @@ static struct option opts[] = {
 	{"verify-sig", 0, 0, 138},
 	{"engine", 1, 0, 139},
 	{"xattr-user", 0, 0, 140},
-	{"validate", 0, 0, 141},
+	{"ignore-violations", 0, 0, 141},
 	{"pcrs", 1, 0, 142},
 	{}
 
@@ -2702,8 +2703,8 @@ int main(int argc, char *argv[])
 			xattr_ima = "user.ima";
 			xattr_evm = "user.evm";
 			break;
-		case 141: /* --validate */
-			validate = 1;
+		case 141: /* --ignore-violations */
+			ignore_violations = 1;
 			break;
 		case 142:
 			if (npcrfile >= MAX_PCRFILE) {
