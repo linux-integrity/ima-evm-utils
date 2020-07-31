@@ -1,0 +1,18 @@
+language: C
+addons:
+ apt:
+  packages:
+   - libkeyutils-dev
+   - libattr1-dev
+   - attr
+   - openssl
+   - libssl-dev
+   - asciidoc
+   - xsltproc
+   - docbook-xsl
+   - docbook-xml
+script:
+   - autoreconf -i && ./configure && make -j$(nproc) && sudo make install && VERBOSE=1 make check TESTS="ima_hash.test sign_verify.test";
+
+   - tail -3 tests/ima_hash.log;
+   - tail -3 tests/sign_verify.log;
