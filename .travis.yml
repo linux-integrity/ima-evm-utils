@@ -11,6 +11,8 @@ addons:
    - xsltproc
    - docbook-xsl
    - docbook-xml
+install:
+   - ./tests/install-swtpm.sh
 script:
    - autoreconf -i && ./configure && make -j$(nproc) && sudo make install && VERBOSE=1 make check TESTS="ima_hash.test sign_verify.test";
 
