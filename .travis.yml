@@ -11,12 +11,27 @@ addons:
    - xsltproc
    - docbook-xsl
    - docbook-xml
+matrix:
+   include:
+     - env: TSS=ibmtss
+     - env: TSS=tpm2-tss
 install:
+   - if [ "${TSS}" = "tpm2-tss" ]; then
+           sudo apt-get install lcov pandoc autoconf-archive liburiparser-dev;
+           sudo apt-get install libdbus-1-dev libglib2.0-dev dbus-x11 libgcrypt-dev;
+           sudo apt-get install libssl-dev doxygen libjson-c-dev;
+           sudo apt-get install libini-config-dev libltdl-dev;
+           sudo apt-get install uuid-dev libcurl4-openssl-dev;
+          ./tests/install-tpm2-tss.sh;
+     fi
    - ./tests/install-swtpm.sh
    - ./tests/install-tss.sh
+
 script:
+   - export LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib;
+   - export PATH=$PATH:/usr/local/bin;
    - autoreconf -i && ./configure && make -j$(nproc) && sudo make install && VERBOSE=1 make check;
 
    - tail -3 tests/ima_hash.log;
    - tail -3 tests/sign_verify.log;
-   - tail -3 tests/boot_aggregate.log;
+   - tail -20 tests/boot_aggregate.log;
