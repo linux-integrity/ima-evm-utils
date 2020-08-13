@@ -1,4 +1,4 @@
-dnl Copyright (c) 2018 Petr Vorel <pvorel@suse.cz>
+dnl Copyright (c) 2018-2020 Petr Vorel <pvorel@suse.cz>
 dnl Find docbook manpage stylesheet
 
 AC_DEFUN([EVMCTL_MANPAGE_DOCBOOK_XSL], [
@@ -19,7 +19,7 @@ AC_DEFUN([EVMCTL_MANPAGE_DOCBOOK_XSL], [
 	if test "x${XMLCATALOG}" != "x" -a "x$have_xmlcatalog_file" = "xyes"; then
 		DOCBOOK_XSL_URI="http://docbook.sourceforge.net/release/xsl/current"
 		DOCBOOK_XSL_PATH="manpages/docbook.xsl"
-		MANPAGE_DOCBOOK_XSL=$(${XMLCATALOG} ${XML_CATALOG_FILE} ${DOCBOOK_XSL_URI}/${DOCBOOK_XSL_PATH} | sed -n 's|^file:/\+|/|p;q')
+		MANPAGE_DOCBOOK_XSL=$(${XMLCATALOG} ${XML_CATALOG_FILE} ${DOCBOOK_XSL_URI}/${DOCBOOK_XSL_PATH} | sed 's|^file:/\+|/|')
 	fi
 	if test "x${MANPAGE_DOCBOOK_XSL}" = "x"; then
 		MANPAGE_DOCBOOK_XSL="/usr/share/xml/docbook/stylesheet/docbook-xsl/manpages/docbook.xsl"
