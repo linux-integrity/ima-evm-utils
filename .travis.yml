@@ -1,38 +1,78 @@
 dist: bionic
 language: C
-addons:
- apt:
-  packages:
-   - libkeyutils-dev
-   - libattr1-dev
-   - attr
-   - openssl
-   - libssl-dev
-   - asciidoc
-   - xsltproc
-   - docbook-xsl
-   - docbook-xml
+services:
+    - docker
+
 matrix:
-   include:
-     - env: TSS=ibmtss
-     - env: TSS=tpm2-tss
-install:
-   - if [ "${TSS}" = "tpm2-tss" ]; then
-           sudo apt-get install lcov pandoc autoconf-archive liburiparser-dev;
-           sudo apt-get install libdbus-1-dev libglib2.0-dev dbus-x11 libgcrypt-dev;
-           sudo apt-get install libssl-dev doxygen libjson-c-dev;
-           sudo apt-get install libini-config-dev libltdl-dev;
-           sudo apt-get install uuid-dev libcurl4-openssl-dev;
-          ./tests/install-tpm2-tss.sh;
-     fi
-   - ./tests/install-swtpm.sh
-   - ./tests/install-tss.sh
+    include:
+        # 32 bit build
+        - os: linux
+          env: DISTRO=debian:stable VARIANT=i386 ARCH=i386 TSS=tpm2-tss
+          compiler: gcc
+
+        # cross compilation builds
+        - os: linux
+          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=ppc64el TSS=ibmtss
+          compiler: powerpc64le-linux-gnu-gcc
+
+        - os: linux
+          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=arm64 TSS=tpm2-tss
+          compiler: aarch64-linux-gnu-gcc
+
+        - os: linux
+          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=s390x TSS=ibmtss
+          compiler: s390x-linux-gnu-gcc
+
+        # musl
+        - os: linux
+          env: DISTRO=alpine:latest TSS=tpm2-tss
+          compiler: gcc
+
+        # glibc (gcc/clang)
+        - os: linux
+          env: DISTRO=opensuse/tumbleweed TSS=ibmtss
+          compiler: clang
+
+        - os: linux
+          env: DISTRO=opensuse/leap TSS=tpm2-tss
+          compiler: gcc
+
+        - os: linux
+          env: DISTRO=ubuntu:eoan TSS=ibmtss
+          compiler: gcc
+
+        - os: linux
+          env: DISTRO=ubuntu:xenial TSS=tpm2-tss
+          compiler: clang
+
+        - os: linux
+          env: DISTRO=fedora:latest TSS=ibmtss
+          compiler: clang
+
+        - os: linux
+          env: DISTRO=centos:7 TSS=tpm2-tss
+          compiler: gcc
+
+        - os: linux
+          env: DISTRO=centos:latest TSS=tpm2-tss
+          compiler: clang
+
+        - os: linux
+          env: DISTRO=debian:testing TSS=tpm2-tss
+          compiler: clang
+
+        - os: linux
+          env: DISTRO=debian:stable TSS=ibmtss
+          compiler: gcc
+
+before_install:
+    - df -hT
+    - DIR="/usr/src/ima-evm-utils"
+    - printf "FROM $DISTRO\nRUN mkdir -p $DIR\nWORKDIR $DIR\nCOPY . $DIR\n" > Dockerfile
+    - cat Dockerfile
+    - docker build -t ima-evm-utils .
 
 script:
-   - export LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib;
-   - export PATH=$PATH:/usr/local/bin;
-   - autoreconf -i && ./configure && make -j$(nproc) && sudo make install && VERBOSE=1 make check;
-
-   - tail -3 tests/ima_hash.log;
-   - tail -3 tests/sign_verify.log;
-   - tail -20 tests/boot_aggregate.log;
+    - INSTALL="${DISTRO%%:*}"
+    - INSTALL="${INSTALL%%/*}"
+    - docker run -t ima-evm-utils /bin/sh -c "cd travis && if [ \"$VARIANT\" ]; then ARCH=\"$ARCH\" ./$INSTALL.$VARIANT.sh; fi && ARCH=\"$ARCH\" CC=\"$CC\" TSS=\"$TSS\" ./$INSTALL.sh && if [ ! \"$VARIANT\" ]; then which tpm_server || ../tests/install-swtpm.sh; fi && CC=\"$CC\" VARIANT=\"$VARIANT\" ../build.sh"
