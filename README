@@ -28,6 +28,7 @@ COMMANDS
  import [--rsa] pubkey keyring
  sign [-r] [--imahash | --imasig ] [--portable] [--key key] [--pass password] file
  verify file
+ ima_boot_aggregate [--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log]
  ima_sign [--sigfile] [--key key] [--pass password] file
  ima_verify file
  ima_hash file

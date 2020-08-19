@@ -33,11 +33,15 @@ else
 	ASCII_RUNTIME_MEASUREMENTS="./sample-ascii_runtime_measurements-pcrs-8-9"
 	export TPM_INTERFACE_TYPE="socsim"
 	export TPM_COMMAND_PORT=2321
+	export TPM_PLATFORM_PORT=2322
+	export TPM_SERVER_NAME="localhost"
+	export TPM_SERVER_TYPE="raw"
+
 fi
 
 # Only stop this test's software TPM.  Preferred method: "tsstpmcmd -stop"
 cleanup() {
-	if [ ! -z "${SWTPM_PPID}" ]; then
+	if [ -n "${SWTPM_PPID}" ]; then
 		if [ -f "${TSSDIR}/tsstpmcmd" ]; then
 			"${TSSDIR}/tsstpmcmd" -stop
 		else
@@ -48,22 +52,36 @@ cleanup() {
 
 # Try to start a software TPM if needed.
 swtpm_start() {
-	local swtpm
+	local swtpm swtpm1
 
 	swtpm="$(which tpm_server)"
-	if [ -z "${swtpm}" ]; then
-		echo "${CYAN}SKIP: Softare TPM (tpm_server) not found${NORM}"
+	swtpm1="$(which swtpm)"
+	if [ -z "${swtpm}" ] && [ -z "${swtpm1}" ]; then
+		echo "${CYAN}SKIP: Softare TPM (tpm_server and swtpm) not found${NORM}"
 		return "$SKIP"
 	fi
 
-	pgrep tpm_server
-	if [ $? -eq 0 ]; then
-		echo "INFO: Software TPM (tpm_server) already running"
-		return 114
-	else
-		echo "INFO: Starting software TPM: ${swtpm}"
-		${swtpm} > /dev/null 2>&1 &
-		SWTPM_PPID=$!
+	if [ -n "${swtpm1}" ]; then
+		pgrep swtpm1
+		if [ $? -eq 0 ]; then
+			echo "INFO: Software TPM (swtpm) already running"
+			return 114
+		else
+			echo "INFO: Starting software TPM: ${swtpm1}"
+			mkdir ./myvtpm
+			${swtpm1} socket --tpmstate dir=./myvtpm --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init > /dev/null 2>&1 &
+			SWTPM_PPID=$!
+		fi
+	elif [ -n "${swtpm}" ]; then
+		pgrep swtpm
+		if [ $? -eq 0 ]; then
+			echo "INFO: Software TPM (tpm_server) already running"
+			return 114
+		else
+			echo "INFO: Starting software TPM: ${swtpm}"
+			${swtpm} > /dev/null 2>&1 &
+			SWTPM_PPID=$!
+		fi
 	fi
 	return 0
 }

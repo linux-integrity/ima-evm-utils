@@ -18,7 +18,14 @@
 cd "$(dirname "$0")" || exit 1
 PATH=../src:$PATH
 source ./functions.sh
-_require evmctl openssl xxd getfattr
+
+_require cmp evmctl getfattr openssl xxd
+
+if cmp -b 2>&1 | grep -q "invalid option"; then
+	echo "cmp does not support -b (cmp from busybox?) Use cmp from diffutils"
+	exit "$HARDFAIL"
+fi
+
 ./gen-keys.sh >/dev/null 2>&1
 
 trap _report_exit EXIT
