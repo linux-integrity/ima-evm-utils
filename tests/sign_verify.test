@@ -100,7 +100,8 @@ _test_sigfile() {
     return "$FAIL"
   fi
 
-  rm "$file_sig" "$file_sig2"
+  # Leave '$file_sig' for ima_verify --sigfile test.
+  rm "$file_sig2"
 }
 
 # Run single sign command
@@ -261,9 +262,12 @@ sign_verify() {
 
     # Normal verify with proper key should pass
     expect_pass check_verify
+    expect_pass check_verify OPTS="--sigfile"
 
     # Multiple files and some don't verify
     expect_fail check_verify FILE="/dev/null $file"
+
+    rm "$FILE.sig"
   fi
 
   TYPE=evm
