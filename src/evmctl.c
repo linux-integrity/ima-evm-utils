@@ -221,7 +221,7 @@ static unsigned char *file2bin(const char *file, const char *ext, int *size)
 		fclose(fp);
 		return NULL;
 	}
-	if (fread(data, len, 1, fp) != len) {
+	if (fread(data, len, 1, fp) != 1) {
 		log_err("Failed to fread %zu bytes: %s\n", len, name);
 		fclose(fp);
 		free(data);
