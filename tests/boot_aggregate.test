@@ -59,7 +59,7 @@ swtpm_start() {
 	swtpm="$(which tpm_server)"
 	swtpm1="$(which swtpm)"
 	if [ -z "${swtpm}" ] && [ -z "${swtpm1}" ]; then
-		echo "${CYAN}SKIP: Softare TPM (tpm_server and swtpm) not found${NORM}"
+		echo "${CYAN}SKIP: Software TPM (tpm_server and swtpm) not found${NORM}"
 		return "$SKIP"
 	fi
 
@@ -123,7 +123,7 @@ display_pcrs() {
 	done
 }
 
-# The first entry in the IMA measuremnet list is the "boot_aggregate".
+# The first entry in the IMA measurement list is the "boot_aggregate".
 # For each kexec, an additional "boot_aggregate" will appear in the
 # measurement list, assuming the previous measurement list is carried
 # across the kexec.
