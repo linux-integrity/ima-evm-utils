@@ -35,6 +35,8 @@ else
 	export TPM_COMMAND_PORT=2321
 	export TPM_PLATFORM_PORT=2322
 	export TPM_SERVER_NAME="localhost"
+
+	# swtpm uses the raw, unencapsulated packet format
 	export TPM_SERVER_TYPE="raw"
 
 fi
@@ -73,6 +75,8 @@ swtpm_start() {
 			SWTPM_PPID=$!
 		fi
 	elif [ -n "${swtpm}" ]; then
+		# tpm_server uses the Microsoft simulator encapsulated packet format
+		export TPM_SERVER_TYPE="mssim"
 		pgrep swtpm
 		if [ $? -eq 0 ]; then
 			echo "INFO: Software TPM (tpm_server) already running"
