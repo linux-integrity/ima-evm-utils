@@ -97,8 +97,20 @@ swtpm_init() {
 		return "$SKIP"
 	fi
 
-	echo "INFO: Walking ${BINARY_BIOS_MEASUREMENTS} initializing the software TPM"
+	echo "INFO: Sending software TPM startup"
 	"${TSSDIR}/tssstartup"
+	if [ $? -ne 0 ]; then
+		echo "INFO: Retry sending software TPM startup"
+		sleep 1
+		"${TSSDIR}/tssstartup"
+	fi
+
+	if [ $? -ne 0 ]; then
+		echo "INFO: Software TPM startup failed"
+		return "$SKIP"
+	fi
+
+	echo "INFO: Walking ${BINARY_BIOS_MEASUREMENTS} initializing the software TPM"
 #	$(${TSSDIR}/tsseventextend -tpm -if "${BINARY_BIOS_MEASUREMENTS}" -v) 2>&1 > /dev/null
 	"${TSSDIR}/tsseventextend" -tpm -if "${BINARY_BIOS_MEASUREMENTS}" -v > /dev/null 2>&1
 }
