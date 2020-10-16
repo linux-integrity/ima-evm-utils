@@ -54,36 +54,36 @@ cleanup() {
 
 # Try to start a software TPM if needed.
 swtpm_start() {
-	local swtpm swtpm1
+	local tpm_server swtpm
 
-	swtpm="$(which tpm_server)"
-	swtpm1="$(which swtpm)"
-	if [ -z "${swtpm}" ] && [ -z "${swtpm1}" ]; then
+	tpm_server="$(which tpm_server)"
+	swtpm="$(which swtpm)"
+	if [ -z "${tpm_server}" ] && [ -z "${swtpm}" ]; then
 		echo "${CYAN}SKIP: Software TPM (tpm_server and swtpm) not found${NORM}"
 		return "$SKIP"
 	fi
 
-	if [ -n "${swtpm1}" ]; then
-		pgrep swtpm1
+	if [ -n "${swtpm}" ]; then
+		pgrep swtpm
 		if [ $? -eq 0 ]; then
 			echo "INFO: Software TPM (swtpm) already running"
 			return 114
 		else
-			echo "INFO: Starting software TPM: ${swtpm1}"
-			mkdir ./myvtpm
-			${swtpm1} socket --tpmstate dir=./myvtpm --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init > /dev/null 2>&1 &
+			echo "INFO: Starting software TPM: ${swtpm}"
+			mkdir -p ./myvtpm
+			${swtpm} socket --tpmstate dir=./myvtpm --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init > /dev/null 2>&1 &
 			SWTPM_PPID=$!
 		fi
-	elif [ -n "${swtpm}" ]; then
+	elif [ -n "${tpm_server}" ]; then
 		# tpm_server uses the Microsoft simulator encapsulated packet format
 		export TPM_SERVER_TYPE="mssim"
-		pgrep swtpm
+		pgrep tpm_server
 		if [ $? -eq 0 ]; then
 			echo "INFO: Software TPM (tpm_server) already running"
 			return 114
 		else
-			echo "INFO: Starting software TPM: ${swtpm}"
-			${swtpm} > /dev/null 2>&1 &
+			echo "INFO: Starting software TPM: ${tpm_server}"
+			${tpm_server} > /dev/null 2>&1 &
 			SWTPM_PPID=$!
 		fi
 	fi
