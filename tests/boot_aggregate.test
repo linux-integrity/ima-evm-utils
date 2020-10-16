@@ -41,14 +41,12 @@ else
 
 fi
 
-# Only stop this test's software TPM.  Preferred method: "tsstpmcmd -stop"
+# Only stop this test's software TPM
 cleanup() {
-	if [ -n "${SWTPM_PPID}" ]; then
-		if [ -f "${TSSDIR}/tsstpmcmd" ]; then
-			"${TSSDIR}/tsstpmcmd" -stop
-		else
-			pkill -P "${SWTPM_PPID}"
-		fi
+	if [ -n "${SWTPM_PID}" ]; then
+		kill -SIGTERM "${SWTPM_PID}"
+	elif [ -n "${TPMSERVER_PID}" ]; then
+		"${TSSDIR}/tsstpmcmd" -stop
 	fi
 }
 
@@ -72,7 +70,7 @@ swtpm_start() {
 			echo "INFO: Starting software TPM: ${swtpm}"
 			mkdir -p ./myvtpm
 			${swtpm} socket --tpmstate dir=./myvtpm --tpm2 --ctrl type=tcp,port=2322 --server type=tcp,port=2321 --flags not-need-init > /dev/null 2>&1 &
-			SWTPM_PPID=$!
+			SWTPM_PID=$!
 		fi
 	elif [ -n "${tpm_server}" ]; then
 		# tpm_server uses the Microsoft simulator encapsulated packet format
@@ -84,7 +82,7 @@ swtpm_start() {
 		else
 			echo "INFO: Starting software TPM: ${tpm_server}"
 			${tpm_server} > /dev/null 2>&1 &
-			SWTPM_PPID=$!
+			TPMSERVER_PID=$!
 		fi
 	fi
 	return 0
