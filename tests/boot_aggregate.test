@@ -26,21 +26,6 @@ TSSDIR="$(dirname -- "$(which tssstartup)")"
 PCRFILE="/sys/class/tpm/tpm0/device/pcrs"
 MISC_PCRFILE="/sys/class/misc/tpm0/device/pcrs"
 
-if [ "$(id -u)" = 0 ] && [ -c "/dev/tpm0" ]; then
-	ASCII_RUNTIME_MEASUREMENTS="/sys/kernel/security/ima/ascii_runtime_measurements"
-else
-	BINARY_BIOS_MEASUREMENTS="./sample-binary_bios_measurements-pcrs-8-9"
-	ASCII_RUNTIME_MEASUREMENTS="./sample-ascii_runtime_measurements-pcrs-8-9"
-	export TPM_INTERFACE_TYPE="socsim"
-	export TPM_COMMAND_PORT=2321
-	export TPM_PLATFORM_PORT=2322
-	export TPM_SERVER_NAME="localhost"
-
-	# swtpm uses the raw, unencapsulated packet format
-	export TPM_SERVER_TYPE="raw"
-
-fi
-
 # Only stop this test's software TPM
 cleanup() {
 	if [ -n "${SWTPM_PID}" ]; then
@@ -164,6 +149,24 @@ check() {
 	echo "$bootaggr"
 	return "$FAIL"
 }
+
+if [ "$(id -u)" = 0 ] && [ -c "/dev/tpm0" ]; then
+	ASCII_RUNTIME_MEASUREMENTS="/sys/kernel/security/ima/ascii_runtime_measurements"
+	if [ ! -d "/sys/kernel/security/ima" ]; then
+		echo "${CYAN}SKIP: CONFIG_IMA not enabled${NORM}"
+		exit "$SKIP"
+	fi
+else
+	BINARY_BIOS_MEASUREMENTS="./sample-binary_bios_measurements-pcrs-8-9"
+	ASCII_RUNTIME_MEASUREMENTS="./sample-ascii_runtime_measurements-pcrs-8-9"
+	export TPM_INTERFACE_TYPE="socsim"
+	export TPM_COMMAND_PORT=2321
+	export TPM_PLATFORM_PORT=2322
+	export TPM_SERVER_NAME="localhost"
+
+	# swtpm uses the raw, unencapsulated packet format
+	export TPM_SERVER_TYPE="raw"
+fi
 
 # Start and initialize a software TPM as needed
 if [ "$(id -u)" != 0 ] || [ ! -c "/dev/tpm0" ]; then
