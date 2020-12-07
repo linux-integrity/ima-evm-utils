@@ -404,6 +404,8 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	}
 
 	for (xattrname = evm_config_xattrnames; *xattrname != NULL; xattrname++) {
+		int use_xattr_ima = 0;
+
 		if (!strcmp(*xattrname, XATTR_NAME_SELINUX) && selinux_str) {
 			err = strlen(selinux_str) + 1;
 			if (err > sizeof(xattr_value)) {
@@ -420,6 +422,15 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 				return -1;
 			}
 			hex2bin(xattr_value, ima_str, err);
+		} else if (!strcmp(*xattrname, XATTR_NAME_IMA) && evm_portable){
+			err = lgetxattr(file, xattr_ima, xattr_value,
+					sizeof(xattr_value));
+			if (err < 0) {
+				log_err("EVM portable sig: %s required\n",
+					xattr_ima);
+				return -1;
+			}
+			use_xattr_ima = 1;
 		} else if (!strcmp(*xattrname, XATTR_NAME_CAPS) && (hmac_flags & HMAC_FLAG_CAPS_SET)) {
 			if (!caps_str)
 				continue;
@@ -442,7 +453,8 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 			}
 		}
 		/*log_debug("name: %s, value: %s, size: %d\n", *xattrname, xattr_value, err);*/
-		log_info("name: %s, size: %d\n", *xattrname, err);
+		log_info("name: %s, size: %d\n",
+			 use_xattr_ima ? xattr_ima : *xattrname, err);
 		log_debug_dump(xattr_value, err);
 		err = EVP_DigestUpdate(pctx, xattr_value, err);
 		if (!err) {
@@ -807,9 +819,18 @@ static int verify_evm(const char *file)
 		return len;
 	}
 
-	if (sig[0] != 0x03) {
+	if ((sig[0] != EVM_IMA_XATTR_DIGSIG) &&
+	    (sig[0] != EVM_XATTR_PORTABLE_DIGSIG)) {
 		log_err("%s has no signature\n", xattr_evm);
 		return -1;
+	}
+
+	if (sig[0] == EVM_XATTR_PORTABLE_DIGSIG) {
+		if (sig[1] != DIGSIG_VERSION_2) {
+			log_err("Portable sig: invalid type\n");
+			return -1;
+		}
+		evm_portable = true;
 	}
 
 	sig_hash_algo = imaevm_hash_algo_from_sig(sig + 1);
