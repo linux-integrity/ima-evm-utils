@@ -328,9 +328,14 @@ try_different_sigs() {
     expect_fail check_verify TYPE=ima
   fi
 
-  # Test --portable
-  expect_pass check_sign OPTS="$OPTS --portable" PREFIX=0x05
-  # Cannot be verified for now, until that support is added to evmctl
+  # Test --portable (only supported for V2 signatures)
+  if expect_pass check_sign OPTS="$OPTS --portable --imahash" PREFIX=0x05; then
+     if [[ "$OPTS" =~ --rsa ]]; then
+        expect_fail check_verify
+     else
+        expect_pass check_verify
+     fi
+  fi
 
   # Test -i (immutable)
   expect_pass check_sign OPTS="$OPTS -i" PREFIX=0x0303
