@@ -60,11 +60,11 @@ int tpm2_pcr_supported(void)
 		log_info("Using %s to read PCRs.\n", CMD);
 
 	if (get_cmd_path(CMD, path, sizeof(path))) {
-		log_debug("Couldn't find '%s' in $PATH", CMD);
+		log_debug("Couldn't find '%s' in $PATH\n", CMD);
 		return 0;
 	}
 
-	log_debug("Found '%s' in $PATH", CMD);
+	log_debug("Found '%s' in $PATH\n", CMD);
 	return 1;
 }
 
