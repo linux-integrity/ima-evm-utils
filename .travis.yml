@@ -38,7 +38,7 @@ matrix:
           compiler: gcc
 
         - os: linux
-          env: DISTRO=ubuntu:eoan TSS=ibmtss
+          env: DISTRO=ubuntu:groovy TSS=ibmtss
           compiler: gcc
 
         - os: linux
