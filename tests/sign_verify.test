@@ -43,6 +43,7 @@ _keyid_from_cert() {
   id=$($cmd 2>/dev/null \
     | openssl asn1parse \
     | grep BIT.STRING \
+    | tail -n1 \
     | cut -d: -f1)
   if [ -z "$id" ]; then
     echo - "$cmd" >&2
