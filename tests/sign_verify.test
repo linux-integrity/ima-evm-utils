@@ -372,6 +372,21 @@ sign_verify  rsa1024  sha384  0x030205:K:0080
 sign_verify  rsa1024  sha512  0x030206:K:0080
 sign_verify  rsa1024  rmd160  0x030203:K:0080
 
+# Test v2 signatures with ECDSA
+# Signature length is typically 0x34-0x38 bytes long, very rarely 0x33
+sign_verify  prime192v1 sha1   0x030202:K:003[345678]
+sign_verify  prime192v1 sha224 0x030207:K:003[345678]
+sign_verify  prime192v1 sha256 0x030204:K:003[345678]
+sign_verify  prime192v1 sha384 0x030205:K:003[345678]
+sign_verify  prime192v1 sha512 0x030206:K:003[345678]
+
+# Signature length is typically 0x44-0x48 bytes long, very rarely 0x43
+sign_verify  prime256v1 sha1   0x030202:K:004[345678]
+sign_verify  prime256v1 sha224 0x030207:K:004[345678]
+sign_verify  prime256v1 sha256 0x030204:K:004[345678]
+sign_verify  prime256v1 sha384 0x030205:K:004[345678]
+sign_verify  prime256v1 sha512 0x030206:K:004[345678]
+
 # Test v2 signatures with EC-RDSA
 _enable_gost_engine
 sign_verify  gost2012_256-A md_gost12_256 0x030212:K:0040

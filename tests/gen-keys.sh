@@ -66,6 +66,26 @@ for m in 1024 2048; do
   fi
 done
 
+for curve in prime192v1 prime256v1; do
+  if [ "$1" = clean ] || [ "$1" = force ]; then
+    rm -f test-$curve.cer test-$curve.key test-$curve.pub
+  fi
+  if [ "$1" = clean ]; then
+    continue
+  fi
+  if [ ! -e test-$curve.key ]; then
+    log openssl req -verbose -new -nodes -utf8 -sha1 -days 10000 -batch -x509 \
+      -config test-ca.conf \
+      -newkey ec \
+      -pkeyopt ec_paramgen_curve:$curve \
+      -out test-$curve.cer -outform DER \
+      -keyout test-$curve.key
+    if [ -s test-$curve.key ]; then
+      log openssl pkey -in test-$curve.key -out test-$curve.pub -pubout
+    fi
+  fi
+done
+
 # EC-RDSA
 for m in \
   gost2012_256:A \
