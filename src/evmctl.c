@@ -125,6 +125,7 @@ static char *caps_str;
 static char *ima_str;
 static char *selinux_str;
 static char *search_type;
+static char *verify_bank;
 static int verify_list_sig;
 static int recursive;
 static int msize;
@@ -2010,6 +2011,16 @@ static int ima_measurement(const char *file)
 	pseudo_banks_mask = (1 << num_banks) - 1;
 	pseudo_padded_banks_mask = pseudo_banks_mask;
 
+	/* Instead of verifying all the banks, only verify a single bank */
+	for (c = 0; c < num_banks; c++) {
+		if (verify_bank
+		    && strcmp(pseudo_padded_banks[c].algo_name, verify_bank)) {
+			pseudo_banks_mask ^= (1 << c);
+			pseudo_padded_banks_mask ^= (1 << c);
+			break;
+		}
+	}
+
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
 		entry_num++;
 		if (entry.header.name_len > TCG_EVENT_NAME_LEN_MAX) {
@@ -2536,7 +2547,7 @@ struct command cmds[] = {
 	{"ima_verify", cmd_verify_ima, 0, "file", "Verify IMA signature (for debugging).\n"},
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
-	{"ima_measurement", cmd_ima_measurement, 0, "[--ignore-violations] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file", "Verify measurement list (experimental).\n"},
+	{"ima_measurement", cmd_ima_measurement, 0, "[--ignore-violations] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] [--verify-bank hash-algorithm] file", "Verify measurement list (experimental).\n"},
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
@@ -2577,6 +2588,7 @@ static struct option opts[] = {
 	{"xattr-user", 0, 0, 140},
 	{"ignore-violations", 0, 0, 141},
 	{"pcrs", 1, 0, 142},
+	{"verify-bank", 2, 0, 143},
 	{}
 
 };
@@ -2764,6 +2776,9 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 			pcrfile[npcrfile++] = optarg;
+			break;
+		case 143:
+			verify_bank = optarg;
 			break;
 		case '?':
 			exit(1);
