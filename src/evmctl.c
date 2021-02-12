@@ -2023,6 +2023,11 @@ static int ima_measurement(const char *file)
 
 	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
 		entry_num++;
+		if (entry.header.pcr >= NUM_PCRS) {
+			log_err("Invalid PCR %d.\n", entry.header.pcr);
+			fclose(fp);
+			exit(1);
+		}
 		if (entry.header.name_len > TCG_EVENT_NAME_LEN_MAX) {
 			log_err("%d ERROR: event name too long!\n",
 				entry.header.name_len);
@@ -2243,7 +2248,7 @@ static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
 			log_info("%02u ", event.header.pcr);
 			log_dump(event.header.digest, SHA_DIGEST_LENGTH);
 		}
-		if (event.header.pcr > NUM_PCRS) {
+		if (event.header.pcr >= NUM_PCRS) {
 			log_err("Invalid PCR %d.\n", event.header.pcr);
 			err = 1;
 			break;
