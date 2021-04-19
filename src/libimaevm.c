@@ -90,14 +90,14 @@ struct libimaevm_params imaevm_params = {
 
 static void __attribute__ ((constructor)) libinit(void);
 
-void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool cr)
+void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool newline)
 {
 	int i;
 	uint8_t *data = (uint8_t *) ptr;
 
 	for (i = 0; i < len; i++)
 		fprintf(fp, "%02x", data[i]);
-	if (cr)
+	if (newline)
 		fprintf(fp, "\n");
 }
 
