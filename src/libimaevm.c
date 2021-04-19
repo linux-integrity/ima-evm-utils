@@ -913,7 +913,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 		return -1;
 	}
 
-	log_info("hash(%s): ", imaevm_params.hash_algo);
+	log_info("hash(%s): ", algo);
 	log_dump(hash, size);
 
 	pkey = read_priv_pkey(keyfile, imaevm_params.keypass);
@@ -939,7 +939,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	if (!EVP_PKEY_sign_init(ctx))
 		goto err;
 	st = "EVP_get_digestbyname";
-	if (!(md = EVP_get_digestbyname(imaevm_params.hash_algo)))
+	if (!(md = EVP_get_digestbyname(algo)))
 		goto err;
 	st = "EVP_PKEY_CTX_set_signature_md";
 	if (!EVP_PKEY_CTX_set_signature_md(ctx, md))
