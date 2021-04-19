@@ -286,7 +286,7 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 		err = add_dev_hash(&st, pctx);
 		break;
 	default:
-		log_errno("Unsupported file type");
+		log_err("Unsupported file type (0x%x)", st.st_mode & S_IFMT);
 		err = -1;
 		goto err;
 	}
