@@ -181,7 +181,7 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 {
 	struct dirent *de;
 	DIR *dir;
-	unsigned long long ino, off;
+	unsigned long long ino;
 	unsigned int type;
 	int result = 0;
 
@@ -193,12 +193,10 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 
 	while ((de = readdir(dir))) {
 		ino = de->d_ino;
-		off = de->d_off;
 		type = de->d_type;
-		log_debug("entry: %s, ino: %llu, type: %u, off: %llu, reclen: %hu\n",
-			  de->d_name, ino, type, off, de->d_reclen);
+		log_debug("entry: %s, ino: %llu, type: %u, reclen: %hu\n",
+			  de->d_name, ino, type, de->d_reclen);
 		if (EVP_DigestUpdate(ctx, de->d_name, strlen(de->d_name)) != 1 ||
-		    /* EVP_DigestUpdate(ctx, &off, sizeof(off)) != 1 || */
 		    EVP_DigestUpdate(ctx, &ino, sizeof(ino)) != 1||
 		    EVP_DigestUpdate(ctx, &type, sizeof(type)) != 1) {
 			log_err("EVP_DigestUpdate() failed\n");
