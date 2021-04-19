@@ -213,15 +213,16 @@ static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
 
 static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
 {
-	int err;
+	int len;
 	char buf[1024];
 
-	err = readlink(path, buf, sizeof(buf));
-	if (err <= 0)
+	len = readlink(path, buf, sizeof(buf));
+	/* 0-length links are also an error */
+	if (len <= 0)
 		return -1;
 
-	log_info("link: %s -> %.*s\n", path, err, buf);
-	return !EVP_DigestUpdate(ctx, buf, err);
+	log_info("link: %s -> %.*s\n", path, len, buf);
+	return !EVP_DigestUpdate(ctx, buf, len);
 }
 
 static int add_dev_hash(struct stat *st, EVP_MD_CTX *ctx)
