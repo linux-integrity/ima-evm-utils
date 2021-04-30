@@ -2514,6 +2514,7 @@ static void usage(void)
 		"      --xattr-user   store xattrs in user namespace (for testing purposes)\n"
 		"      --rsa          use RSA key type and signing scheme v1\n"
 		"  -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)\n"
+		"      --keyid n      overwrite signature keyid with a 32-bit value in hex (for signing)\n"
 		"  -o, --portable     generate portable EVM signatures\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -r, --recursive    recurse into directories (sign)\n"
@@ -2594,6 +2595,7 @@ static struct option opts[] = {
 	{"ignore-violations", 0, 0, 141},
 	{"pcrs", 1, 0, 142},
 	{"verify-bank", 2, 0, 143},
+	{"keyid", 1, 0, 144},
 	{}
 
 };
@@ -2638,6 +2640,8 @@ int main(int argc, char *argv[])
 {
 	int err = 0, c, lind;
 	ENGINE *eng = NULL;
+	unsigned long keyid;
+	char *eptr;
 
 #if !(OPENSSL_VERSION_NUMBER < 0x10100000)
 	OPENSSL_init_crypto(
@@ -2784,6 +2788,22 @@ int main(int argc, char *argv[])
 			break;
 		case 143:
 			verify_bank = optarg;
+			break;
+		case 144:
+			errno = 0;
+			keyid = strtoul(optarg, &eptr, 16);
+			/*
+			 * ULONG_MAX is error from strtoul(3),
+			 * UINT_MAX is `imaevm_params.keyid' maximum value,
+			 * 0 is reserved for keyid being unset.
+			 */
+			if (errno || eptr - optarg != strlen(optarg) ||
+			    keyid == ULONG_MAX || keyid > UINT_MAX ||
+			    keyid == 0) {
+				log_err("Invalid keyid value.\n");
+				exit(1);
+			}
+			imaevm_params.keyid = keyid;
 			break;
 		case '?':
 			exit(1);

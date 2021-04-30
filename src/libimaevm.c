@@ -45,6 +45,7 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <asm/byteorder.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
@@ -929,7 +930,10 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 		return -1;
 	}
 
-	calc_keyid_v2(&keyid, name, pkey);
+	if (imaevm_params.keyid)
+		keyid = htonl(imaevm_params.keyid);
+	else
+		calc_keyid_v2(&keyid, name, pkey);
 	hdr->keyid = keyid;
 
 	st = "EVP_PKEY_CTX_new";
