@@ -53,10 +53,12 @@
 #include <assert.h>
 #include <ctype.h>
 
+#include <openssl/asn1.h>
 #include <openssl/crypto.h>
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 #include <openssl/err.h>
 
 #include "imaevm.h"
@@ -743,6 +745,118 @@ void calc_keyid_v2(uint32_t *keyid, char *str, EVP_PKEY *pkey)
 		log_info("keyid: %s\n", str);
 
 	X509_PUBKEY_free(pk);
+}
+
+/*
+ * Extract SKID from x509 in openssl portable way.
+ */
+static const unsigned char *x509_get_skid(X509 *x, int *len)
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	ASN1_STRING *skid;
+
+	/*
+	 * This will cache extensions.
+	 * OpenSSL uses this method itself.
+	 */
+	if (X509_check_purpose(x, -1, -1) != 1)
+		return NULL;
+	skid = x->skid;
+#else
+	const ASN1_OCTET_STRING *skid = X509_get0_subject_key_id(x);
+#endif
+	if (len)
+		*len = ASN1_STRING_length(skid);
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	return ASN1_STRING_data(x->skid);
+#else
+	return ASN1_STRING_get0_data(skid);
+#endif
+}
+
+/*
+ * read_keyid_from_cert() - Read keyid from SKID from x509 certificate file
+ * @keyid_be:	Output 32-bit keyid in network order (BE);
+ * @certfile:	Input filename.
+ * @try_der:	true:  try to read in DER from if there is no PEM,
+ *		       cert is considered mandatory and error will be issued
+ *		       if there is no cert;
+ *		false: only try to read in PEM form, cert is considered
+ *		       optional.
+ * Return:	0 on success, -1 on error.
+ */
+static int read_keyid_from_cert(uint32_t *keyid_be, const char *certfile, int try_der)
+{
+	X509 *x = NULL;
+	FILE *fp;
+	const unsigned char *skid;
+	int skid_len;
+
+	if (!(fp = fopen(certfile, "r"))) {
+		log_err("Cannot open %s: %s\n", certfile, strerror(errno));
+		return -1;
+	}
+	if (!PEM_read_X509(fp, &x, NULL, NULL)) {
+		if (ERR_GET_REASON(ERR_peek_last_error()) == PEM_R_NO_START_LINE) {
+			ERR_clear_error();
+			if (try_der) {
+				rewind(fp);
+				d2i_X509_fp(fp, &x);
+			} else {
+				/*
+				 * Cert is optional and there is just no PEM
+				 * header, then issue debug message and stop
+				 * trying.
+				 */
+				log_debug("%s: x509 certificate not found\n",
+					  certfile);
+				fclose(fp);
+				return -1;
+			}
+		}
+	}
+	fclose(fp);
+	if (!x) {
+		ERR_print_errors_fp(stderr);
+		log_err("read keyid: %s: Error reading x509 certificate\n",
+			certfile);
+	}
+
+	if (!(skid = x509_get_skid(x, &skid_len))) {
+		log_err("read keyid: %s: SKID not found\n", certfile);
+		goto err_free;
+	}
+	if (skid_len < sizeof(*keyid_be)) {
+		log_err("read keyid: %s: SKID too short (len %d)\n", certfile,
+			skid_len);
+		goto err_free;
+	}
+	memcpy(keyid_be, skid + skid_len - sizeof(*keyid_be), sizeof(*keyid_be));
+	log_info("keyid %04x (from %s)\n", ntohl(*keyid_be), certfile);
+	X509_free(x);
+	return 0;
+
+err_free:
+	X509_free(x);
+	return -1;
+}
+
+/*
+ * imaevm_read_keyid() - Read 32-bit keyid from the cert file
+ * @certfile:	File with certificate in PEM or DER form.
+ *
+ * Try to read keyid from Subject Key Identifier (SKID) of x509 certificate.
+ * Autodetect if cert is in PEM (tried first) or DER encoding.
+ *
+ * Return: 0 on error or 32-bit keyid in host order otherwise.
+ */
+uint32_t imaevm_read_keyid(const char *certfile)
+{
+	uint32_t keyid_be = 0;
+
+	read_keyid_from_cert(&keyid_be, certfile, true);
+	/* On error keyid_be will not be set, returning 0. */
+	return ntohl(keyid_be);
 }
 
 static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
