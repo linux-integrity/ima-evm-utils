@@ -128,6 +128,9 @@ for signing and importing the key.
 Second key format uses X509 DER encoded public key certificates and uses asymmetric key support
 in the kernel (since kernel 3.9). CONFIG_INTEGRITY_ASYMMETRIC_KEYS must be enabled (default).
 
+For v2 signatures x509 certificate (containing the public key) could be appended to the
+private key (they both are in PEM format) to automatically extract keyid from its Subject
+Key Identifier (SKID).
 
 Integrity keyrings
 ----------------

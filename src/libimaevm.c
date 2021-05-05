@@ -1046,8 +1046,12 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 
 	if (imaevm_params.keyid)
 		keyid = htonl(imaevm_params.keyid);
-	else
-		calc_keyid_v2(&keyid, name, pkey);
+	else {
+		int keyid_read_failed = read_keyid_from_cert(&keyid, keyfile, false);
+
+		if (keyid_read_failed)
+			calc_keyid_v2(&keyid, name, pkey);
+	}
 	hdr->keyid = keyid;
 
 	st = "EVP_PKEY_CTX_new";
