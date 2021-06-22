@@ -42,6 +42,6 @@ zypper --non-interactive install --force-resolution --no-recommends \
 	which \
 	xsltproc
 
-if [ -f /usr/lib/ibmtss/tpm_server ]; then
+if [ -f /usr/lib/ibmtss/tpm_server -a ! -e /usr/local/bin/tpm_server ]; then
 	ln -s /usr/lib/ibmtss/tpm_server /usr/local/bin
 fi
