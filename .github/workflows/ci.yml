@@ -1,0 +1,121 @@
+# Copyright (c) 2021 Petr Vorel <pvorel@suse.cz>
+name: "distros"
+on: [push, pull_request]
+
+jobs:
+  job:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 32bit build
+          - container: "debian:stable"
+            env:
+              CC: gcc
+              ARCH: i386
+              TSS: tpm2-tss
+              VARIANT: i386
+
+          # cross compilation builds
+          - container: "debian:stable"
+            env:
+              ARCH: ppc64el
+              CC: powerpc64le-linux-gnu-gcc
+              TSS: ibmtss
+              VARIANT: cross-compile
+
+          - container: "debian:stable"
+            env:
+              ARCH: arm64
+              CC: aarch64-linux-gnu-gcc
+              TSS: tpm2-tss
+              VARIANT: cross-compile
+
+          - container: "debian:stable"
+            env:
+              ARCH: s390x
+              CC: s390x-linux-gnu-gcc
+              TSS: ibmtss
+              VARIANT: cross-compile
+
+          # musl (native)
+          - container: "alpine:latest"
+            env:
+              CC: gcc
+              TSS: tpm2-tss
+
+          # glibc (gcc/clang)
+          - container: "opensuse/tumbleweed"
+            env:
+              CC: clang
+              TSS: ibmtss
+
+          - container: "opensuse/leap"
+            env:
+              CC: gcc
+              TSS: tpm2-tss
+
+          - container: "ubuntu:groovy"
+            env:
+              CC: gcc
+              TSS: ibmtss
+
+          - container: "ubuntu:xenial"
+            env:
+              CC: clang
+              TSS: tpm2-tss
+
+          - container: "fedora:latest"
+            env:
+              CC: clang
+              TSS: ibmtss
+
+          - container: "centos:7"
+            env:
+              CC: gcc
+              TSS: tpm2-tss
+
+          - container: "centos:latest"
+            env:
+              CC: gcc
+              TSS: tpm2-tss
+
+          - container: "debian:testing"
+            env:
+              CC: clang
+              TSS: tpm2-tss
+
+          - container: "debian:stable"
+            env:
+              CC: clang
+              TSS: ibmtss
+
+    container:
+      image: ${{ matrix.container }}
+      env: ${{ matrix.env }}
+
+    steps:
+    - name: Show OS
+      run: cat /etc/os-release
+
+    - name: Git checkout
+      uses: actions/checkout@v1
+
+    - name: Install additional packages
+      run: |
+        INSTALL=${{ matrix.container }}
+        INSTALL="${INSTALL%%:*}"
+        INSTALL="${INSTALL%%/*}"
+        if [ "$VARIANT" ]; then ARCH="$ARCH" ./ci/$INSTALL.$VARIANT.sh; fi
+        ARCH="$ARCH" CC="$CC" TSS="$TSS" ./ci/$INSTALL.sh
+
+    - name: Build swtpm
+      run: if [ ! "$VARIANT" ]; then which tpm_server || which swtpm || ./tests/install-swtpm.sh; fi
+
+    - name: Compiler version
+      run: $CC --version
+
+    - name: Compile
+      run: CC="$CC" VARIANT="$VARIANT" ./build.sh
