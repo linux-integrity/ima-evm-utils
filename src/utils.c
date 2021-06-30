@@ -77,7 +77,8 @@ int get_cmd_path(const char *prog_name, char *buf, size_t buf_len)
 		if (buf_len - size > ret && file_exist(buf))
 			return 0;
 
-		start = end + 1;
+		if (end != NULL)
+			start = end + 1;
 
 	} while (end != NULL);
 
