@@ -177,40 +177,6 @@ out:
 	return err;
 }
 
-static int add_dir_hash(const char *file, EVP_MD_CTX *ctx)
-{
-	struct dirent *de;
-	DIR *dir;
-	unsigned long long ino;
-	unsigned int type;
-	int result = 0;
-
-	dir = opendir(file);
-	if (!dir) {
-		log_err("Failed to open: %s\n", file);
-		return -1;
-	}
-
-	while ((de = readdir(dir))) {
-		ino = de->d_ino;
-		type = de->d_type;
-		log_debug("entry: %s, ino: %llu, type: %u, reclen: %hu\n",
-			  de->d_name, ino, type, de->d_reclen);
-		if (EVP_DigestUpdate(ctx, de->d_name, strlen(de->d_name)) != 1 ||
-		    EVP_DigestUpdate(ctx, &ino, sizeof(ino)) != 1||
-		    EVP_DigestUpdate(ctx, &type, sizeof(type)) != 1) {
-			log_err("EVP_DigestUpdate() failed\n");
-			output_openssl_errors();
-			result = 1;
-			break;
-		}
-	}
-
-	closedir(dir);
-
-	return result;
-}
-
 static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
 {
 	int len;
@@ -264,9 +230,6 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 	switch (st.st_mode & S_IFMT) {
 	case S_IFREG:
 		err = add_file_hash(file, pctx);
-		break;
-	case S_IFDIR:
-		err = add_dir_hash(file, pctx);
 		break;
 	case S_IFLNK:
 		err = add_link_hash(file, pctx);
