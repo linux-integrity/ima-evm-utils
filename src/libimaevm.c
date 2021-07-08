@@ -177,20 +177,6 @@ out:
 	return err;
 }
 
-static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
-{
-	int len;
-	char buf[1024];
-
-	len = readlink(path, buf, sizeof(buf));
-	/* 0-length links are also an error */
-	if (len <= 0)
-		return -1;
-
-	log_info("link: %s -> %.*s\n", path, len, buf);
-	return !EVP_DigestUpdate(ctx, buf, len);
-}
-
 int ima_calc_hash(const char *file, uint8_t *hash)
 {
 	const EVP_MD *md;
@@ -230,9 +216,6 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 	switch (st.st_mode & S_IFMT) {
 	case S_IFREG:
 		err = add_file_hash(file, pctx);
-		break;
-	case S_IFLNK:
-		err = add_link_hash(file, pctx);
 		break;
 	default:
 		log_err("Unsupported file type (0x%x)", st.st_mode & S_IFMT);
