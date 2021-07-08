@@ -225,16 +225,6 @@ static int add_link_hash(const char *path, EVP_MD_CTX *ctx)
 	return !EVP_DigestUpdate(ctx, buf, len);
 }
 
-static int add_dev_hash(struct stat *st, EVP_MD_CTX *ctx)
-{
-	uint32_t dev = st->st_rdev;
-	unsigned major = (dev & 0xfff00) >> 8;
-	unsigned minor = (dev & 0xff) | ((dev >> 12) & 0xfff00);
-
-	log_info("device: %u:%u\n", major, minor);
-	return !EVP_DigestUpdate(ctx, &dev, sizeof(dev));
-}
-
 int ima_calc_hash(const char *file, uint8_t *hash)
 {
 	const EVP_MD *md;
@@ -280,10 +270,6 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 		break;
 	case S_IFLNK:
 		err = add_link_hash(file, pctx);
-		break;
-	case S_IFIFO: case S_IFSOCK:
-	case S_IFCHR: case S_IFBLK:
-		err = add_dev_hash(&st, pctx);
 		break;
 	default:
 		log_err("Unsupported file type (0x%x)", st.st_mode & S_IFMT);
