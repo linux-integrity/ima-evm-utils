@@ -51,7 +51,7 @@ OPTIONS
   -o, --portable     generate portable EVM signatures
   -p, --pass         password for encrypted signing key
   -r, --recursive    recurse into directories (sign)
-  -t, --type         file types to fix 'fdsxm' (f: file, d: directory, s: block/char/symlink)
+  -t, --type         file types to fix 'fxm' (f: file)
                      x - skip fixing if both ima and evm xattrs exist (use with caution)
                      m - stay on the same filesystem (like 'find -xdev')
   -n                 print result to stdout instead of setting xattr

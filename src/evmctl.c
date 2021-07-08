@@ -142,10 +142,6 @@ typedef int (*find_cb_t)(const char *path);
 static int find(const char *path, int dts, find_cb_t func);
 
 #define REG_MASK	(1 << DT_REG)
-#define DIR_MASK	(1 << DT_DIR)
-#define LNK_MASK	(1 << DT_LNK)
-#define CHR_MASK	(1 << DT_CHR)
-#define BLK_MASK	(1 << DT_BLK)
 
 struct command cmds[];
 static void print_usage(struct command *cmd);
@@ -668,10 +664,6 @@ static int get_file_type(const char *path, const char *search_type)
 		switch (search_type[i]) {
 		case 'f':
 			dts |= REG_MASK; break;
-		case 'd':
-			dts |= DIR_MASK; break;
-		case 's':
-			dts |= BLK_MASK | CHR_MASK | LNK_MASK; break;
 		case 'x':
 			check_xattr = true; break;
 		case 'm':
@@ -1370,9 +1362,6 @@ static int find(const char *path, int dts, find_cb_t func)
 		log_err("Failed to chdir: %s\n", path);
 		return -1;
 	}
-
-	if (dts & DIR_MASK)
-		func(path);
 
 	closedir(dir);
 
@@ -2517,7 +2506,7 @@ static void usage(void)
 		"  -o, --portable     generate portable EVM signatures\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -r, --recursive    recurse into directories (sign)\n"
-		"  -t, --type         file types to fix 'fdsxm' (f: file, d: directory, s: block/char/symlink)\n"
+		"  -t, --type         file types to fix 'fxm' (f: file)\n"
 		"                     x - skip fixing if both ima and evm xattrs exist (use with caution)\n"
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
 		"  -n                 print result to stdout instead of setting xattr\n"
