@@ -79,8 +79,16 @@ VERBOSE=1 make check || ret=$?
 
 title "logs"
 if [ $ret -eq 0 ]; then
-	tail -3 tests/ima_hash.log
-	tail -3 tests/sign_verify.log
+	if [ -f tests/ima_hash.log ]; then
+		tail -3 tests/ima_hash.log
+		grep "skipped" tests/ima_hash.log  && \
+		   grep "skipped" tests/ima_hash.log | wc -l
+	fi
+	if [ -f tests/sign_verify.log ]; then
+		tail -3 tests/sign_verify.log
+		grep "skipped" tests/sign_verify.log  && \
+		   grep "skipped" tests/sign_verify.log | wc -l
+	fi
 	tail -20 tests/boot_aggregate.log
 	exit 0
 fi
