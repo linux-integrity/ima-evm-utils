@@ -1108,7 +1108,8 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	/* EVM key is 128 bytes */
 	memcpy(evmkey, key, keylen);
-	memset(evmkey + keylen, 0, sizeof(evmkey) - keylen);
+	if (keylen < sizeof(evmkey))
+		memset(evmkey + keylen, 0, sizeof(evmkey) - keylen);
 
 	if (lstat(file, &st)) {
 		log_err("Failed to stat: %s\n", file);
