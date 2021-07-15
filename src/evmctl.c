@@ -2011,7 +2011,7 @@ static int ima_measurement(const char *file)
 		}
 	}
 
-	while (fread(&entry.header, sizeof(entry.header), 1, fp)) {
+	while (fread(&entry.header, sizeof(entry.header), 1, fp) == 1) {
 		entry_num++;
 		if (entry.header.pcr >= NUM_PCRS) {
 			log_err("Invalid PCR %d.\n", entry.header.pcr);
@@ -2233,7 +2233,7 @@ static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
 		log_info("Reading the TPM 1.2 event log %s.\n", file);
 
 	/* Extend the pseudo TPM PCRs with the event digest */
-	while (fread(&event, sizeof(event.header), 1, fp)) {
+	while (fread(&event, sizeof(event.header), 1, fp) == 1) {
 		if (imaevm_params.verbose > LOG_INFO) {
 			log_info("%02u ", event.header.pcr);
 			log_dump(event.header.digest, SHA_DIGEST_LENGTH);

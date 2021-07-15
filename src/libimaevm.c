@@ -156,7 +156,7 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 
 	for (size = stats.st_size; size; size -= len) {
 		len = MIN(size, bs);
-		if (!fread(data, len, 1, fp)) {
+		if (fread(data, len, 1, fp) != 1) {
 			if (ferror(fp)) {
 				log_err("fread() failed\n\n");
 				goto out;
