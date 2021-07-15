@@ -392,8 +392,6 @@ void init_public_keys(const char *keyfiles)
 	keyfiles_free = tmp_keyfiles;
 
 	while ((keyfile = strsep(&tmp_keyfiles, ", \t")) != NULL) {
-		if (!keyfile)
-			break;
 		if ((*keyfile == '\0') || (*keyfile == ' ') ||
 		    (*keyfile == '\t'))
 			continue;
