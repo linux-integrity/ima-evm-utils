@@ -67,6 +67,10 @@ matrix:
           env: DISTRO=debian:stable TSS=ibmtss
           compiler: gcc
 
+        - os: linux
+          env: DISTRO=alt:sisyphus TSS=libtpm2-tss-devel
+          compiler: gcc
+
 before_install:
     # Tumbleweed requires podman and newest runc due docker incompatible with glibc 2.33 (faccessat2)
     - CONTAINER="${CONTAINER:-docker}"
