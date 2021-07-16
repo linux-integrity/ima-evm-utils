@@ -20,13 +20,14 @@ PATH=../src:$PATH
 type openssl
 
 log() {
-  echo - "$*"
+  echo >&2 - "$*"
   eval "$@"
 }
 
 if [ "$1" = clean ]; then
   rm -f test-ca.conf
-elif [ "$1" = force ] || [ ! -e test-ca.conf ]; then
+elif [ "$1" = force ] || [ ! -e test-ca.conf ] \
+	|| [ gen-keys.sh -nt test-ca.conf ]; then
 cat > test-ca.conf <<- EOF
 	[ req ]
 	distinguished_name = req_distinguished_name
@@ -43,26 +44,44 @@ cat > test-ca.conf <<- EOF
 	basicConstraints=CA:TRUE
 	subjectKeyIdentifier=hash
 	authorityKeyIdentifier=keyid:always,issuer
+
+	[ skid ]
+	basicConstraints=CA:TRUE
+	subjectKeyIdentifier=12345678
+	authorityKeyIdentifier=keyid:always,issuer
 EOF
 fi
 
 # RSA
 # Second key will be used for wrong key tests.
-for m in 1024 2048; do
-  if [ "$1" = clean ] || [ "$1" = force ]; then
+for m in 1024 1024_skid 2048; do
+  if [ "$1" = clean ] || [ "$1" = force ] \
+	  || [ gen-keys.sh -nt test-rsa$m.key ]; then
     rm -f test-rsa$m.cer test-rsa$m.key test-rsa$m.pub
   fi
   if [ "$1" = clean ]; then
     continue
   fi
+  if [ -z "${m%%*_*}" ]; then
+    # Add named extension.
+    bits=${m%_*}
+    ext="-extensions ${m#*_}"
+  else
+    bits=$m
+    ext=
+  fi
   if [ ! -e test-rsa$m.key ]; then
-    log openssl req -verbose -new -nodes -utf8 -sha1 -days 10000 -batch -x509 \
+    log openssl req -verbose -new -nodes -utf8 -sha1 -days 10000 -batch -x509 $ext \
       -config test-ca.conf \
-      -newkey rsa:$m \
+      -newkey rsa:$bits \
       -out test-rsa$m.cer -outform DER \
       -keyout test-rsa$m.key
     # for v1 signatures
     log openssl pkey -in test-rsa$m.key -out test-rsa$m.pub -pubout
+    if [ $m = 1024_skid ]; then
+      # Create combined key+cert.
+      log openssl x509 -inform DER -in test-rsa$m.cer >> test-rsa$m.key
+    fi
   fi
 done
 
