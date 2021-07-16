@@ -362,9 +362,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 		st.st_mode = strtoul(mode_str, NULL, 10);
 
 	if (!evm_immutable) {
-		if ((S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) && !generation_str) {
-			/* we cannot at the momement to get generation of
-			   special files kernel API does not support it */
+		if (S_ISREG(st.st_mode) && !generation_str) {
 			int fd = open(file, 0);
 
 			if (fd < 0) {
@@ -1116,9 +1114,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 		goto out;
 	}
 
-	if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) {
-		/* we cannot at the momement to get generation of special files..
-		 * kernel API does not support it */
+	if (S_ISREG(st.st_mode)) {
 		int fd = open(file, 0);
 
 		if (fd < 0) {
