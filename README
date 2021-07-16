@@ -49,6 +49,8 @@ OPTIONS
       --rsa          use RSA key type and signing scheme v1
   -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)
       --keyid n      overwrite signature keyid with a 32-bit value in hex (for signing)
+      --keyid-from-cert file
+                     read keyid value from SKID of a x509 cert file
   -o, --portable     generate portable EVM signatures
   -p, --pass         password for encrypted signing key
   -r, --recursive    recurse into directories (sign)

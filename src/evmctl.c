@@ -42,6 +42,7 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -57,12 +58,14 @@
 #include <termios.h>
 #include <assert.h>
 
+#include <openssl/asn1.h>
 #include <openssl/sha.h>
 #include <openssl/pem.h>
 #include <openssl/hmac.h>
 #include <openssl/err.h>
 #include <openssl/rsa.h>
 #include <openssl/engine.h>
+#include <openssl/x509v3.h>
 #include "hash_info.h"
 #include "pcr.h"
 #include "utils.h"
@@ -2501,6 +2504,8 @@ static void usage(void)
 		"      --rsa          use RSA key type and signing scheme v1\n"
 		"  -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)\n"
 		"      --keyid n      overwrite signature keyid with a 32-bit value in hex (for signing)\n"
+		"      --keyid-from-cert file\n"
+		"                     read keyid value from SKID of a x509 cert file\n"
 		"  -o, --portable     generate portable EVM signatures\n"
 		"  -p, --pass         password for encrypted signing key\n"
 		"  -r, --recursive    recurse into directories (sign)\n"
@@ -2582,6 +2587,7 @@ static struct option opts[] = {
 	{"pcrs", 1, 0, 142},
 	{"verify-bank", 2, 0, 143},
 	{"keyid", 1, 0, 144},
+	{"keyid-from-cert", 1, 0, 145},
 	{}
 
 };
@@ -2787,6 +2793,14 @@ int main(int argc, char *argv[])
 			    keyid == ULONG_MAX || keyid > UINT_MAX ||
 			    keyid == 0) {
 				log_err("Invalid keyid value.\n");
+				exit(1);
+			}
+			imaevm_params.keyid = keyid;
+			break;
+		case 145:
+			keyid = imaevm_read_keyid(optarg);
+			if (keyid == 0) {
+				log_err("Error reading keyid.\n");
 				exit(1);
 			}
 			imaevm_params.keyid = keyid;
