@@ -199,6 +199,10 @@ check_sign() {
   # This is all we can do for evm.
   [[ "$TYPE" =~ evm ]] && return "$OK"
 
+  # When using the SM2/3 algorithm, the openssl tool uses USERID for verify,
+  # which is incompatible with calling API directly, so skip it.
+  [[ "$ALG" == sm3 ]] && return "$OK"
+
   # Extract signature to a file
   _extract_xattr "$FILE" "$(_xattr "$TYPE")" "$FILE.sig2" "$PREFIX"
 
@@ -389,6 +393,12 @@ sign_verify  prime256v1 sha224 0x030207:K:004[345678]
 sign_verify  prime256v1 sha256 0x030204:K:004[345678]
 sign_verify  prime256v1 sha384 0x030205:K:004[345678]
 sign_verify  prime256v1 sha512 0x030206:K:004[345678]
+
+# If openssl 3.0 is installed, test the SM2/3 algorithm combination
+if [ -x /opt/openssl3/bin/openssl ]; then
+  PATH=/opt/openssl3/bin:$PATH LD_LIBRARY_PATH=/opt/openssl3/lib \
+    sign_verify  sm2    sm3    0x030211:K:004[345678]
+fi
 
 # Test v2 signatures with EC-RDSA
 _enable_gost_engine

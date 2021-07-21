@@ -17,6 +17,7 @@ jobs:
               ARCH: i386
               TSS: tpm2-tss
               VARIANT: i386
+              COMPILE_SSL: openssl-3.0.0-beta1
 
           # cross compilation builds
           - container: "debian:stable"
@@ -51,6 +52,7 @@ jobs:
             env:
               CC: clang
               TSS: ibmtss
+              COMPILE_SSL: openssl-3.0.0-beta1
 
           - container: "opensuse/leap"
             env:
@@ -61,6 +63,7 @@ jobs:
             env:
               CC: gcc
               TSS: ibmtss
+              COMPILE_SSL: openssl-3.0.0-beta1
 
           - container: "ubuntu:xenial"
             env:
@@ -115,6 +118,7 @@ jobs:
         INSTALL="${INSTALL%%/*}"
         if [ "$VARIANT" ]; then ARCH="$ARCH" ./ci/$INSTALL.$VARIANT.sh; fi
         ARCH="$ARCH" CC="$CC" TSS="$TSS" ./ci/$INSTALL.sh
+        if [ "$COMPILE_SSL" ]; then COMPILE_SSL="$COMPILE_SSL" ./tests/install-openssl3.sh; fi
 
     - name: Build swtpm
       run: |

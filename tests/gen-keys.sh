@@ -131,6 +131,31 @@ for m in \
     fi
 done
 
+# SM2, If openssl 3.0 is installed, gen SM2 keys using
+if [ -x /opt/openssl3/bin/openssl ]; then
+  (PATH=/opt/openssl3/bin:$PATH LD_LIBRARY_PATH=/opt/openssl3/lib
+  for curve in sm2; do
+    if [ "$1" = clean ] || [ "$1" = force ]; then
+      rm -f test-$curve.cer test-$curve.key test-$curve.pub
+    fi
+    if [ "$1" = clean ]; then
+      continue
+    fi
+    if [ ! -e test-$curve.key ]; then
+      log openssl req -verbose -new -nodes -utf8 -days 10000 -batch -x509 \
+        -sm3 -sigopt "distid:1234567812345678" \
+        -config test-ca.conf \
+        -copy_extensions copyall \
+        -newkey $curve \
+        -out test-$curve.cer -outform DER \
+        -keyout test-$curve.key
+      if [ -s test-$curve.key ]; then
+        log openssl pkey -in test-$curve.key -out test-$curve.pub -pubout
+      fi
+    fi
+  done)
+fi
+
 # This script leaves test-ca.conf, *.cer, *.pub, *.key files for sing/verify tests.
 # They are never deleted except by `make distclean'.
 
