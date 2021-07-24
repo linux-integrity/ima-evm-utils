@@ -84,9 +84,10 @@ echo "};"
 echo "const char *const hash_algo_name[HASH_ALGO__LAST] = {"
 sed -n 's/HASH_ALGO_\(.*\),/\1 \L\1\E/p' $HASH_INFO | \
   while read a b; do
-    # Normalize text hash name: if it contains underscore between
-    # digits replace it with a dash, other underscores are removed.
-    b=$(echo "$b" | sed "s/\([0-9]\)_\([0-9]\)/\1-\2/g;s/_//g")
+    # Normalize text hash name: sm3 algorithm name is different from
+    # the macro definition, which is also the only special case of an
+    # underscore between digits. Remove all other underscores.
+    b=$(echo "$b" | sed "s/sm3_256/sm3/g;s/_//g")
     printf '\t%-26s = "%s",\n' "[HASH_ALGO_$a]" "$b"
   done
 echo "};"
