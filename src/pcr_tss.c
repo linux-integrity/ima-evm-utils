@@ -106,7 +106,7 @@ static TPM2_ALG_ID algo_to_tss2(const char *algo_name)
 	return TPM2_ALG_ERROR;
 }
 
-int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
+int tpm2_pcr_read(const char *algo_name, uint32_t pcr_handle, uint8_t *hwpcr,
 		 int len, char **errmsg)
 {
 	TSS2_ABI_VERSION abi_version = {
@@ -140,7 +140,8 @@ int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
 		}
 	};
 
-	pcr_select_in.pcrSelections[0].pcrSelect[idx / 8] = (1 << (idx % 8));
+	pcr_select_in.pcrSelections[0].pcrSelect[pcr_handle / 8] =
+	    (1 << (pcr_handle % 8));
 
 	ret = Esys_Initialize(&ctx, NULL, &abi_version);
 	if (ret != TPM2_RC_SUCCESS) {

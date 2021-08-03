@@ -1914,7 +1914,8 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 {
 	int tpm_enabled = 0;
 	char *errmsg = NULL;
-	int i, j;
+	int i;
+	uint32_t pcr_handle;
 	int err;
 
 	/* If --pcrs was specified, read only from the specified file(s) */
@@ -1934,9 +1935,12 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 	/* Read PCRs from multiple TPM 2.0 banks */
 	for (i = 0; i < num_banks; i++) {
 		err = 0;
-		for (j = 0; j < NUM_PCRS && !err; j++) {
-			err = tpm2_pcr_read(bank[i].algo_name, j,
-					    bank[i].pcr[j], bank[i].digest_size,
+		for (pcr_handle = 0;
+		     pcr_handle < NUM_PCRS && !err;
+		     pcr_handle++) {
+			err = tpm2_pcr_read(bank[i].algo_name, pcr_handle,
+					    bank[i].pcr[pcr_handle],
+					    bank[i].digest_size,
 					    &errmsg);
 			if (err) {
 				log_debug("Failed to read %s PCRs: (%s)\n",

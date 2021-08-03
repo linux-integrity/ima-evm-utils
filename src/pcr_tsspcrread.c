@@ -68,7 +68,7 @@ int tpm2_pcr_supported(void)
 	return 1;
 }
 
-int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
+int tpm2_pcr_read(const char *algo_name, uint32_t pcr_handle, uint8_t *hwpcr,
 		 int len, char **errmsg)
 {
 	FILE *fp;
@@ -76,8 +76,8 @@ int tpm2_pcr_read(const char *algo_name, int idx, uint8_t *hwpcr,
 	char cmd[PATH_MAX + 50];
 	int ret;
 
-	sprintf(cmd, "%s -halg %s -ha %d -ns 2> /dev/null",
-		path, algo_name, idx);
+	sprintf(cmd, "%s -halg %s -ha %u -ns 2> /dev/null",
+		path, algo_name, pcr_handle);
 	fp = popen(cmd, "r");
 	if (!fp) {
 		ret = asprintf(errmsg, "popen failed: %s", strerror(errno));
