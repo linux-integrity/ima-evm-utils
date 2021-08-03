@@ -30,9 +30,14 @@ AC_SUBST(KERNEL_HEADERS)
 AC_CHECK_HEADER(unistd.h)
 AC_CHECK_HEADERS(openssl/conf.h)
 
+# Intel TSS
 AC_CHECK_LIB([tss2-esys], [Esys_Free])
 AC_CHECK_LIB([tss2-rc], [Tss2_RC_Decode])
 AM_CONDITIONAL([USE_PCRTSS], [test "x$ac_cv_lib_tss2_esys_Esys_Free" = "xyes"])
+
+# IBM TSS include files
+AC_CHECK_HEADER(ibmtss/tss.h, [], [], [[#define TPM_POSIX]])
+AM_CONDITIONAL([USE_IBMTSS], [test "x$ac_cv_header_ibmtss_tss_h" = "xyes"])
 
 AC_CHECK_HEADERS(sys/xattr.h, , [AC_MSG_ERROR([sys/xattr.h header not found. You need the c-library development package.])])
 AC_CHECK_HEADERS(keyutils.h, , [AC_MSG_ERROR([keyutils.h header not found. You need the libkeyutils development package.])])
@@ -79,5 +84,6 @@ echo	"          debug: $pkg_cv_enable_debug"
 echo	"   openssl-conf: $enable_openssl_conf"
 echo	"      tss2-esys: $ac_cv_lib_tss2_esys_Esys_Free"
 echo	" tss2-rc-decode: $ac_cv_lib_tss2_rc_Tss2_RC_Decode"
+echo    "         ibmtss: $ac_cv_header_ibmtss_tss_h"
 echo	"            doc: $have_doc"
 echo

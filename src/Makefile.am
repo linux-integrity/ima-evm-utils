@@ -22,10 +22,21 @@ evmctl_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 evmctl_LDFLAGS = $(LDFLAGS_READLINE)
 evmctl_LDADD =  $(LIBCRYPTO_LIBS) -lkeyutils libimaevm.la
 
+# USE_PCRTSS uses the Intel TSS
 if USE_PCRTSS
-evmctl_SOURCES += pcr_tss.c
+ evmctl_SOURCES += pcr_tss.c
+
+# USE_IBMTSS uses the IBM TSS
 else
-evmctl_SOURCES += pcr_tsspcrread.c
+if USE_IBMTSS
+ evmctl_SOURCES += pcr_ibmtss.c
+ evmctl_LDADD += -libmtss
+
+# uses the IBM TSS command line utilities
+else
+ evmctl_SOURCES += pcr_tsspcrread.c
+
+endif
 endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -include config.h
