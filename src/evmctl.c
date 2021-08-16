@@ -2629,7 +2629,12 @@ static char *get_password(void)
 		return NULL;
 	}
 
-	return pwd;
+	if (pwd == NULL) {
+		free(password);
+		return NULL;
+	}
+
+	return password;
 }
 
 int main(int argc, char *argv[])
