@@ -2500,7 +2500,7 @@ static void usage(void)
 
 	printf(
 		"\n"
-		"  -a, --hashalgo     sha1 (default), sha224, sha256, sha384, sha512, streebog256, streebog512\n"
+		"  -a, --hashalgo     sha1, sha224, sha256, sha384, sha512, streebog256, streebog512 (default: %s)\n"
 		"  -s, --imasig       make IMA signature\n"
 		"  -d, --imahash      make IMA hash\n"
 		"  -f, --sigfile      store IMA signature in .sig file instead of xattr\n"
@@ -2538,7 +2538,7 @@ static void usage(void)
 		"\n"
 		"Environment variables:\n\n"
 		"EVMCTL_KEY_PASSWORD  : Private key password to use; do not use --pass option\n"
-		"\n");
+		"\n", DEFAULT_HASH_ALGO);
 }
 
 struct command cmds[] = {

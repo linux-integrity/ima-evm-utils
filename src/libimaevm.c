@@ -89,7 +89,7 @@ static const char *const pkey_hash_algo_kern[PKEY_HASH__LAST] = {
 struct libimaevm_params imaevm_params = {
 	.verbose = LOG_INFO,
 	.x509 = 1,
-	.hash_algo = "sha1",
+	.hash_algo = DEFAULT_HASH_ALGO,
 };
 
 static void __attribute__ ((constructor)) libinit(void);
