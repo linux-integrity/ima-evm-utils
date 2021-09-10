@@ -9,7 +9,7 @@ AC_DEFUN([AX_DEFAULT_HASH_ALGO], [
 	AC_ARG_WITH([default_hash],
 		AS_HELP_STRING([--with-default-hash=ALGORITHM], [specifies the default hash algorithm to be used]),
 		[HASH_ALGO=$withval],
-		[HASH_ALGO=sha1])
+		[HASH_ALGO=sha256])
 
 	AC_PROG_SED()
 	HASH_ALGO="$(echo $HASH_ALGO | $SED 's/\(.*\)/\L\1\E/')"

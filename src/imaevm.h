@@ -76,7 +76,7 @@
 #define log_errno(fmt, args...)		do_log(LOG_ERR, fmt ": errno: %s (%d)\n", ##args, strerror(errno), errno)
 
 #ifndef DEFAULT_HASH_ALGO
-#define DEFAULT_HASH_ALGO "sha1"
+#define DEFAULT_HASH_ALGO "sha256"
 #endif
 
 #define	DATA_SIZE	4096
