@@ -62,6 +62,7 @@ else
 fi
 
 EVMCTL_MANPAGE_DOCBOOK_XSL
+AX_DEFAULT_HASH_ALGO([$KERNEL_HEADERS])
 
 # for gcov
 #CFLAGS="$CFLAGS -Wall -fprofile-arcs -ftest-coverage"
@@ -81,6 +82,7 @@ echo
 echo
 echo	"Configuration:"
 echo	"          debug: $pkg_cv_enable_debug"
+echo	"   default-hash: $HASH_ALGO"
 echo	"   openssl-conf: $enable_openssl_conf"
 echo	"      tss2-esys: $ac_cv_lib_tss2_esys_Esys_Free"
 echo	" tss2-rc-decode: $ac_cv_lib_tss2_rc_Tss2_RC_Decode"
