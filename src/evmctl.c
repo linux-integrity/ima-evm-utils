@@ -2640,6 +2640,23 @@ static char *get_password(void)
 	return password;
 }
 
+static ENGINE *setup_engine(const char *engine_id)
+{
+	ENGINE *eng = ENGINE_by_id(engine_id);
+	if (!eng) {
+		log_err("engine %s isn't available\n", optarg);
+		ERR_print_errors_fp(stderr);
+	} else if (!ENGINE_init(eng)) {
+		log_err("engine %s init failed\n", optarg);
+		ERR_print_errors_fp(stderr);
+		ENGINE_free(eng);
+		eng = NULL;
+	}
+	if (eng)
+		ENGINE_set_default(eng, ENGINE_METHOD_ALL);
+	return eng;
+}
+
 int main(int argc, char *argv[])
 {
 	int err = 0, c, lind;
@@ -2764,19 +2781,8 @@ int main(int argc, char *argv[])
 			verify_list_sig = 1;
 			break;
 		case 139: /* --engine e */
-			eng = ENGINE_by_id(optarg);
-			if (!eng) {
-				log_err("engine %s isn't available\n", optarg);
-				ERR_print_errors_fp(stderr);
-			} else if (!ENGINE_init(eng)) {
-				log_err("engine %s init failed\n", optarg);
-				ERR_print_errors_fp(stderr);
-				ENGINE_free(eng);
-				eng = NULL;
-			}
-			if (eng)
-				ENGINE_set_default(eng, ENGINE_METHOD_ALL);
-			else
+			eng = setup_engine(optarg);
+			if (!eng)
 				goto error;
 			break;
 		case 140: /* --xattr-user */
