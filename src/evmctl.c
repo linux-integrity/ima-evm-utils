@@ -2774,7 +2774,10 @@ int main(int argc, char *argv[])
 				ENGINE_free(eng);
 				eng = NULL;
 			}
-			ENGINE_set_default(eng, ENGINE_METHOD_ALL);
+			if (eng)
+				ENGINE_set_default(eng, ENGINE_METHOD_ALL);
+			else
+				goto error;
 			break;
 		case 140: /* --xattr-user */
 			xattr_ima = "user.ima";
@@ -2848,6 +2851,7 @@ int main(int argc, char *argv[])
 			err = 125;
 	}
 
+error:
 	if (eng) {
 		ENGINE_finish(eng);
 		ENGINE_free(eng);
