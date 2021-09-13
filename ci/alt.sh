@@ -12,12 +12,15 @@ apt-get install -y \
 		asciidoc \
 		attr \
 		docbook-style-xsl \
+		gnutls-utils \
 		libattr-devel \
 		libkeyutils-devel \
+		libp11 \
 		libssl-devel \
 		openssl \
 		openssl-gost-engine \
 		rpm-build \
+		softhsm \
 		wget \
 		xsltproc \
 		xxd \
