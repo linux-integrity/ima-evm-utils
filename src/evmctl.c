@@ -2660,7 +2660,6 @@ static ENGINE *setup_engine(const char *engine_id)
 int main(int argc, char *argv[])
 {
 	int err = 0, c, lind;
-	ENGINE *eng = NULL;
 	unsigned long keyid;
 	char *eptr;
 
@@ -2781,8 +2780,8 @@ int main(int argc, char *argv[])
 			verify_list_sig = 1;
 			break;
 		case 139: /* --engine e */
-			eng = setup_engine(optarg);
-			if (!eng)
+			imaevm_params.eng = setup_engine(optarg);
+			if (!imaevm_params.eng)
 				goto error;
 			break;
 		case 140: /* --xattr-user */
@@ -2858,9 +2857,9 @@ int main(int argc, char *argv[])
 	}
 
 error:
-	if (eng) {
-		ENGINE_finish(eng);
-		ENGINE_free(eng);
+	if (imaevm_params.eng) {
+		ENGINE_finish(imaevm_params.eng);
+		ENGINE_free(imaevm_params.eng);
 #if OPENSSL_API_COMPAT < 0x10100000L
 		ENGINE_cleanup();
 #endif

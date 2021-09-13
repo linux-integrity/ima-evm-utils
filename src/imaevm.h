@@ -48,6 +48,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <openssl/rsa.h>
+#include <openssl/engine.h>
 
 #ifdef USE_FPRINTF
 #define do_log(level, fmt, args...)	\
@@ -197,6 +198,7 @@ struct libimaevm_params {
 	const char *keyfile;
 	const char *keypass;
 	uint32_t keyid;		/* keyid overriding value, unless 0. (Host order.) */
+	ENGINE *eng;
 };
 
 struct RSA_ASN1_template {
