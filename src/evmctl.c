@@ -2836,6 +2836,14 @@ int main(int argc, char *argv[])
 	if (!imaevm_params.keypass)
 		imaevm_params.keypass = getenv("EVMCTL_KEY_PASSWORD");
 
+	if (imaevm_params.keyfile != NULL &&
+	    imaevm_params.eng == NULL &&
+	    !strncmp(imaevm_params.keyfile, "pkcs11:", 7)) {
+		imaevm_params.eng = setup_engine("pkcs11");
+		if (!imaevm_params.eng)
+			goto error;
+	}
+
 	if (argv[optind] == NULL)
 		usage();
 	else
