@@ -60,6 +60,7 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
+#include <openssl/engine.h>
 
 #include "imaevm.h"
 #include "hash_info.h"
@@ -804,20 +805,44 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
 	FILE *fp;
 	EVP_PKEY *pkey;
 
-	fp = fopen(keyfile, "r");
-	if (!fp) {
-		log_err("Failed to open keyfile: %s\n", keyfile);
-		return NULL;
-	}
-	pkey = PEM_read_PrivateKey(fp, NULL, NULL, (void *)keypass);
-	if (!pkey) {
-		log_err("Failed to PEM_read_PrivateKey key file: %s\n",
-			keyfile);
-		output_openssl_errors();
+	if (!strncmp(keyfile, "pkcs11:", 7)) {
+		if (!imaevm_params.keyid) {
+			log_err("When using a pkcs11 URI you must provide the keyid with an option\n");
+			return NULL;
+		}
+
+		if (keypass) {
+			if (!ENGINE_ctrl_cmd_string(imaevm_params.eng, "PIN", keypass, 0)) {
+				log_err("Failed to set the PIN for the private key\n");
+				goto err_engine;
+			}
+		}
+		pkey = ENGINE_load_private_key(imaevm_params.eng, keyfile, NULL, NULL);
+		if (!pkey) {
+			log_err("Failed to load private key %s\n", keyfile);
+			goto err_engine;
+		}
+	} else {
+		fp = fopen(keyfile, "r");
+		if (!fp) {
+			log_err("Failed to open keyfile: %s\n", keyfile);
+			return NULL;
+		}
+		pkey = PEM_read_PrivateKey(fp, NULL, NULL, (void *)keypass);
+		if (!pkey) {
+			log_err("Failed to PEM_read_PrivateKey key file: %s\n",
+				keyfile);
+			output_openssl_errors();
+		}
+
+		fclose(fp);
 	}
 
-	fclose(fp);
 	return pkey;
+
+err_engine:
+	output_openssl_errors();
+	return NULL;
 }
 
 static RSA *read_priv_key(const char *keyfile, const char *keypass)
