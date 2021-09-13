@@ -28,7 +28,8 @@ fi
 
 ./gen-keys.sh >/dev/null 2>&1
 
-trap _report_exit EXIT
+trap _report_exit_and_cleanup EXIT
+WORKDIR=$(mktemp -d)
 set -f # disable globbing
 
 # Determine keyid from a cert
@@ -132,11 +133,16 @@ check_sign() {
   # OPTS (additional options for evmctl),
   # FILE (working file to sign).
   local "$@"
-  local KEY=${KEY%.*}.key
+  local key verifykey
   local FILE=${FILE:-$ALG.txt}
 
-  # Normalize key filename
-  KEY=test-${KEY#test-}
+  # Normalize key filename if it's not a pkcs11 URI
+  if [ ${KEY:0:7} != pkcs11: ]; then
+    key=${KEY%.*}.key
+    key=test-${key#test-}
+  else
+    key=${KEY}
+  fi
 
   # Append suffix to files for negative tests, because we may
   # leave only good files for verify tests.
@@ -152,33 +158,33 @@ check_sign() {
 
   if _test_expected_to_pass; then
     # Can openssl work with this digest?
-    cmd="openssl dgst $OPENSSL_ENGINE -$ALG $FILE"
+    cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG $FILE"
     echo - "$cmd"
     if ! $cmd >/dev/null; then
-      echo "${CYAN}$ALG ($KEY) test is skipped (openssl is unable to digest)$NORM"
+      echo "${CYAN}$ALG ($key) test is skipped (openssl is unable to digest)$NORM"
       return "$SKIP"
     fi
 
-    if [ ! -e "$KEY" ]; then
-      echo "${CYAN}$ALG ($KEY) test is skipped (key file not found)$NORM"
+    if [ "${key:0:7}" != pkcs11: ] && [ ! -e "$key" ]; then
+      echo "${CYAN}$ALG ($key) test is skipped (key file not found)$NORM"
       return "$SKIP"
     fi
 
     # Can openssl sign with this digest and key?
-    cmd="openssl dgst $OPENSSL_ENGINE -$ALG -sign $KEY -hex $FILE"
+    cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -sign $key -hex $FILE"
     echo - "$cmd"
     if ! $cmd >/dev/null; then
-      echo "${CYAN}$ALG ($KEY) test is skipped (openssl is unable to sign)$NORM"
+      echo "${CYAN}$ALG ($key) test is skipped (openssl is unable to sign)$NORM"
       return "$SKIP"
     fi
   fi
 
   # Insert keyid from cert into PREFIX in-place of marker `:K:'
   if [[ $PREFIX =~ :K: ]]; then
-    keyid=$(_keyid_from_cert "$KEY")
+    keyid=$(_keyid_from_cert "$key")
     if [ $? -ne 0 ]; then
       color_red
-      echo "Unable to determine keyid for $KEY"
+      echo "Unable to determine keyid for $key"
       color_restore
       return "$HARDFAIL"
     fi
@@ -187,7 +193,7 @@ check_sign() {
   fi
 
   # Perform signing by evmctl
-  _evmctl_sign "$TYPE" "$KEY" "$ALG" "$FILE" "$OPTS" || return
+  _evmctl_sign "$TYPE" "$key" "$ALG" "$FILE" "$OPTS" || return
 
   # First simple pattern match the signature.
   ADD_TEXT_FOR=$ALG \
@@ -207,7 +213,13 @@ check_sign() {
   _extract_xattr "$FILE" "$(_xattr "$TYPE")" "$FILE.sig2" "$PREFIX"
 
   # Verify extracted signature with openssl
-  cmd="openssl dgst $OPENSSL_ENGINE -$ALG -verify ${KEY%.*}.pub \
+  if [ "${key:0:7}" != pkcs11: ]; then
+      verifykey=${key%.*}.pub
+  else
+      verifykey=${key}
+  fi
+
+  cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
 	-signature $FILE.sig2 $FILE"
   echo - "$cmd"
   if ! $cmd; then
@@ -413,3 +425,15 @@ expect_fail \
 expect_fail \
   check_sign TYPE=ima KEY=gost2012_256-B ALG=md_gost12_512 PREFIX=0x0302 OPTS=
 
+# Test signing with key described by pkcs11 URI
+_softhsm_setup "${WORKDIR}"
+if [ -n "${PKCS11_KEYURI}" ]; then
+  expect_pass check_sign FILE=pkcs11test TYPE=ima KEY=${PKCS11_KEYURI} ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS=--keyid=aabbccdd
+  expect_pass check_sign FILE=pkcs11test TYPE=ima KEY=${PKCS11_KEYURI} ALG=sha1   PREFIX=0x030202aabbccdd0100 OPTS=--keyid=aabbccdd
+else
+  # to have a constant number of tests, skip these two tests
+  __skip() { echo "pkcs11 test is skipped: could not setup softhsm"; return $SKIP; }
+  expect_pass __skip
+  expect_pass __skip
+fi
+_softhsm_teardown "${WORKDIR}"

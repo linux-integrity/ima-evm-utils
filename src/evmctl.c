@@ -2507,6 +2507,7 @@ static void usage(void)
 		"      --xattr-user   store xattrs in user namespace (for testing purposes)\n"
 		"      --rsa          use RSA key type and signing scheme v1\n"
 		"  -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)\n"
+		"                     or a pkcs11 URI\n"
 		"      --keyid n      overwrite signature keyid with a 32-bit value in hex (for signing)\n"
 		"      --keyid-from-cert file\n"
 		"                     read keyid value from SKID of a x509 cert file\n"
@@ -2534,6 +2535,9 @@ static void usage(void)
 		"      --ignore-violations ignore ToMToU measurement violations\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
+		"\n"
+		"Environment variables:\n\n"
+		"EVMCTL_KEY_PASSWORD  : Private key password to use; do not use --pass option\n"
 		"\n");
 }
 
@@ -2637,10 +2641,26 @@ static char *get_password(void)
 	return password;
 }
 
+static ENGINE *setup_engine(const char *engine_id)
+{
+	ENGINE *eng = ENGINE_by_id(engine_id);
+	if (!eng) {
+		log_err("engine %s isn't available\n", optarg);
+		ERR_print_errors_fp(stderr);
+	} else if (!ENGINE_init(eng)) {
+		log_err("engine %s init failed\n", optarg);
+		ERR_print_errors_fp(stderr);
+		ENGINE_free(eng);
+		eng = NULL;
+	}
+	if (eng)
+		ENGINE_set_default(eng, ENGINE_METHOD_ALL);
+	return eng;
+}
+
 int main(int argc, char *argv[])
 {
 	int err = 0, c, lind;
-	ENGINE *eng = NULL;
 	unsigned long keyid;
 	char *eptr;
 
@@ -2761,17 +2781,9 @@ int main(int argc, char *argv[])
 			verify_list_sig = 1;
 			break;
 		case 139: /* --engine e */
-			eng = ENGINE_by_id(optarg);
-			if (!eng) {
-				log_err("engine %s isn't available\n", optarg);
-				ERR_print_errors_fp(stderr);
-			} else if (!ENGINE_init(eng)) {
-				log_err("engine %s init failed\n", optarg);
-				ERR_print_errors_fp(stderr);
-				ENGINE_free(eng);
-				eng = NULL;
-			}
-			ENGINE_set_default(eng, ENGINE_METHOD_ALL);
+			imaevm_params.eng = setup_engine(optarg);
+			if (!imaevm_params.eng)
+				goto error;
 			break;
 		case 140: /* --xattr-user */
 			xattr_ima = "user.ima";
@@ -2822,6 +2834,17 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (!imaevm_params.keypass)
+		imaevm_params.keypass = getenv("EVMCTL_KEY_PASSWORD");
+
+	if (imaevm_params.keyfile != NULL &&
+	    imaevm_params.eng == NULL &&
+	    !strncmp(imaevm_params.keyfile, "pkcs11:", 7)) {
+		imaevm_params.eng = setup_engine("pkcs11");
+		if (!imaevm_params.eng)
+			goto error;
+	}
+
 	if (argv[optind] == NULL)
 		usage();
 	else
@@ -2842,9 +2865,10 @@ int main(int argc, char *argv[])
 			err = 125;
 	}
 
-	if (eng) {
-		ENGINE_finish(eng);
-		ENGINE_free(eng);
+error:
+	if (imaevm_params.eng) {
+		ENGINE_finish(imaevm_params.eng);
+		ENGINE_free(imaevm_params.eng);
 #if OPENSSL_API_COMPAT < 0x10100000L
 		ENGINE_cleanup();
 #endif

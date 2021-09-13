@@ -248,8 +248,12 @@ _enable_gost_engine() {
 }
 
 # Show test stats and exit into automake test system
-# with proper exit code (same as ours).
-_report_exit() {
+# with proper exit code (same as ours). Do cleanups.
+_report_exit_and_cleanup() {
+  if [ -n "${WORKDIR}" ]; then
+    rm -rf "${WORKDIR}"
+  fi
+
   if [ $testsfail -gt 0 ]; then
     echo "================================="
     echo " Run with FAILEARLY=1 $0 $*"
@@ -272,3 +276,40 @@ _report_exit() {
   fi
 }
 
+# Setup SoftHSM for local testing by calling the softhsm_setup script.
+# Use the provided workdir as the directory where SoftHSM will store its state
+# into.
+# Upon successfully setting up SoftHSM, this function sets the global variables
+# OPENSSL_ENGINE and OPENSSL_KEYFORM so that the openssl command line tool can
+# use SoftHSM. Also the PKCS11_KEYURI global variable is set to the test key's
+# pkcs11 URI.
+_softhsm_setup() {
+  local workdir="$1"
+
+  local msg
+
+  export SOFTHSM_SETUP_CONFIGDIR="${workdir}/softhsm"
+  export SOFTHSM2_CONF="${workdir}/softhsm/softhsm2.conf"
+
+  mkdir -p "${SOFTHSM_SETUP_CONFIGDIR}"
+
+  msg=$(./softhsm_setup setup 2>&1)
+  if [ $? -eq 0 ]; then
+    echo "softhsm_setup setup succeeded: $msg"
+    PKCS11_KEYURI=$(echo $msg | sed -n 's|^keyuri: \(.*\)|\1|p')
+
+    export EVMCTL_ENGINE="--engine pkcs11"
+    export OPENSSL_ENGINE="-engine pkcs11"
+    export OPENSSL_KEYFORM="-keyform engine"
+  else
+    echo "softhsm_setup setup failed: ${msg}"
+  fi
+}
+
+# Tear down the SoftHSM setup and clean up the environment
+_softhsm_teardown() {
+  ./softhsm_setup teardown &>/dev/null
+  rm -rf "${SOFTHSM_SETUP_CONFIGDIR}"
+  unset SOFTHSM_SETUP_CONFIGDIR SOFTHSM2_CONF PKCS11_KEYURI \
+    EVMCTL_ENGINE OPENSSL_ENGINE OPENSSL_KEYFORM
+}

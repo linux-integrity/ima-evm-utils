@@ -25,6 +25,7 @@ yum -y install \
 	automake \
 	diffutils \
 	docbook-xsl \
+	gnutls-utils \
 	gzip \
 	keyutils-libs-devel \
 	libattr-devel \
@@ -33,6 +34,7 @@ yum -y install \
 	make \
 	openssl \
 	openssl-devel \
+	openssl-pkcs11 \
 	pkg-config \
 	procps \
 	sudo \
@@ -42,3 +44,9 @@ yum -y install \
 
 yum -y install docbook5-style-xsl || true
 yum -y install swtpm || true
+
+# SoftHSM is available via EPEL on CentOS
+if [ -f /etc/centos-release ]; then
+	yum -y install epel-release
+fi
+yum -y install softhsm || true

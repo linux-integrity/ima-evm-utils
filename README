@@ -48,6 +48,7 @@ OPTIONS
       --xattr-user   store xattrs in user namespace (for testing purposes)
       --rsa          use RSA key type and signing scheme v1
   -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)
+                     or a pkcs11 URI
       --keyid n      overwrite signature keyid with a 32-bit value in hex (for signing)
       --keyid-from-cert file
                      read keyid value from SKID of a x509 cert file
@@ -69,6 +70,10 @@ OPTIONS
                      stored in the template data.
   -v                 increase verbosity level
   -h, --help         display this help and exit
+
+Environment variables:
+
+EVMCTL_KEY_PASSWORD  : Private key password to use; do not use --pass option
 
 
 INTRODUCTION
