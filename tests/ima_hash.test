@@ -20,7 +20,7 @@ PATH=../src:$PATH
 source ./functions.sh
 _require evmctl openssl getfattr
 
-trap _report_exit EXIT
+trap _report_exit_and_cleanup EXIT
 set -f # disable globbing
 
 check() {
