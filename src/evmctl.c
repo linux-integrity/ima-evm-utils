@@ -2534,6 +2534,9 @@ static void usage(void)
 		"      --ignore-violations ignore ToMToU measurement violations\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
+		"\n"
+		"Environment variables:\n\n"
+		"EVMCTL_KEY_PASSWORD  : Private key password to use; do not use --pass option\n"
 		"\n");
 }
 
@@ -2821,6 +2824,9 @@ int main(int argc, char *argv[])
 			log_err("getopt() returned: %d (%c)\n", c, c);
 		}
 	}
+
+	if (!imaevm_params.keypass)
+		imaevm_params.keypass = getenv("EVMCTL_KEY_PASSWORD");
 
 	if (argv[optind] == NULL)
 		usage();

@@ -70,6 +70,10 @@ OPTIONS
   -v                 increase verbosity level
   -h, --help         display this help and exit
 
+Environment variables:
+
+EVMCTL_KEY_PASSWORD  : Private key password to use; do not use --pass option
+
 
 INTRODUCTION
 ------------
