@@ -32,7 +32,7 @@ matrix:
 
         # glibc (gcc/clang)
         - os: linux
-          env: DISTRO=opensuse/tumbleweed TSS=ibmtss CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/runc --network=host" COMPILE_SSL=openssl-3.0.0-beta1
+          env: DISTRO=opensuse/tumbleweed TSS=ibmtss CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/crun --network=host" COMPILE_SSL=openssl-3.0.0-beta1
           compiler: clang
 
         - os: linux
@@ -72,7 +72,8 @@ matrix:
           compiler: gcc
 
 before_install:
-    # Tumbleweed requires podman and newest runc due docker incompatible with glibc 2.33 (faccessat2)
+    # Tumbleweed requires podman due docker incompatible with glibc 2.33
+    # (faccessat2) and crun (for clone3).
     - CONTAINER="${CONTAINER:-docker}"
     - >
         if [ "$CONTAINER" = "podman" ]; then
@@ -81,11 +82,7 @@ before_install:
             sudo sh -c "echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_${VERSION_ID}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list"
             wget -nv https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_${VERSION_ID}/Release.key -O- | sudo apt-key add -
             sudo apt update
-            sudo apt -y install podman slirp4netns
-
-            # runc
-            sudo curl -L https://github.com/opencontainers/runc/releases/download/v1.0.0-rc93/runc.amd64 -o /usr/bin/runc
-            sudo chmod +x /usr/bin/runc
+            sudo apt -y install podman slirp4netns crun
         fi
     - $CONTAINER info
 
