@@ -27,7 +27,7 @@ matrix:
 
         # musl
         - os: linux
-          env: DISTRO=alpine:latest TSS=tpm2-tss
+          env: DISTRO=alpine:latest TSS=tpm2-tss CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/crun --network=host"
           compiler: gcc
 
         # glibc (gcc/clang)
@@ -48,7 +48,7 @@ matrix:
           compiler: clang
 
         - os: linux
-          env: DISTRO=fedora:latest TSS=ibmtss
+          env: DISTRO=fedora:latest TSS=ibmtss CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/crun --network=host"
           compiler: clang
 
         - os: linux
@@ -68,7 +68,7 @@ matrix:
           compiler: gcc
 
         - os: linux
-          env: DISTRO=alt:sisyphus TSS=libtpm2-tss-devel
+          env: DISTRO=alt:sisyphus TSS=libtpm2-tss-devel CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/crun --network=host"
           compiler: gcc
 
 before_install:
