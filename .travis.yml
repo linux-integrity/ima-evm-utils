@@ -68,7 +68,7 @@ matrix:
           compiler: gcc
 
         - os: linux
-          env: DISTRO=alt:sisyphus TSS=libtpm2-tss-devel CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/crun --network=host"
+          env: REPO="docker.io/library/" DISTRO=${REPO}alt:sisyphus TSS=libtpm2-tss-devel CONTAINER=podman CONTAINER_ARGS="--runtime=/usr/bin/crun --network=host"
           compiler: gcc
 
 before_install:
@@ -92,6 +92,7 @@ before_install:
     - $CONTAINER build $CONTAINER_ARGS -t ima-evm-utils .
 
 script:
-    - INSTALL="${DISTRO%%:*}"
+    - INSTALL="${DISTRO#${REPO}}"
+    - INSTALL="${INSTALL%%:*}"
     - INSTALL="${INSTALL%%/*}"
     - $CONTAINER run $CONTAINER_ARGS -t ima-evm-utils /bin/sh -c "if [ \"$VARIANT\" ]; then ARCH=\"$ARCH\" ./ci/$INSTALL.$VARIANT.sh; fi && ARCH=\"$ARCH\" CC=\"$CC\" TSS=\"$TSS\" ./ci/$INSTALL.sh && if [ "$COMPILE_SSL" ]; then COMPILE_SSL="$COMPILE_SSL" ./tests/install-openssl3.sh; fi && if [ ! \"$VARIANT\" ]; then which tpm_server || which swtpm || if which tssstartup; then ./tests/install-swtpm.sh; fi; fi && CC=\"$CC\" VARIANT=\"$VARIANT\" ./build.sh"
