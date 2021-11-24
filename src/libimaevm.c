@@ -424,10 +424,21 @@ void init_public_keys(const char *keyfiles)
 }
 
 /*
+ * Verify a signature, prefixed with the signature_v2_hdr, either based
+ * directly or indirectly on the file data hash.
+ *
+ * version 2: directly based on the file data hash (e.g. sha*sum)
+ * version 3: indirectly based on the hash of the struct ima_file_id, which
+ *	      contains the xattr type (enum evm_ima_xattr_type), the hash
+ *	      algorithm (enum hash_algo), and the file data hash
+ *	      (e.g. fsverity digest).
+ *
  * Return: 0 verification good, 1 verification bad, -1 error.
+ *
+ * (Note: signature_v2_hdr struct does not contain the 'type'.)
  */
-static int verify_hash_v2(const char *file, const unsigned char *hash, int size,
-			  unsigned char *sig, int siglen)
+static int verify_hash_common(const char *file, const unsigned char *hash,
+			      int size, unsigned char *sig, int siglen)
 {
 	int ret = -1;
 	EVP_PKEY *pkey, *pkey_free = NULL;
@@ -497,6 +508,39 @@ err:
 	return ret;
 }
 
+/*
+ * Verify a signature, prefixed with the signature_v2_hdr, directly based
+ * on the file data hash.
+ *
+ * Return: 0 verification good, 1 verification bad, -1 error.
+ */
+static int verify_hash_v2(const char *file, const unsigned char *hash,
+			  int size, unsigned char *sig, int siglen)
+{
+	/* note: signature_v2_hdr does not contain 'type', use sig + 1 */
+	return verify_hash_common(file, hash, size, sig + 1, siglen - 1);
+}
+
+/*
+ * Verify a signature, prefixed with the signature_v2_hdr, indirectly based
+ * on the file data hash.
+ *
+ * Return: 0 verification good, 1 verification bad, -1 error.
+ */
+static int verify_hash_v3(const char *file, const unsigned char *hash,
+			  int size, unsigned char *sig, int siglen)
+{
+	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
+	int ret;
+
+	ret = calc_hash_sigv3(sig[0], NULL, hash, sigv3_hash);
+	if (ret < 0)
+		return ret;
+
+	/* note: signature_v2_hdr does not contain 'type', use sig + 1 */
+	return verify_hash_common(file, sigv3_hash, size, sig + 1, siglen - 1);
+}
+
 #define HASH_MAX_DIGESTSIZE 64	/* kernel HASH_MAX_DIGESTSIZE is 64 bytes */
 
 struct ima_file_id {
@@ -536,6 +580,9 @@ int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo,
 		log_err("Only fsverity supports signature format v3 (sigv3)\n");
 		return -EINVAL;
 	}
+
+	if (!algo)
+		algo = imaevm_params.hash_algo;
 
 	if ((hash_algo = imaevm_get_hash_algo(algo)) < 0) {
 		log_err("Hash algorithm %s not supported\n", algo);
@@ -625,7 +672,7 @@ int imaevm_hash_algo_from_sig(unsigned char *sig)
 		default:
 			return -1;
 		}
-	} else if (sig[0] == DIGSIG_VERSION_2) {
+	} else if (sig[0] == DIGSIG_VERSION_2 || sig[0] == DIGSIG_VERSION_3) {
 		hashalgo = ((struct signature_v2_hdr *)sig)->hash_algo;
 		if (hashalgo >= PKEY_HASH__LAST)
 			return -1;
@@ -634,11 +681,11 @@ int imaevm_hash_algo_from_sig(unsigned char *sig)
 		return -1;
 }
 
-int verify_hash(const char *file, const unsigned char *hash, int size, unsigned char *sig,
-		int siglen)
+int verify_hash(const char *file, const unsigned char *hash, int size,
+		unsigned char *sig, int siglen)
 {
 	/* Get signature type from sig header */
-	if (sig[0] == DIGSIG_VERSION_1) {
+	if (sig[1] == DIGSIG_VERSION_1) {
 		const char *key = NULL;
 
 		/* Read pubkey from RSA key */
@@ -646,9 +693,12 @@ int verify_hash(const char *file, const unsigned char *hash, int size, unsigned 
 			key = "/etc/keys/pubkey_evm.pem";
 		else
 			key = imaevm_params.keyfile;
-		return verify_hash_v1(file, hash, size, sig, siglen, key);
-	} else if (sig[0] == DIGSIG_VERSION_2) {
+		return verify_hash_v1(file, hash, size, sig + 1, siglen - 1,
+					 key);
+	} else if (sig[1] == DIGSIG_VERSION_2) {
 		return verify_hash_v2(file, hash, size, sig, siglen);
+	} else if (sig[1] == DIGSIG_VERSION_3) {
+		return verify_hash_v3(file, hash, size, sig, siglen);
 	} else
 		return -1;
 }
@@ -659,8 +709,13 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	unsigned char hash[MAX_DIGEST_SIZE];
 	int hashlen, sig_hash_algo;
 
-	if (sig[0] != EVM_IMA_XATTR_DIGSIG) {
+	if (sig[0] != EVM_IMA_XATTR_DIGSIG && sig[0] != IMA_VERITY_DIGSIG) {
 		log_err("%s: xattr ima has no signature\n", file);
+		return -1;
+	}
+
+	if (!digest && sig[0] == IMA_VERITY_DIGSIG) {
+		log_err("%s: calculating the fs-verity digest is not supported\n", file);
 		return -1;
 	}
 
@@ -676,15 +731,15 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	 * Validate the signature based on the digest included in the
 	 * measurement list, not by calculating the local file digest.
 	 */
-	if (digestlen > 0)
-	    return verify_hash(file, digest, digestlen, sig + 1, siglen - 1);
+	if (digest && digestlen > 0)
+		return verify_hash(file, digest, digestlen, sig, siglen);
 
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)
 		return hashlen;
 	assert(hashlen <= sizeof(hash));
 
-	return verify_hash(file, hash, hashlen, sig + 1, siglen - 1);
+	return verify_hash(file, hash, hashlen, sig, siglen);
 }
 
 /*

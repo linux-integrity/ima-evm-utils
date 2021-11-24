@@ -918,7 +918,7 @@ static int verify_evm(const char *file)
 		return mdlen;
 	assert(mdlen <= sizeof(hash));
 
-	return verify_hash(file, hash, mdlen, sig + 1, len - 1);
+	return verify_hash(file, hash, mdlen, sig, len);
 }
 
 static int cmd_verify_evm(struct command *cmd)
@@ -1583,7 +1583,8 @@ void ima_ng_show(struct template_entry *entry)
 	fieldp += field_len;
 	total_len -= field_len;
 
-	if (!strcmp(entry->name, "ima-sig")) {
+	if (!strcmp(entry->name, "ima-sig") ||
+	    !strcmp(entry->name, "ima-sigv2")) {
 		/* get signature */
 		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
@@ -1629,11 +1630,17 @@ void ima_ng_show(struct template_entry *entry)
 			log_info(" ");
 			log_dump(sig, sig_len);
 		}
+
+		/*
+		 * Either verify the signature against the hash contained in
+		 * the measurement list or calculate the hash.
+		 */
 		if (verify_list_sig)
 			err = ima_verify_signature(path, sig, sig_len,
 						   digest, digest_len);
 		else
 			err = ima_verify_signature(path, sig, sig_len, NULL, 0);
+
 		if (!err && imaevm_params.verbose > LOG_INFO)
 			log_info("%s: verification is OK\n", path);
 	} else {
