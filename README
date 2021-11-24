@@ -34,7 +34,7 @@ COMMANDS
  ima_hash file
  ima_measurement [--ignore-violations] [--verify-sig [--key "key1, key2, ..."]]  [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file
  ima_fix [-t fdsxm] path
- sign_hash [--key key] [--pass password]
+ sign_hash [--veritysig] [--key key] [--pass password]
  hmac [--imahash | --imasig ] file
 
 
@@ -43,6 +43,7 @@ OPTIONS
 
   -a, --hashalgo     sha1, sha224, sha256, sha384, sha512
   -s, --imasig       make IMA signature
+      --veritysig    sign an fs-verity file digest hash
   -d, --imahash      make IMA hash
   -f, --sigfile      store IMA signature in .sig file instead of xattr
       --xattr-user   store xattrs in user namespace (for testing purposes)

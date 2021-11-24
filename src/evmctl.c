@@ -135,6 +135,7 @@ static int msize;
 static dev_t fs_dev;
 static bool evm_immutable;
 static bool evm_portable;
+static bool veritysig;
 
 #define HMAC_FLAG_NO_UUID	0x0001
 #define HMAC_FLAG_CAPS_SET	0x0002
@@ -731,33 +732,106 @@ static int cmd_sign_ima(struct command *cmd)
 	return do_cmd(cmd, sign_ima_file);
 }
 
+/*
+ * Sign file hash(es) provided in the format as produced by either
+ * sha*sum or "fsverity digest".
+ *
+ * sha*sum format: <hash> <pathname>
+ * fsverity digest format: <algo>:<hash> <pathname>
+ *
+ * To disambiguate the resulting file signatures, a new signature format
+ * version 3 (sigv3) was defined as the hash of the xattr type (enum
+ * evm_ima_xattr_type), the hash algorithm (enum hash_algo), and the hash.
+ *
+ * Either directly sign the sha*sum hash or indirectly sign the fsverity
+ * hash (sigv3).
+ *
+ * The output is the same format as the input with the resulting file
+ * signature appended.
+ */
 static int cmd_sign_hash(struct command *cmd)
 {
-	const char *key;
-	char *token, *line = NULL;
-	int hashlen = 0;
-	size_t line_len;
-	ssize_t len;
+	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
+	unsigned char sig[MAX_SIGNATURE_SIZE];
 	unsigned char hash[MAX_DIGEST_SIZE];
-	unsigned char sig[MAX_SIGNATURE_SIZE] = "\x03";
-	int siglen;
+	int siglen, algolen = 0, hashlen = 0;
+	char *line = NULL, *token, *hashp;
+	size_t line_len = 0;
+	const char *key;
+	char algo[7];	/* Current maximum fsverity hash algo name length */
+	ssize_t len;
+	int ret;
 
 	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
-	/* support reading hash (eg. output of shasum) */
 	while ((len = getline(&line, &line_len, stdin)) > 0) {
 		/* remove end of line */
 		if (line[len - 1] == '\n')
 			line[--len] = '\0';
 
-		/* find the end of the hash */
-		token = strpbrk(line, ", \t");
-		hashlen = token ? token - line : strlen(line);
+		/*
+		 * Before either directly or indirectly signing the hash,
+		 * convert the hex-ascii hash representation to binary.
+		 */
+		if (veritysig) {
 
-		assert(hashlen / 2 <= sizeof(hash));
-		hex2bin(hash, line, hashlen / 2);
-		siglen = sign_hash(imaevm_params.hash_algo, hash, hashlen / 2,
-				 key, NULL, sig + 1);
+			/*
+			 * Split the hash algorithm from the hash
+			 * example format: sha256:51dda1..d7c6 <file pathname>
+			 */
+			hashp = strpbrk(line, ":");
+			if (hashp)	/* pointer to the delimiter */
+				algolen = hashp - line;
+
+			if (!hashp || algolen <= 0 ||
+			    algolen >= sizeof(algo)) {
+				log_err("Missing/invalid fsverity hash algorithm\n");
+				continue;
+			}
+
+			strncpy(algo, line, algolen);
+			algo[algolen] = '\0';	/* Nul terminate algorithm */
+
+			hashp++;
+			token = strpbrk(line, " ");
+			if (!token) {
+				log_err("Missing fsverity hash\n");
+				continue;
+			}
+
+			hashlen = token - hashp;
+			if (hashlen <= 0) {
+				log_err("Missing fsverity hash\n");
+				continue;
+			}
+
+			assert(hashlen / 2 <= sizeof(hash));
+			hex2bin(hash, hashp, hashlen / 2);
+
+			ret = calc_hash_sigv3(IMA_VERITY_DIGSIG, algo, hash,
+					      sigv3_hash);
+			if (ret < 0 || ret == 1) {
+				log_info("Failure to calculate fs-verity hash\n");
+				continue;
+			}
+
+			siglen = sign_hash(algo, sigv3_hash, hashlen / 2,
+					   key, NULL, sig + 1);
+
+			sig[0] = IMA_VERITY_DIGSIG;
+			sig[1] = DIGSIG_VERSION_3;	/* sigv3 */
+		} else {
+			/* Parse the shaXsum output */
+			token = strpbrk(line, " \t");
+			hashlen = token ? token - line : strlen(line);
+			assert(hashlen / 2 <= sizeof(hash));
+			hex2bin(hash, line, hashlen / 2);
+
+			siglen = sign_hash(imaevm_params.hash_algo, hash,
+					   hashlen / 2, key, NULL, sig + 1);
+			sig[0] = EVM_IMA_XATTR_DIGSIG;
+		}
+
 		if (siglen <= 1)
 			return siglen;
 		assert(siglen < sizeof(sig));
@@ -2568,7 +2642,7 @@ struct command cmds[] = {
 	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
-	{"sign_hash", cmd_sign_hash, 0, "[--key key] [--pass [password]", "Sign hashes from shaXsum output.\n"},
+	{"sign_hash", cmd_sign_hash, 0, "[--veritysig] [--key key] [--pass password]", "Sign hashes from either shaXsum or \"fsverity digest\" output.\n"},
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
@@ -2608,6 +2682,7 @@ static struct option opts[] = {
 	{"verify-bank", 2, 0, 143},
 	{"keyid", 1, 0, 144},
 	{"keyid-from-cert", 1, 0, 145},
+	{"veritysig", 0, 0, 146},
 	{}
 
 };
@@ -2839,6 +2914,9 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 			imaevm_params.keyid = keyid;
+			break;
+		case 146:
+			veritysig = 1;
 			break;
 		case '?':
 			exit(1);

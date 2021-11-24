@@ -497,6 +497,92 @@ err:
 	return ret;
 }
 
+#define HASH_MAX_DIGESTSIZE 64	/* kernel HASH_MAX_DIGESTSIZE is 64 bytes */
+
+struct ima_file_id {
+	__u8 hash_type;		/* xattr type [enum evm_ima_xattr_type] */
+	__u8 hash_algorithm;	/* Digest algorithm [enum hash_algo] */
+	__u8 hash[HASH_MAX_DIGESTSIZE];
+} __packed;
+
+/*
+ * Calculate the signature format version 3 hash based on the portion
+ * of the ima_file_id structure used, not the entire structure.
+ *
+ * On success, return the hash length, otherwise for openssl errors
+ * return 1, other errors return -EINVAL.
+ */
+int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo,
+		    const unsigned char *in_hash, unsigned char *out_hash)
+{
+	struct ima_file_id file_id = { .hash_type = IMA_VERITY_DIGSIG };
+	uint8_t *data = (uint8_t *) &file_id;
+
+	const EVP_MD *md;
+	EVP_MD_CTX *pctx;
+	unsigned int mdlen;
+	int err;
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+	EVP_MD_CTX ctx;
+	pctx = &ctx;
+#else
+	pctx = EVP_MD_CTX_new();
+#endif
+	int hash_algo;
+	int hash_size;
+	unsigned int unused;
+
+	if (type != IMA_VERITY_DIGSIG) {
+		log_err("Only fsverity supports signature format v3 (sigv3)\n");
+		return -EINVAL;
+	}
+
+	if ((hash_algo = imaevm_get_hash_algo(algo)) < 0) {
+		log_err("Hash algorithm %s not supported\n", algo);
+		return -EINVAL;
+	}
+	file_id.hash_algorithm = hash_algo;
+
+	md = EVP_get_digestbyname(algo);
+	if (!md) {
+		log_err("EVP_get_digestbyname(%s) failed\n", algo);
+		err = 1;
+		goto err;
+	}
+
+	hash_size = EVP_MD_size(md);
+	memcpy(file_id.hash, in_hash, hash_size);
+
+	err = EVP_DigestInit(pctx, md);
+	if (!err) {
+		log_err("EVP_DigestInit() failed\n");
+		err = 1;
+		goto err;
+	}
+
+	unused = HASH_MAX_DIGESTSIZE - hash_size;
+	if (!EVP_DigestUpdate(pctx, data, sizeof(file_id) - unused)) {
+		log_err("EVP_DigestUpdate() failed\n");
+		err = 1;
+		goto err;
+	}
+
+	err = EVP_DigestFinal(pctx, out_hash, &mdlen);
+	if (!err) {
+		log_err("EVP_DigestFinal() failed\n");
+		err = 1;
+		goto err;
+	}
+	err = mdlen;
+err:
+	if (err == 1)
+		output_openssl_errors();
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+	EVP_MD_CTX_free(pctx);
+#endif
+	return err;
+}
+
 int imaevm_get_hash_algo(const char *algo)
 {
 	int i;
