@@ -80,11 +80,6 @@ jobs:
               CC: gcc
               TSS: tpm2-tss
 
-          - container: "centos:latest"
-            env:
-              CC: gcc
-              TSS: tpm2-tss
-
           - container: "debian:testing"
             env:
               CC: clang
