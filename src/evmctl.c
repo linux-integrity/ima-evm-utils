@@ -181,6 +181,7 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 	fp = fopen(name, "w");
 	if (!fp) {
 		log_err("Failed to open: %s\n", name);
+		errno = 0;
 		return -1;
 	}
 	err = fwrite(data, len, 1, fp);
@@ -206,6 +207,7 @@ static unsigned char *file2bin(const char *file, const char *ext, int *size)
 	fp = fopen(name, "r");
 	if (!fp) {
 		log_err("Failed to open: %s\n", name);
+		errno = 0;
 		return NULL;
 	}
 	if (fstat(fileno(fp), &stats) == -1) {
@@ -312,8 +314,10 @@ static int get_uuid(struct stat *st, char *uuid)
 	sprintf(path, "blkid -s UUID -o value /dev/block/%u:%u", major, minor);
 
 	fp = popen(path, "r");
-	if (!fp)
+	if (!fp) {
+		errno = 0;
 		goto err;
+	}
 
 	len = fread(_uuid, 1, sizeof(_uuid), fp);
 	pclose(fp);
@@ -370,6 +374,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 
 			if (fd < 0) {
 				log_err("Failed to open: %s\n", file);
+				errno = 0;
 				return -1;
 			}
 			if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
@@ -1122,6 +1127,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 		if (fd < 0) {
 			log_err("Failed to open %s\n", file);
+			errno = 0;
 			goto out;
 		}
 		if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
@@ -1312,6 +1318,7 @@ static int ima_fix(const char *path)
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		log_errno("Failed to open file: %s", path);
+		errno = 0;
 		return -1;
 	}
 
@@ -1828,8 +1835,10 @@ static int read_sysfs_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 	int i, result;
 
 	fp = fopen(pcrs, "r");
-	if (!fp)
+	if (!fp) {
 		fp = fopen(misc_pcrs, "r");
+		errno = 0;
+	}
 	if (!fp)
 		return -1;
 
@@ -1892,6 +1901,7 @@ static int read_file_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 		fp = fopen(path, "r");
 		if (!fp) {
 			log_err("Could not open '%s'\n", path);
+			errno = 0;
 			return -1;
 		}
 
@@ -1984,6 +1994,7 @@ static int ima_measurement(const char *file)
 	fp = fopen(file, "rb");
 	if (!fp) {
 		log_err("Failed to open measurement file: %s\n", file);
+		errno = 0;
 		return -1;
 	}
 
@@ -2229,6 +2240,7 @@ static int read_binary_bios_measurements(char *file, struct tpm_bank_info *bank)
 	fp = fopen(file, "r");
 	if (!fp) {
 		log_errno("Failed to open TPM 1.2 event log.\n");
+		errno = 0;
 		return 1;
 	}
 
@@ -2663,6 +2675,8 @@ int main(int argc, char *argv[])
 	int err = 0, c, lind;
 	unsigned long keyid;
 	char *eptr;
+
+	errno = 0;	/* initialize errno */
 
 #if !(OPENSSL_VERSION_NUMBER < 0x10100000)
 	OPENSSL_init_crypto(
