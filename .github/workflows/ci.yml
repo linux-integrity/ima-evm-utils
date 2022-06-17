@@ -59,7 +59,7 @@ jobs:
               CC: gcc
               TSS: tpm2-tss
 
-          - container: "ubuntu:impish"
+          - container: "ubuntu:jammy"
             env:
               CC: gcc
               TSS: ibmtss
