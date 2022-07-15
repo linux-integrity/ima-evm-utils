@@ -26,6 +26,7 @@ apk add \
 	attr-dev \
 	autoconf \
 	automake \
+	bash \
 	diffutils \
 	docbook-xml \
 	docbook-xsl \
