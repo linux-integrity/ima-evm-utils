@@ -290,6 +290,7 @@ out:
 	return pkey;
 }
 
+#if CONFIG_SIGV1
 RSA *read_pub_key(const char *keyfile, int x509)
 {
 	EVP_PKEY *pkey;
@@ -349,6 +350,7 @@ static int verify_hash_v1(const char *file, const unsigned char *hash, int size,
 
 	return 0;
 }
+#endif  /* CONFIG_SIGV1 */
 
 struct public_key_entry {
 	struct public_key_entry *next;
@@ -684,6 +686,7 @@ int verify_hash(const char *file, const unsigned char *hash, int size,
 {
 	/* Get signature type from sig header */
 	if (sig[1] == DIGSIG_VERSION_1) {
+#if CONFIG_SIGV1
 		const char *key = NULL;
 
 		/* Read pubkey from RSA key */
@@ -693,6 +696,10 @@ int verify_hash(const char *file, const unsigned char *hash, int size,
 			key = imaevm_params.keyfile;
 		return verify_hash_v1(file, hash, size, sig + 1, siglen - 1,
 					 key);
+#else
+		log_info("Signature version 1 deprecated.");
+		return -1;
+#endif
 	} else if (sig[1] == DIGSIG_VERSION_2) {
 		return verify_hash_v2(file, hash, size, sig, siglen);
 	} else if (sig[1] == DIGSIG_VERSION_3) {
@@ -740,6 +747,7 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	return verify_hash(file, hash, hashlen, sig, siglen);
 }
 
+#if CONFIG_SIGV1
 /*
  * Create binary key representation suitable for kernel
  */
@@ -798,6 +806,7 @@ void calc_keyid_v1(uint8_t *keyid, char *str, const unsigned char *pkey, int len
 	if (imaevm_params.verbose > LOG_INFO)
 		log_info("keyid-v1: %s\n", str);
 }
+#endif /* CONFIG_SIGV1 */
 
 /*
  * Calculate keyid of the public_key part of EVP_PKEY
@@ -986,6 +995,7 @@ err_engine:
 	return NULL;
 }
 
+#if CONFIG_SIGV1
 static RSA *read_priv_key(const char *keyfile, const char *keypass)
 {
 	EVP_PKEY *pkey;
@@ -1096,6 +1106,7 @@ out:
 	RSA_free(key);
 	return len;
 }
+#endif /* CONFIG_SIGV1 */
 
 /*
  * @sig is assumed to be of (MAX_SIGNATURE_SIZE - 1) size
@@ -1210,9 +1221,14 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const c
 	if (keypass)
 		imaevm_params.keypass = keypass;
 
-	return imaevm_params.x509 ?
-		sign_hash_v2(hashalgo, hash, size, keyfile, sig) :
-		sign_hash_v1(hashalgo, hash, size, keyfile, sig);
+	if (imaevm_params.x509)
+		return sign_hash_v2(hashalgo, hash, size, keyfile, sig);
+#if CONFIG_SIGV1
+	else
+		return sign_hash_v1(hashalgo, hash, size, keyfile, sig);
+#endif
+	log_info("Signature version 1 deprecated.");
+	return -1;
 }
 
 static void libinit()
