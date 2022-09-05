@@ -17,7 +17,7 @@ jobs:
               ARCH: i386
               TSS: tpm2-tss
               VARIANT: i386
-              COMPILE_SSL: openssl-3.0.0-beta1
+              COMPILE_SSL: openssl-3.0.5
 
           # cross compilation builds
           - container: "debian:stable"
@@ -52,7 +52,7 @@ jobs:
             env:
               CC: clang
               TSS: ibmtss
-              COMPILE_SSL: openssl-3.0.0-beta1
+              COMPILE_SSL: openssl-3.0.5
 
           - container: "opensuse/leap"
             env:
@@ -63,7 +63,7 @@ jobs:
             env:
               CC: gcc
               TSS: ibmtss
-              COMPILE_SSL: openssl-3.0.0-beta1
+              COMPILE_SSL: openssl-3.0.5
 
           - container: "ubuntu:xenial"
             env:
