@@ -2983,8 +2983,10 @@ int main(int argc, char *argv[])
 #if CONFIG_IMA_EVM_ENGINE
 		case 139: /* --engine e */
 			imaevm_params.eng = setup_engine(optarg);
-			if (!imaevm_params.eng)
+			if (!imaevm_params.eng) {
+				log_info("setup_engine failed\n");
 				goto error;
+			}
 			break;
 #endif
 		case 140: /* --xattr-user */

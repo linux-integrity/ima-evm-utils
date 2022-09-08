@@ -13,7 +13,14 @@ wget --no-check-certificate https://github.com/openssl/openssl/archive/refs/tags
 tar --no-same-owner -xzf ${version}.tar.gz
 cd openssl-${version}
 
-./Configure --prefix=/opt/openssl3 --openssldir=/opt/openssl3/ssl
+if [ "$VARIANT" = "i386" ]; then
+	echo "32-bit compilation"
+	FLAGS="-m32 linux-generic32"
+fi
+
+./Configure $FLAGS no-engine no-dynamic-engine --prefix=/opt/openssl3 --openssldir=/opt/openssl3
+# Uncomment for debugging
+# perl configdata.pm --dump | grep engine
 make -j$(nproc)
 # only install apps and library
 sudo make install_sw

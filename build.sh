@@ -32,6 +32,14 @@ log_exit()
 
 cd `dirname $0`
 
+if [ "$COMPILE_SSL" ]; then
+	echo "COMPILE_SSL: $COMPILE_SSL"
+	export CFLAGS="-I/opt/openssl3/include $CFLAGS"
+	export LD_LIBRARY_PATH="/opt/openssl3/lib64:/opt/openssl3/lib:$HOME/src/ima-evm-utils/src/.libs:$LD_LIBRARY_PATH"
+	export LDFLAGS="-L/opt/openssl3/lib64 -L/opt/openssl3/lib $LDFLAGS"
+	export PATH="/opt/openssl3/bin:$HOME/src/ima-evm-utils/src/.libs:$PATH"
+fi
+
 case "$VARIANT" in
 	i386)
 		echo "32-bit compilation"
