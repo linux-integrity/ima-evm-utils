@@ -2008,7 +2008,63 @@ static int read_sysfs_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 	for (i = 1; i < num_banks; i++)
 		tpm_banks[i].supported = 0;
 	return 0;
+}
 
+static int read_tpm2_one_bank(struct tpm_bank_info *tpm_bank)
+{
+	FILE *fp;
+	char digest[MAX_DIGEST_SIZE + 1];
+	char file_name[NAME_MAX];
+	char *p;
+	int i;
+
+	for (i = 0; i < NUM_PCRS; i++) {
+		sprintf(file_name, "/sys/class/tpm/tpm0/pcr-%s/%d",
+			tpm_bank->algo_name, i);
+		fp = fopen(file_name, "r");
+		if (!fp) {
+			log_errno_reset(LOG_DEBUG,
+					"Failed to read TPM 2.0 PCRs via sysfs");
+			return -1;
+		}
+
+		p = fgets(digest, tpm_bank->digest_size * 2 + 1, fp);
+		if (!p) {
+			fclose(fp);
+			return -1;
+		}
+
+		hex2bin(tpm_bank->pcr[i], digest, tpm_bank->digest_size);
+		fclose(fp);
+	}
+	return 0;
+}
+
+static int read_sysfs_tpm2_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
+{
+	int tpm_enabled = 0;
+	int rt, j;
+
+	if (imaevm_params.verbose > LOG_INFO)
+		log_info("Trying to read TPM 2.0 PCRs via sysfs\n");
+
+	for (j = 0; j < num_banks; j++) {
+		rt = read_tpm2_one_bank(&tpm_banks[j]);
+		if (rt < 0) {
+			tpm_banks[j].supported = 0;
+			continue;
+		}
+		tpm_enabled = 1;
+	}
+
+	/* On failure to read any TPM bank PCRs, re-initialize the TPM banks*/
+	if (tpm_enabled == 0) {
+		for (j = 0; j < num_banks; j++)
+			tpm_banks[j].supported = 1;
+		return 1;
+	}
+
+	return 0;
 }
 
 /* Read PCRs from per-bank file(s) specified via --pcrs */
@@ -2091,6 +2147,9 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 
 	/* Else try reading PCRs from the sysfs file if present */
 	if (read_sysfs_pcrs(num_banks, bank) == 0)
+		return 0;
+
+	if (read_sysfs_tpm2_pcrs(num_banks, bank) == 0)
 		return 0;
 
 	/* Any userspace applications available for reading TPM 2.0 PCRs? */
