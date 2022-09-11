@@ -250,6 +250,7 @@ EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
 {
 	FILE *fp;
 	EVP_PKEY *pkey = NULL;
+	struct stat st;
 
 	if (!keyfile)
 		return NULL;
@@ -259,6 +260,17 @@ EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
 		if (imaevm_params.verbose > LOG_INFO)
 			log_info("Failed to open keyfile: %s\n", keyfile);
 		return NULL;
+	}
+
+	if (fstat(fileno(fp), &st) == -1) {
+		log_err("Failed to fstat key file: %s\n", keyfile);
+		goto out;
+	}
+
+	if ((st.st_mode & S_IFMT) != S_IFREG) {
+		if (imaevm_params.verbose > LOG_INFO)
+			log_err("Key file is not regular file: %s\n", keyfile);
+		goto out;
 	}
 
 	if (x509) {
