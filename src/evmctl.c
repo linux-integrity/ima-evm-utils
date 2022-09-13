@@ -1591,8 +1591,9 @@ void ima_ng_show(struct template_entry *entry)
 {
 	uint8_t *fieldp = entry->template;
 	uint32_t field_len;
-	int total_len = entry->template_len, digest_len, len, sig_len, fbuf_len;
+	int total_len = entry->template_len, digest_len, len, fbuf_len;
 	uint8_t *digest, *sig = NULL, *fbuf = NULL;
+	int sig_len = 0;
 	char *algo, *path;
 	int found;
 	int err;
@@ -1601,33 +1602,65 @@ void ima_ng_show(struct template_entry *entry)
 	field_len = *(uint32_t *)fieldp;
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
+	if (total_len < 0) {
+		log_err("Template \"%s\" invalid template data\n", entry->name);
+		return;
+	}
 
 	algo = (char *)fieldp;
 	len = strnlen(algo, field_len - 1) + 1;
 	digest_len = field_len - len;
+	if (digest_len < SHA_DIGEST_LENGTH ||
+	    digest_len > MAX_DIGEST_SIZE) {
+		log_err("Template \"%s\" invalid digest length\n", entry->name);
+		return;
+	}
 	digest = fieldp + len;
 
 	/* move to next field */
 	fieldp += field_len;
 	total_len -= field_len;
+	if (total_len < 0) {
+		log_err("Template \"%s\" invalid template data\n", entry->name);
+		return;
+	}
 
 	/* get path */
 	field_len = *(uint32_t *)fieldp;
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
+	if (field_len == 0 || field_len > PATH_MAX || total_len < field_len) {
+		log_err("Template \"%s\" invalid file pathname\n", entry->name);
+		return;
+	}
 
 	path = (char *)fieldp;
 
 	/* move to next field */
 	fieldp += field_len;
 	total_len -= field_len;
+	if (total_len < 0) {
+		log_err("Template \"%s\" invalid template data\n", entry->name);
+		return;
+	}
 
 	if (!strcmp(entry->name, "ima-sig") ||
 	    !strcmp(entry->name, "ima-sigv2")) {
-		/* get signature */
+		/* get signature, if it exists */
 		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
+		if (field_len > MAX_SIGNATURE_SIZE) {
+			log_err("Template \"%s\" invalid file signature size\n",
+				entry->name);
+			return;
+		}
+
 		total_len -= sizeof(field_len);
+		if (total_len < 0) {
+			log_err("Template \"%s\" invalid template data\n",
+				entry->name);
+			return;
+		}
 
 		if (field_len) {
 			sig = fieldp;
@@ -1649,6 +1682,11 @@ void ima_ng_show(struct template_entry *entry)
 			fieldp += field_len;
 			total_len -= field_len;
 		}
+	}
+
+	if (total_len < 0) {
+		log_err("Template \"%s\" invalid template data\n", entry->name);
+		return;
 	}
 
 	/* ascii_runtime_measurements */
