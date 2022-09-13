@@ -91,6 +91,16 @@
 #define MAX_DIGEST_SIZE		64
 #define MAX_SIGNATURE_SIZE	1024
 
+/*
+ * The maximum template data size is dependent on the template format. For
+ * example the 'ima-modsig' template includes two signatures - one for the
+ * entire file, the other without the appended signature - and other fields
+ * (e.g. file digest, file name, file digest without the appended signature).
+ *
+ * Other template formats are much smaller.
+ */
+#define MAX_TEMPLATE_SIZE	(MAX_SIGNATURE_SIZE * 4)
+
 #define __packed __attribute__((packed))
 
 enum evm_ima_xattr_type {

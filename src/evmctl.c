@@ -2189,7 +2189,8 @@ static int ima_measurement(const char *file)
 				log_err("Unable to read template length\n");
 				goto out;
 			}
-			if (entry.template_len == 0) {
+			if (entry.template_len == 0 ||
+			    entry.template_len > MAX_TEMPLATE_SIZE) {
 				log_err("Invalid template data len\n");
 				goto out;
 			}
