@@ -2161,7 +2161,7 @@ static int ima_measurement(const char *file)
 		}
 
 		memset(entry.name, 0x00, sizeof(entry.name));
-		if (!fread(entry.name, entry.header.name_len, 1, fp)) {
+		if (fread(entry.name, entry.header.name_len, 1, fp) != 1) {
 			log_err("Unable to read template name\n");
 			goto out;
 		}
@@ -2184,8 +2184,8 @@ static int ima_measurement(const char *file)
 
 		/* The "ima" template data is not length prefixed.  Skip it. */
 		if (!is_ima_template) {
-			if (!fread(&entry.template_len,
-				   sizeof(entry.template_len), 1, fp)) {
+			if (fread(&entry.template_len,
+				  sizeof(entry.template_len), 1, fp) != 1) {
 				log_err("Unable to read template length\n");
 				goto out;
 			}
@@ -2205,7 +2205,8 @@ static int ima_measurement(const char *file)
 		}
 
 		if (!is_ima_template) {
-			if (!fread(entry.template, entry.template_len, 1, fp)) {
+			if (fread(entry.template, entry.template_len,
+				  1, fp) != 1) {
 				log_errno("Unable to read template\n");
 				goto out;
 			}
@@ -2217,7 +2218,8 @@ static int ima_measurement(const char *file)
 			 * The "ima" template data format is digest,
 			 * filename length, filename.
 			 */
-			if (!fread(entry.template, SHA_DIGEST_LENGTH, 1, fp)) {
+			if (fread(entry.template, SHA_DIGEST_LENGTH,
+				  1, fp) != 1) {
 				log_errno("Unable to read file data hash\n");
 				goto out;
 			}
