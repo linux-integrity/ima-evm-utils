@@ -20,21 +20,11 @@
 #undef MAX_DIGEST_SIZE	/* imaevm uses a different value than the TSS */
 #include <ibmtss/tss.h>
 
-#define CMD "tsspcrread"
-
-static char path[PATH_MAX];
-
 int tpm2_pcr_supported(void)
 {
 	if (imaevm_params.verbose > LOG_INFO)
-		log_info("Using %s to read PCRs.\n", CMD);
+		log_info("Using ibmtss to read PCRs\n");
 
-	if (get_cmd_path(CMD, path, sizeof(path))) {
-		log_debug("Couldn't find '%s' in $PATH\n", CMD);
-		return 0;
-	}
-
-	log_debug("Found '%s' in $PATH\n", CMD);
 	return 1;
 }
 
