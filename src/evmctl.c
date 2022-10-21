@@ -166,6 +166,9 @@ struct tpm_bank_info {
 static char *pcrfile[MAX_PCRFILE];
 static unsigned npcrfile;
 
+#define log_errno_reset(level, fmt, args...) \
+	{do_log(level, fmt " (errno: %s)\n", ##args, strerror(errno)); errno = 0; }
+
 static int bin2file(const char *file, const char *ext, const unsigned char *data, int len)
 {
 	FILE *fp;
@@ -1911,8 +1914,10 @@ static int read_sysfs_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 	fp = fopen(pcrs, "r");
 	if (!fp)
 		fp = fopen(misc_pcrs, "r");
-	if (!fp)
+	if (!fp) {
+		log_errno_reset(LOG_DEBUG, "Failed to read TPM 1.2 PCRs");
 		return -1;
+	}
 
 	result = read_one_bank(&tpm_banks[0], fp);
 	fclose(fp);
@@ -2055,7 +2060,6 @@ static int ima_measurement(const char *file)
 	int err_padded = -1;
 	int err = -1;
 
-	errno = 0;
 	memset(zero, 0, MAX_DIGEST_SIZE);
 
 	pseudo_padded_banks = init_tpm_banks(&num_banks);
@@ -2072,6 +2076,9 @@ static int ima_measurement(const char *file)
 		init_public_keys(imaevm_params.keyfile);
 	else				/* assume read pubkey from x509 cert */
 		init_public_keys("/etc/keys/x509_evm.der");
+	if (errno)
+		log_errno_reset(LOG_DEBUG,
+				"Failure in initializing public keys");
 
 	/*
 	 * Reading the PCRs before walking the IMA measurement list
@@ -2745,6 +2752,8 @@ int main(int argc, char *argv[])
 	int err = 0, c, lind;
 	unsigned long keyid;
 	char *eptr;
+
+	errno = 0;	/* initialize global errno */
 
 #if !(OPENSSL_VERSION_NUMBER < 0x10100000)
 	OPENSSL_init_crypto(
