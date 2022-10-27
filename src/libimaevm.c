@@ -144,7 +144,6 @@ static int add_file_hash(const char *file, EVP_MD_CTX *ctx)
 	fp = fopen(file, "r");
 	if (!fp) {
 		log_err("Failed to open: %s\n", file);
-		errno = 0;
 		return -1;
 	}
 
@@ -259,7 +258,6 @@ EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
 	if (!fp) {
 		if (imaevm_params.verbose > LOG_INFO)
 			log_info("Failed to open keyfile: %s\n", keyfile);
-		errno = 0;
 		return NULL;
 	}
 
@@ -878,7 +876,6 @@ static int read_keyid_from_cert(uint32_t *keyid_be, const char *certfile, int tr
 
 	if (!(fp = fopen(certfile, "r"))) {
 		log_err("Cannot open %s: %s\n", certfile, strerror(errno));
-		errno = 0;
 		return -1;
 	}
 	if (!PEM_read_X509(fp, &x, NULL, NULL)) {
@@ -970,7 +967,6 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
 		fp = fopen(keyfile, "r");
 		if (!fp) {
 			log_err("Failed to open keyfile: %s\n", keyfile);
-			errno = 0;
 			return NULL;
 		}
 		pkey = PEM_read_PrivateKey(fp, NULL, NULL, (void *)keypass);
