@@ -572,7 +572,8 @@ static int sign_evm(const char *file, const char *key)
 	if (xattr) {
 		err = lsetxattr(file, xattr_evm, sig, len, 0);
 		if (err < 0) {
-			log_err("setxattr failed: %s\n", file);
+			log_errno_reset(LOG_ERR, "Setting EVM xattr failed: %s",
+					file);
 			return err;
 		}
 	}
@@ -615,7 +616,9 @@ static int hash_ima(const char *file)
 	if (xattr) {
 		err = lsetxattr(file, xattr_ima, hash, len, 0);
 		if (err < 0) {
-			log_err("setxattr failed: %s\n", file);
+			log_errno_reset(LOG_ERR,
+					"Setting IMA hash xattr failed: %s",
+					file);
 			return err;
 		}
 	}
@@ -652,7 +655,9 @@ static int sign_ima(const char *file, const char *key)
 	if (xattr) {
 		err = lsetxattr(file, xattr_ima, sig, len, 0);
 		if (err < 0) {
-			log_err("setxattr failed: %s\n", file);
+			log_errno_reset(LOG_ERR,
+					"Setting IMA sig xattr failed: %s",
+					file);
 			return err;
 		}
 	}
@@ -1125,7 +1130,8 @@ static int setxattr_ima(const char *file, char *sig_file)
 
 	err = lsetxattr(file, xattr_ima, sig, len, 0);
 	if (err < 0)
-		log_err("setxattr failed: %s\n", file);
+		log_errno_reset(LOG_ERR, "Setting IMA sig xattr failed: %s",
+				file);
 	free(sig);
 	return err;
 }
@@ -1323,7 +1329,9 @@ static int hmac_evm(const char *file, const char *key)
 		sig[0] = EVM_XATTR_HMAC;
 		err = lsetxattr(file, xattr_evm, sig, len + 1, 0);
 		if (err < 0) {
-			log_err("setxattr failed: %s\n", file);
+			log_errno_reset(LOG_ERR,
+					"Setting EVM hmac xattr failed: %s",
+					file);
 			return err;
 		}
 	}
