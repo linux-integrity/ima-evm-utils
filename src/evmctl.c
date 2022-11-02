@@ -1754,8 +1754,10 @@ static struct tpm_bank_info *init_tpm_banks(int *num_banks)
 	int i, j;
 
 	banks = calloc(num_algos, sizeof(struct tpm_bank_info));
-	if (!banks)
-		return banks;
+	if (!banks) {
+		log_err("Out of memory\n");
+		return NULL;
+	}
 
 	/* re-calculate the PCRs digests for only known algorithms */
 	*num_banks = num_algos;
@@ -2185,8 +2187,8 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 static int ima_measurement(const char *file)
 {
 	struct tpm_bank_info *pseudo_padded_banks;
-	struct tpm_bank_info *pseudo_banks;
-	struct tpm_bank_info *tpm_banks;
+	struct tpm_bank_info *pseudo_banks = NULL;
+	struct tpm_bank_info *tpm_banks = NULL;
 	int is_ima_template, cur_template_fmt;
 	int num_banks = 0;
 	int tpmbanks = 1;
@@ -2204,13 +2206,21 @@ static int ima_measurement(const char *file)
 	memset(zero, 0, MAX_DIGEST_SIZE);
 
 	pseudo_padded_banks = init_tpm_banks(&num_banks);
+	if (!pseudo_padded_banks)
+		return -1;
+
 	pseudo_banks = init_tpm_banks(&num_banks);
+	if (!pseudo_banks)
+		goto out_free;
+
 	tpm_banks = init_tpm_banks(&num_banks);
+	if (!tpm_banks)
+		goto out_free;
 
 	fp = fopen(file, "rb");
 	if (!fp) {
 		log_err("Failed to open measurement file: %s\n", file);
-		return -1;
+		goto out;
 	}
 
 	if (imaevm_params.keyfile)	/* Support multiple public keys */
@@ -2417,6 +2427,11 @@ static int ima_measurement(const char *file)
 
 out:
 	fclose(fp);
+out_free:
+	free(tpm_banks);
+	free(pseudo_banks);
+	free(pseudo_padded_banks);
+
 	return err;
 }
 
@@ -2662,6 +2677,8 @@ static int cmd_ima_bootaggr(struct command *cmd)
 	 */
 	if (file) {
 		tpm_banks = init_tpm_banks(&num_banks);
+		if (!tpm_banks)
+			return -1;
 
 		/* TPM 1.2 only supports SHA1.*/
 		for (i = 1; i < num_banks; i++)
@@ -2671,12 +2688,19 @@ static int cmd_ima_bootaggr(struct command *cmd)
 		if (err) {
 			log_err("Failed reading the TPM 1.2 event log (%s)\n",
 				file);
+			free(tpm_banks);
+
 			return -1;
 		}
 	} else {
 		tpm_banks = init_tpm_banks(&num_banks);
+		if (!tpm_banks)
+			return -1;
+
 		if (read_tpm_banks(num_banks, tpm_banks) != 0) {
 			log_info("Failed to read any TPM PCRs\n");
+			free(tpm_banks);
+
 			return -1;
 		}
 	}
@@ -2710,7 +2734,10 @@ static int cmd_ima_bootaggr(struct command *cmd)
 	}
 	bootaggr[bootaggr_len] = '\0';
 	printf("%s", bootaggr);
+
 	free(bootaggr);
+	free(tpm_banks);
+
 	return 0;
 }
 
