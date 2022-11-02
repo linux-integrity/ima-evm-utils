@@ -1140,7 +1140,7 @@ static int cmd_import(struct command *cmd)
 		log_info("keyid: %d\n", id);
 		printf("%d\n", id);
 	}
-	if (imaevm_params.x509)
+	if (pub != _pub)
 		free(pub);
 	return err;
 }
