@@ -2197,7 +2197,7 @@ static int ima_measurement(const char *file)
 	unsigned long entry_num = 0;
 	int c;
 
-	struct template_entry entry = { .template = 0 };
+	struct template_entry entry = { .template = NULL };
 	FILE *fp;
 	int invalid_template_digest = 0;
 	int err_padded = -1;
@@ -2310,6 +2310,10 @@ static int ima_measurement(const char *file)
 			free(entry.template);
 			entry.template_buf_len = entry.template_len;
 			entry.template = malloc(entry.template_len);
+			if (!entry.template) {
+				log_err("Out of memory\n");
+				goto out;
+			}
 		}
 
 		if (!is_ima_template) {
@@ -2431,6 +2435,7 @@ out_free:
 	free(tpm_banks);
 	free(pseudo_banks);
 	free(pseudo_padded_banks);
+	free(entry.template);
 
 	return err;
 }
