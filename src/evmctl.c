@@ -1766,6 +1766,7 @@ static struct tpm_bank_info *init_tpm_banks(int *num_banks)
 			if (!strcmp(default_algos[i], hash_algo_name[j]))
 				set_bank_info(&banks[i], hash_algo_name[j]);
 		}
+		assert(banks[i].algo_name);
 	}
 	return banks;
 }
