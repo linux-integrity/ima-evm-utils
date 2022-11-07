@@ -1,0 +1,46 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+</STYLE>
+<BODY LANG="en-US" DIR="LTR">
+<p style="text-align: center; font-family:arial">
+<FONT SIZE=+3><b><a href="https://sourceforge.net/p/linux-ima/wiki/Home">
+See documentation at Linux IMA/EVM Wiki</a></b></FONT>
+<br>
+<FONT SIZE=+3><b>Linux Integrity Subsystem</b></FONT>
+<p>The goals of the kernel integrity subsystem are to detect if files have
+been accidentally or maliciously altered, both remotely and locally,
+appraise a file's measurement against a "good" value stored as an extended
+attribute, and enforce local file integrity.  These goals are complementary
+to Mandatory Access Control(MAC) protections provided by LSM modules, such as
+SElinux and Smack, which, depending on policy, can attempt to protect file
+integrity. The following modules provide several integrity functions:</p>
+<object type="text/html" style="float:right" height=450 data="tcg.html-20100504"></object>
+<UL>
+<LI><B>Collect</B> - measure a file before it is accessed. </li>
+<LI><B>Store</B> - add the measurement to a kernel resident list and, if a
+hardware Trusted Platform Module (TPM) is present, extend the IMA PCR </li>
+<LI><B>Attest</B> -if present, use the TPM to sign the IMA PCR value, to
+allow a remote validation of the measurement list.</li>
+<LI><B>Appraise</B> - enforce local validation of a measurement against a
+'good' value stored in an extended attribute of the file.</li>
+<LI><B>Protect</B> - protect a file's security extended attributes
+</UL>
+<p>The first three functions were introduced with Integrity Measurement
+Architecture (IMA) in 2.6.30.  The EVM/IMA-appraisal patches add support for
+the last two features.</p>
+<p>For additional information about the Linux integrity subsystem, refer to the
+<a href="http://sourceforge.net/apps/mediawiki/linux-ima/index.php?title=Main_Page">Wiki</a>.
+</p>
+<H3><a name="Trusted-Computing">Trusted Computing: architecture and opensource components</a></H3>
+<P> IMA measurement, one component of the kernel's integrity subsystem, is part
+of an overall Integrity Architecture based on the
+<a href="https://www.trustedcomputinggroup.org/home">Trusted Computing Group's
+</a> open standards, including Trusted Platform Module (TPM), Trusted Boot,
+Trusted Software Stack (TSS), Trusted Network Connect (TNC), and Platform
+Trust Services (PTS). The diagram shows how these standards relate, and
+provides links to the respective specifications and open source
+implementations. IMA and EVM can still run on platforms without a
+hardware TPM, although without the hardware guarantee of compromise
+detection.
+</P>
+</BODY></HTML>

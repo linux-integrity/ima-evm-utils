@@ -16,6 +16,8 @@ AM_PROG_CC_C_O
 #AC_PROG_CPP
 AC_PROG_INSTALL
 #AC_PROG_LN_S
+AC_CHECK_PROG(have_pandoc, [pandoc], [yes], [no])
+AM_CONDITIONAL([HAVE_PANDOC], [test "x$have_pandoc" = "xyes"])
 LT_INIT
 
 # FIXME: Replace `main' with a function in `-lpthread':
@@ -79,6 +81,8 @@ AX_DEFAULT_HASH_ALGO([$KERNEL_HEADERS])
 AC_CONFIG_FILES([Makefile
 		src/Makefile
 		tests/Makefile
+		doc/Makefile
+		doc/sf/Makefile
 		packaging/ima-evm-utils.spec
 		])
 AC_OUTPUT
@@ -96,4 +100,5 @@ echo    "         ibmtss: $ac_cv_header_ibmtss_tss_h"
 echo    "         sigv1:  $enable_sigv1"
 echo    "         engine: $enable_engine"
 echo	"            doc: $have_doc"
+echo	"         pandoc: $have_pandoc"
 echo

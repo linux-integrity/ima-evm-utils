@@ -1,4 +1,8 @@
 SUBDIRS = src tests
+if HAVE_PANDOC
+SUBDIRS += doc
+endif
+
 if MANPAGE_DOCBOOK_XSL
 dist_man_MANS = evmctl.1
 endif
