@@ -40,6 +40,7 @@ $apt \
 	debianutils \
 	docbook-xml \
 	docbook-xsl \
+	e2fsprogs \
 	gzip \
 	libattr1-dev$ARCH \
 	libkeyutils-dev$ARCH \
@@ -50,6 +51,7 @@ $apt \
 	pkg-config \
 	procps \
 	sudo \
+	util-linux \
 	wget \
 	xsltproc
 

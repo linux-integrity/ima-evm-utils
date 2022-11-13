@@ -11,7 +11,8 @@ apt-get install -y \
 		$TSS \
 		asciidoc \
 		attr \
-		docbook-style-xsl \
+		e2fsprogs \
+		fsverity-utils-devel \
 		gnutls-utils \
 		libattr-devel \
 		libkeyutils-devel \
@@ -21,6 +22,7 @@ apt-get install -y \
 		openssl-gost-engine \
 		rpm-build \
 		softhsm \
+		util-linux \
 		wget \
 		xsltproc \
 		xxd \

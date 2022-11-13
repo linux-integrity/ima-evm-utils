@@ -30,6 +30,7 @@ apk add \
 	diffutils \
 	docbook-xml \
 	docbook-xsl \
+	e2fsprogs-extra \
 	keyutils-dev \
 	libtool \
 	libxslt \
@@ -41,6 +42,7 @@ apk add \
 	pkgconfig \
 	procps \
 	sudo \
+	util-linux \
 	wget \
 	which \
 	xxd

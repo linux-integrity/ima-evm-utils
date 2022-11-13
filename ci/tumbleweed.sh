@@ -26,6 +26,7 @@ zypper --non-interactive install --force-resolution --no-recommends \
 	diffutils \
 	docbook_5 \
 	docbook5-xsl-stylesheets \
+	e2fsprogs \
 	gzip \
 	ibmswtpm2 \
 	keyutils-devel \
@@ -37,6 +38,7 @@ zypper --non-interactive install --force-resolution --no-recommends \
 	pkg-config \
 	procps \
 	sudo \
+	util-linux \
 	vim \
 	wget \
 	which \

@@ -25,9 +25,12 @@ yum -y install \
 	automake \
 	diffutils \
 	docbook-xsl \
+	e2fsprogs \
+	git-core \
 	gnutls-utils \
 	gzip \
 	keyutils-libs-devel \
+	kmod \
 	libattr-devel \
 	libtool \
 	libxslt \
@@ -38,6 +41,7 @@ yum -y install \
 	pkg-config \
 	procps \
 	sudo \
+	util-linux \
 	vim-common \
 	wget \
 	which
@@ -50,3 +54,5 @@ if [ -f /etc/centos-release ]; then
 	yum -y install epel-release
 fi
 yum -y install softhsm || true
+
+./tests/install-fsverity.sh

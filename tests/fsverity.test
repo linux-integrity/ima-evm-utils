@@ -1,0 +1,377 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Test IMA support for including fs-verity enabled files measurements
+# in the IMA measurement list.
+#
+# Define policy rules showing the different types of IMA and fs-verity
+# records in the IMA measurement list.  Include examples of files that
+# are suppose to be fs-verity enabled, but aren't.
+#
+# test 1: IMA policy rule using the new ima-ngv2 template
+# - Hash prefixed with "ima:"
+#
+# test 2: fs-verity IMA policy rule using the new ima-ngv2 template
+# - fs-verity hash prefixed with "verity:"
+# - Non fs-verity enabled file, zeros prefixed with "verity:"
+#
+# test 3: IMA policy rule using the new ima-sigv2 template
+# - Hash prefixed with "ima:"
+# - Appended signature, when available.
+#
+# test 4: fs-verity IMA policy rule using the new ima-sigv2 template
+# - fs-verity hash prefixed with "verity:"
+# - Non fs-verity enabled file, zeros prefixed with "verity:"
+# - Appended IMA signature of fs-verity file hash, when available.
+
+# To avoid affecting the system's IMA custom policy or requiring a
+# reboot between tests, define policy rules based on UUID.  However,
+# since the policy rules are walked sequentially, the system's IMA
+# custom policy rules might take precedence.
+
+cd "$(dirname "$0")" || exit 1
+PATH=../src:$PATH
+source ./functions.sh
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+
+IMA_POLICY_FILE="/sys/kernel/security/integrity/ima/policy"
+IMA_MEASUREMENT_LIST="/sys/kernel/security/integrity/ima/ascii_runtime_measurements"
+TST_MNT="/tmp/fsverity-test"
+TST_IMG="/tmp/test.img"
+
+LOOPBACK_MOUNTED=0
+FSVERITY="$(which fsverity)"
+
+_require dd mkfs blkid e2fsck tune2fs evmctl setfattr
+./gen-keys.sh >/dev/null 2>&1
+
+trap cleanup SIGINT SIGTERM EXIT
+
+cleanup() {
+        if [ -e $TST_MNT ]; then
+		if [ $LOOPBACK_MOUNTED -eq 1 ]; then
+			umount $TST_MNT
+		fi
+		if [ -f "$TST_IMG" ]; then
+			rm "$TST_IMG"
+		fi
+	fi
+	_report_exit_and_cleanup
+}
+
+# Loopback mount a file
+mount_loopback_file() {
+	local ret
+
+	if [ ! -d $TST_MNT ]; then
+		mkdir $TST_MNT
+	fi
+
+#	if modprobe loop; then
+#		echo "${CYAN}INFO: modprobe loop failed${NORM}"
+#	fi
+
+	if ! losetup -f &> /dev/null; then
+		echo "${RED}FAILURE: losetup${NORM}"
+		exit "$FAIL"
+	fi
+
+	mount -o loop ${TST_IMG} $TST_MNT
+	ret=$?
+
+	if [ "${ret}" -eq 0 ]; then
+		LOOPBACK_MOUNTED=1
+	fi
+
+	return "$ret"
+}
+
+# Change the loopback mounted filesystem's UUID in between tests
+change_loopback_file_uuid() {
+	echo " "
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: Changing loopback file uuid"
+
+	umount $TST_MNT
+	if ! e2fsck -y -f ${TST_IMG} &> /dev/null; then
+		echo "${RED}FAILURE: e2fsck${NORM}"
+		exit "$FAIL"
+	fi
+
+	if ! tune2fs -f ${TST_IMG} -U random &> /dev/null; then
+		echo "${RED}FAILURE: change UUID${NORM}"
+		exit "$FAIL"
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: Remounting loopback filesystem"
+	if ! mount_loopback_file; then
+		echo "${RED}FAILURE: re-mounting loopback filesystem${NORM}"
+		exit "$FAIL"
+	fi
+	return 0
+}
+
+# Create a file to be loopback mounted
+create_loopback_file() {
+	local fs_type=$1
+	local options=""
+
+	echo "INFO: Creating loopback filesystem"
+	case $fs_type in
+	ext4|f2fs)
+		options="-O verity"
+		;;
+	btrfs)
+		;;
+	*)
+		echo "${RED}FAILURE: unsupported fs-verity filesystem${NORM}"
+		exit "${FAIL}"
+		;;
+	esac
+
+	[ "$VERBOSE" -ge 2 ] && echo "INFO: Creating a file to be loopback mounted with options: $options"
+	if ! dd if=/dev/zero of="${TST_IMG}" bs=100M count=6 &> /dev/null; then
+		echo "${RED}FAILURE: creating ${TST_IMG}${NORM}"
+		exit "$FAIL"
+	fi
+
+	echo "INFO: Building an $fs_type filesystem"
+	if ! mkfs -t "$fs_type" -q "${TST_IMG}" "$options"; then
+		echo "${RED}FAILURE: Creating $fs_type filesystem${NORM}"
+		exit "$FAIL"
+	fi
+
+	echo "INFO: Mounting loopback filesystem"
+	if ! mount_loopback_file; then
+		echo "${RED}FAILURE: mounting loopback filesystem${NORM}"
+		exit "$FAIL"
+	fi
+	return 0
+}
+
+get_current_uuid() {
+	[ "$VERBOSE" -ge 2 ] && echo "INFO: Getting loopback file uuid"
+	if ! UUID=$(blkid -s UUID -o value ${TST_IMG}); then
+		echo "${RED}FAILURE: to get UUID${NORM}"
+		return "$FAIL"
+	fi
+	return 0
+}
+
+unqualified_bprm_rule() {
+	local test=$1
+	local rule=$2
+	local rule_match="measure func=BPRM_CHECK"
+	local rule_dontmatch="fsuuid"
+
+	if [ -z "${rule##*$digest_type=verity*}" ]; then
+		if grep "$rule_match" $IMA_POLICY_FILE | grep -v "$rule_dontmatch"  &> /dev/null; then
+			return "$SKIP"
+		fi
+	fi
+	return 0
+}
+
+load_policy_rule() {
+	local test=$1
+	local rule=$2
+
+	if ! get_current_uuid; then
+		echo "${RED}FAILURE:FAILED getting uuid${NORM}"
+		exit "$FAIL"
+	fi
+
+	unqualified_bprm_rule "${test}" "${rule}"
+	if [ $? -eq "${SKIP}" ]; then
+		echo "${CYAN}SKIP: fsuuid unqualified \"BPRM_CHECK\" rule exists${NORM}"
+		return "$SKIP"
+	fi
+
+	echo "$test: rule: $rule fsuuid=$UUID"
+	if ! echo "$rule fsuuid=$UUID" > $IMA_POLICY_FILE; then
+		echo "${CYAN}SKIP: Loading policy rule failed, skipping test${NORM}"
+		return "$SKIP"
+	fi
+	return 0
+}
+
+create_file() {
+	local test=$1
+	local type=$2
+
+	TST_FILE=$(mktemp -p $TST_MNT -t "${type}".XXXXXX)
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: creating $TST_FILE"
+
+	# heredoc to create a script
+	cat <<-EOF > "$TST_FILE"
+	#!/bin/bash
+	echo "Hello" &> /dev/null
+	EOF
+
+	chmod a+x "$TST_FILE"
+}
+
+measure-verity() {
+	local test=$1
+	local verity="${2:-disabled}"
+	local digest_filename
+	local error="$OK"
+	local KEY=$PWD/test-rsa2048.key
+
+	create_file "$test" verity-hash
+	if [ "$verity" = "enabled" ]; then
+		msg="Measuring fs-verity enabled file $TST_FILE"
+		if ! "$FSVERITY" enable "$TST_FILE" &> /dev/null; then
+			echo "${CYAN}SKIP: Failed enabling fs-verity on $TST_FILE${NORM}"
+			return "$SKIP"
+		fi
+	else
+		msg="Measuring non fs-verity enabled file $TST_FILE"
+	fi
+
+	# Sign the fsverity digest and write it as security.ima xattr.
+	# "evmctl sign_hash" input: <digest> <filename>
+	# "evmctl sign_hash" output: <digest> <filename> <signature>
+	[ "$VERBOSE" -ge 2 ] && echo "INFO: Signing the fsverity digest"
+	xattr=$("$FSVERITY" digest "$TST_FILE" | evmctl sign_hash --veritysig --key "$KEY" 2> /dev/null)
+	sig=$(echo "$xattr" | cut -d' ' -f3)
+
+	# On failure to write security.ima xattr, the signature will simply
+	# not be appended to the measurement list record.
+	if ! setfattr -n security.ima -v "0x$sig" "$TST_FILE"; then
+		echo "${CYAN}INFO: Failed to write security.ima xattr${NORM}"
+	fi
+	"$TST_FILE"
+
+	# "fsverity digest" calculates the fsverity hash, even for
+	# non fs-verity enabled files.
+	digest_filename=$("$FSVERITY" digest "$TST_FILE")
+	[ "$VERBOSE" -ge 2 ] && echo "INFO: verity:$digest_filename"
+
+	grep "verity:$digest_filename" $IMA_MEASUREMENT_LIST &> /dev/null
+	ret=$?
+
+	# Not finding the "fsverity digest" result in the IMA measurement
+	# list is expected for non fs-verity enabled files.  The measurement
+	# list will contain zeros for the file hash.
+	if [ $ret -eq 1 ]; then
+		error="$FAIL"
+		if [ "$verity" = "enabled" ]; then
+			echo "${RED}FAILURE: ${msg} ${NORM}"
+		else
+			echo "${GREEN}SUCCESS: ${msg}, fsverity digest not found${NORM}"
+		fi
+	else
+		if [ "$verity" = "enabled" ]; then
+			echo "${GREEN}SUCCESS: ${msg} ${NORM}"
+		else
+			error="$FAIL"
+			echo "${RED}FAILURE: ${msg} ${NORM}"
+		fi
+	fi
+	return "$error"
+}
+
+measure-ima() {
+	local test=$1
+	local digest_filename
+	local error="$OK"
+	local hashalg
+	local digestsum
+
+	create_file "$test" ima-hash
+	"$TST_FILE"
+
+	hashalg=$(grep "${TST_FILE}" $IMA_MEASUREMENT_LIST | cut -d':' -f2)
+	if [ -z "${hashalg}" ]; then
+		echo "${CYAN}SKIP: Measurement record with algorithm not found${NORM}"
+		return "$SKIP"
+	fi
+
+	digestsum=$(which "${hashalg}"sum)
+	if [ -z "${digestsum}" ]; then
+		echo "${CYAN}SKIP: ${hashalg}sum is not installed${NORM}"
+		return "$SKIP"
+	fi
+
+	# sha1sum,sha256sum return: <digest> <2 spaces> <filename>
+	# Remove the extra space before the filename
+	digest_filename=$(${digestsum} "$TST_FILE" | sed "s/\ \ /\ /")
+	[ "$VERBOSE" -ge 2 ] && echo "$test: $digest_filename"
+	if grep "$digest_filename" $IMA_MEASUREMENT_LIST &> /dev/null; then
+		echo "${GREEN}SUCCESS: Measuring $TST_FILE ${NORM}"
+	else
+		error="$FAIL"
+		echo "${RED}FAILURE: Measuring $TST_FILE ${NORM}"
+	fi
+
+	return "$error"
+}
+
+# Dependency on being able to read and write the IMA policy file.
+# Requires both CONFIG_IMA_WRITE_POLICY, CONFIG_IMA_READ_POLICY be
+# enabled.
+if [ -e "$IMA_POLICY_FILE" ]; then
+	mode=$(stat -c "%a" $IMA_POLICY_FILE)
+	if [ "$mode" != "600" ]; then
+		echo "${CYAN}SKIP: IMA policy file must be read-write${NORM}"
+		exit "$SKIP"
+	fi
+else
+	echo "${CYAN}SKIP: $IMA_POLICY_FILE does not exist${NORM}"
+	exit "$SKIP"
+fi
+
+# Skip the test if fsverity is not found; using _require fails the test.
+if [ -z "$FSVERITY" ]; then
+	echo "${CYAN}SKIP: fsverity is not installed${NORM}"
+	exit "$SKIP"
+fi
+
+if [ "x$(id -u)" != "x0" ]; then
+	echo "${CYAN}SKIP: Must be root to execute this test${NORM}"
+	exit "$SKIP"
+fi
+
+create_loopback_file ext4
+
+# Commit 989dc72511f7 ("ima: define a new template field named 'd-ngv2' and
+# templates") introduced ima-ngv2 and ima-sigv2 in linux-5.19.
+__skip() { return "$SKIP"; }
+
+# IMA policy rule using the ima-ngv2 template
+if load_policy_rule test1 "measure func=BPRM_CHECK template=ima-ngv2"; then
+	expect_pass measure-ima test1
+else
+	expect_pass __skip
+fi
+
+# fsverity IMA policy rule using the ima-ngv2 template
+change_loopback_file_uuid
+if load_policy_rule test2 "measure func=BPRM_CHECK template=ima-ngv2 digest_type=verity"; then
+	expect_fail measure-verity test2
+	expect_pass measure-verity test2 enabled
+else
+	expect_pass __skip
+	expect_pass __skip
+fi
+
+# IMA policy rule using the ima-sigv2 template
+change_loopback_file_uuid
+if load_policy_rule test3 "measure func=BPRM_CHECK template=ima-sigv2"; then
+	expect_pass measure-ima test3
+else
+	expect_pass __skip
+fi
+
+# fsverity IMA policy rule using the ima-sigv2 template
+change_loopback_file_uuid
+if load_policy_rule test4 "measure func=BPRM_CHECK template=ima-sigv2 digest_type=verity"; then
+	expect_fail measure-verity test4
+	expect_pass measure-verity test4 enabled
+else
+	expect_pass __skip
+	expect_pass __skip
+fi
+exit

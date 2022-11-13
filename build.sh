@@ -98,6 +98,12 @@ if [ $ret -eq 0 ]; then
 		   grep "skipped" tests/sign_verify.log | wc -l
 	fi
 	tail -20 tests/boot_aggregate.log
+
+	if [ -f tests/fsverity.log ]; then
+		tail -4 tests/fsverity.log
+		grep "skipped" tests/fsverity.log  && \
+		   grep "skipped" tests/fsverity.log | wc -l
+	fi
 	exit 0
 fi
 
