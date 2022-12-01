@@ -78,7 +78,7 @@ mount_loopback_file() {
 		exit "$FAIL"
 	fi
 
-	mount -o loop ${TST_IMG} $TST_MNT
+	mount -v -o loop ${TST_IMG} $TST_MNT
 	ret=$?
 
 	if [ "${ret}" -eq 0 ]; then

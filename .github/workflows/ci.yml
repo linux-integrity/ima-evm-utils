@@ -98,7 +98,7 @@ jobs:
     container:
       image: ${{ matrix.container }}
       env: ${{ matrix.env }}
-      options: --security-opt seccomp=unconfined
+      options: --privileged --device /dev/loop-control
 
     steps:
     - name: Show OS

@@ -1,6 +1,16 @@
 #!/bin/sh
 # Copyright (c) 2020 Petr Vorel <pvorel@suse.cz>
 
+if [ -n "$CI" ]; then
+	# If we under CI only thing we can analyze is logs so better to enable
+	# verbosity to a maximum.
+	set -x
+	# This is to make stdout and stderr synchronous in the logs.
+	exec 2>&1
+
+	mount -t securityfs -o rw securityfs /sys/kernel/security
+fi
+
 set -e
 
 CC="${CC:-gcc}"
@@ -100,7 +110,7 @@ if [ $ret -eq 0 ]; then
 	tail -20 tests/boot_aggregate.log
 
 	if [ -f tests/fsverity.log ]; then
-		tail -4 tests/fsverity.log
+		[ -n "$CI" ] && cat tests/fsverity.log || tail tests/fsverity.log
 		grep "skipped" tests/fsverity.log  && \
 		   grep "skipped" tests/fsverity.log | wc -l
 	fi
