@@ -923,6 +923,7 @@ static int read_keyid_from_cert(uint32_t *keyid_be, const char *certfile, int tr
 		ERR_print_errors_fp(stderr);
 		log_err("read keyid: %s: Error reading x509 certificate\n",
 			certfile);
+		return -1;
 	}
 
 	if (!(skid = x509_get_skid(x, &skid_len))) {
