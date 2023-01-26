@@ -30,7 +30,7 @@
 # custom policy rules might take precedence.
 
 cd "$(dirname "$0")" || exit 1
-PATH=../src:$PATH
+PATH=../src:../fsverity-utils:$PATH
 source ./functions.sh
 
 # Base VERBOSE on the environment variable, if set.
