@@ -46,7 +46,6 @@ yum -y install \
 	wget \
 	which \
 	zstd \
-	haveged \
 	systemd \
 	keyutils \
 	e2fsprogs \
@@ -61,6 +60,9 @@ if [ -f /etc/centos-release ]; then
 	yum -y install epel-release
 fi
 yum -y install softhsm || true
+
+# haveged is available via EPEL on CentOS stream8.
+yum -y install haveged || true
 
 ./tests/install-fsverity.sh
 ./tests/install-mount-idmapped.sh
