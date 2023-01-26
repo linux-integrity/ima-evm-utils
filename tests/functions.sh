@@ -250,9 +250,13 @@ _enable_gost_engine() {
 # Show test stats and exit into automake test system
 # with proper exit code (same as ours). Do cleanups.
 _report_exit_and_cleanup() {
+  local exit_code=$?
+
   if [ -n "${WORKDIR}" ]; then
     rm -rf "${WORKDIR}"
   fi
+
+  "$@"
 
   if [ $testsfail -gt 0 ]; then
     echo "================================="
@@ -271,8 +275,10 @@ _report_exit_and_cleanup() {
     exit "$FAIL"
   elif [ $testspass -gt 0 ]; then
     exit "$OK"
-  else
+  elif [ $testsskip -gt 0 ]; then
     exit "$SKIP"
+  else
+    exit "$exit_code"
   fi
 }
 

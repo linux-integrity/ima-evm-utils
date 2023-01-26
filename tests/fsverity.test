@@ -47,7 +47,7 @@ FSVERITY="$(which fsverity)"
 _require dd mkfs blkid e2fsck tune2fs evmctl setfattr
 ./gen-keys.sh >/dev/null 2>&1
 
-trap cleanup SIGINT SIGTERM EXIT
+trap '_report_exit_and_cleanup cleanup' SIGINT SIGTERM EXIT
 
 cleanup() {
         if [ -e $TST_MNT ]; then
@@ -58,7 +58,6 @@ cleanup() {
 			rm "$TST_IMG"
 		fi
 	fi
-	_report_exit_and_cleanup
 }
 
 # Loopback mount a file
