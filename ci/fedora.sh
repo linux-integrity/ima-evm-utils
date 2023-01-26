@@ -44,7 +44,8 @@ yum -y install \
 	util-linux \
 	vim-common \
 	wget \
-	which
+	which \
+	zstd
 
 yum -y install docbook5-style-xsl || true
 yum -y install swtpm || true

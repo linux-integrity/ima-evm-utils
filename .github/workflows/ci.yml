@@ -3,7 +3,79 @@ name: "distros"
 on: [push, pull_request]
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      LINUX_SHA: ${{ steps.last-commit.outputs.LINUX_SHA }}
+    name: build
+    timeout-minutes: 100
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Determine last kernel commit
+        id: last-commit
+        shell: bash
+        run: |
+          mkdir linux-integrity
+          pushd linux-integrity
+          git init
+          LINUX_URL=${{ vars.LINUX_URL }}
+          if [ -z "$LINUX_URL" ]; then
+              LINUX_URL=https://git.kernel.org/pub/scm/linux/kernel/git/zohar/linux-integrity.git
+          fi
+          LINUX_BRANCH=${{ vars.LINUX_BRANCH }}
+          if [ -z "$LINUX_BRANCH" ]; then
+              LINUX_BRANCH=next-integrity
+          fi
+          git remote add origin $LINUX_URL
+          LINUX_SHA=$(git ls-remote origin $GITHUB_REF_NAME | awk '{print $1}')
+          [ -z "$LINUX_SHA" ] && LINUX_SHA=$(git ls-remote origin $LINUX_BRANCH | awk '{print $1}')
+          echo "LINUX_SHA=$LINUX_SHA" >> $GITHUB_OUTPUT
+          popd
+
+      - name: Cache UML kernel
+        id: cache-linux
+        uses: actions/cache@v3
+        with:
+          path: linux
+          key: linux-${{ steps.last-commit.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
+
+      - name: Cache signing key
+        id: cache-key
+        uses: actions/cache@v3
+        with:
+          path: signing_key.pem
+          key: signing_key.pem-${{ steps.last-commit.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
+
+      - name: Compile UML kernel
+        if: steps.cache-linux.outputs.cache-hit != 'true' || steps.cache-key.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          if [ "$DEVTOOLSET" = "yes" ]; then
+                  source /opt/rh/devtoolset-10/enable
+          fi
+          if [ "$ARCH" = "i386" ]; then
+                  CROSS_COMPILE_OPT="CROSS_COMPILE=i686-linux-gnu-"
+          fi
+          pushd linux-integrity
+          git pull --depth 1 origin ${{ steps.last-commit.outputs.LINUX_SHA }}
+          make ARCH=um defconfig
+          ./scripts/kconfig/merge_config.sh -m .config $(ls ../kernel-configs/*)
+          # Update manually, to specify ARCH=um
+          make ARCH=um olddefconfig
+          # Make everything built-in
+          make ARCH=um localyesconfig
+          make ARCH=um $CROSS_COMPILE_OPT -j$(nproc)
+          chmod +x linux
+          cp linux ..
+          cp certs/signing_key.pem ..
+          popd
+
   job:
+    needs: build
     runs-on: ubuntu-latest
 
     strategy:
@@ -75,6 +147,13 @@ jobs:
               CC: clang
               TSS: ibmtss
 
+          - container: "fedora:latest"
+            env:
+              CC: clang
+              TSS: ibmtss
+              TST_ENV: um
+              TST_KERNEL: ../linux
+
           - container: "centos:7"
             env:
               CC: gcc
@@ -98,7 +177,7 @@ jobs:
     container:
       image: ${{ matrix.container }}
       env: ${{ matrix.env }}
-      options: --privileged --device /dev/loop-control
+      options: --privileged --device /dev/loop-control -v /dev/shm:/dev/shm
 
     steps:
     - name: Show OS
@@ -125,8 +204,24 @@ jobs:
             fi
         fi
 
+    - name: Retrieve UML kernel
+      if: ${{ matrix.env.TST_ENV }}
+      uses: actions/cache@v3
+      continue-on-error: false
+      with:
+        path: linux
+        key: linux-${{ needs.build.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
+
+    - name: Retrieve signing key
+      if: ${{ matrix.env.TST_ENV }}
+      continue-on-error: false
+      uses: actions/cache@v3
+      with:
+        path: signing_key.pem
+        key: signing_key.pem-${{ needs.build.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
+
     - name: Compiler version
       run: $CC --version
 
     - name: Compile
-      run: CC="$CC" VARIANT="$VARIANT" COMPILE_SSL="$COMPILE_SSL" ./build.sh
+      run: CC="$CC" VARIANT="$VARIANT" COMPILE_SSL="$COMPILE_SSL" TST_ENV="$TST_ENV" TST_KERNEL="$TST_KERNEL" ./build.sh
