@@ -47,7 +47,11 @@ yum -y install \
 	which \
 	zstd \
 	haveged \
-	systemd
+	systemd \
+	keyutils \
+	e2fsprogs \
+	acl \
+	libcap
 
 yum -y install docbook5-style-xsl || true
 yum -y install swtpm || true
@@ -59,3 +63,4 @@ fi
 yum -y install softhsm || true
 
 ./tests/install-fsverity.sh
+./tests/install-mount-idmapped.sh

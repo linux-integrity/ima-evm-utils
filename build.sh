@@ -114,6 +114,11 @@ if [ $ret -eq 0 ]; then
 		grep "skipped" tests/fsverity.log  && \
 		   grep "skipped" tests/fsverity.log | wc -l
 	fi
+	if [ -f tests/portable_signatures.log ]; then
+		[ -n "$CI" ] && cat tests/portable_signatures.log || tail tests/portable_signatures.log
+		grep "skipped" tests/portable_signatures.log  && \
+		   grep "skipped" tests/portable_signatures.log | wc -l
+	fi
 	exit 0
 fi
 
