@@ -139,6 +139,7 @@ static dev_t fs_dev;
 static bool evm_immutable;
 static bool evm_portable;
 static bool veritysig;
+static bool hwtpm;
 
 #define HMAC_FLAG_NO_UUID	0x0001
 #define HMAC_FLAG_CAPS_SET	0x0002
@@ -2152,7 +2153,7 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 	if (read_sysfs_pcrs(num_banks, bank) == 0)
 		return 0;
 
-	if (read_sysfs_tpm2_pcrs(num_banks, bank) == 0)
+	if (hwtpm && read_sysfs_tpm2_pcrs(num_banks, bank) == 0)
 		return 0;
 
 	/* Any userspace applications available for reading TPM 2.0 PCRs? */
@@ -2878,7 +2879,7 @@ struct command cmds[] = {
 	{"ima_setxattr", cmd_setxattr_ima, 0, "[--sigfile file]", "Set IMA signature from sigfile\n"},
 	{"ima_hash", cmd_hash_ima, 0, "file", "Make file content hash.\n"},
 	{"ima_measurement", cmd_ima_measurement, 0, "[--ignore-violations] [--verify-sig [--key key1, key2, ...]] [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] [--verify-bank hash-algorithm] file", "Verify measurement list (experimental).\n"},
-	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log]", "Calculate per TPM bank boot_aggregate digests\n"},
+	{"ima_boot_aggregate", cmd_ima_bootaggr, 0, "[--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log] [--hwtpm]", "Calculate per TPM bank boot_aggregate digests\n"},
 	{"ima_fix", cmd_ima_fix, 0, "[-t fdsxm] path", "Recursively fix IMA/EVM xattrs in fix mode.\n"},
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
 	{"sign_hash", cmd_sign_hash, 0, "[--veritysig] [--key key] [--pass password]", "Sign hashes from either shaXsum or \"fsverity digest\" output.\n"},
@@ -2924,6 +2925,7 @@ static struct option opts[] = {
 	{"keyid", 1, 0, 144},
 	{"keyid-from-cert", 1, 0, 145},
 	{"veritysig", 0, 0, 146},
+	{"hwtpm", 0, 0, 147},
 	{}
 
 };
@@ -3165,6 +3167,9 @@ int main(int argc, char *argv[])
 			break;
 		case 146:
 			veritysig = 1;
+			break;
+		case 147:
+			hwtpm = 1;
 			break;
 		case '?':
 			exit(1);
