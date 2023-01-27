@@ -1184,9 +1184,9 @@ static int cmd_setxattr_ima(struct command *cmd)
 
 #define MAX_KEY_SIZE 128
 
-static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *hash)
+static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *sig)
 {
-	size_t mdlen;
+	size_t siglen = MAX_DIGEST_SIZE;
 	EVP_MD_CTX *pctx;
 	EVP_PKEY *pkey = NULL;
 	struct stat st;
@@ -1260,7 +1260,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	pkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, evmkey, sizeof(evmkey));
 	if (!pkey) {
-		log_err("HMAC_Init() failed\n");
+		log_err("EVP_PKEY_new_mac_key() failed\n");
 		goto out;
 	}
 
@@ -1326,12 +1326,12 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *h
 
 	err = EVP_DigestSignUpdate(pctx, &hmac_misc, hmac_size);
 	if (err != 1) {
-		log_err("HMAC_Update() failed\n");
+		log_err("EVP_DigestSignUpdate() failed\n");
 		goto out_ctx_cleanup;
 	}
-	err = EVP_DigestSignFinal(pctx, hash, &mdlen);
+	err = EVP_DigestSignFinal(pctx, sig, &siglen);
 	if (err != 1)
-		log_err("HMAC_Final() failed\n");
+		log_err("EVP_DigestSignFinal() failed\n");
 out_ctx_cleanup:
 	EVP_PKEY_free(pkey);
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
@@ -1340,7 +1340,7 @@ out_ctx_cleanup:
 out:
 	free(key);
 	if (err == 1)
-		return mdlen;
+		return siglen;
 	return err;
 }
 

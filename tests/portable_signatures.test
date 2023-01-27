@@ -1,0 +1,1122 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2022-2023 Roberto Sassu <roberto.sassu@huawei.com>
+#
+# Check if operations on files with EVM portable signatures succeed.
+
+trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+TST_EVM_CHANGE_MODE="${TST_EVM_CHANGE_MODE:-0}"
+
+# From security/integrity/evm/evm.h in kernel source directory.
+(( EVM_INIT_HMAC=0x0001 ))
+(( EVM_INIT_X509=0x0002 ))
+(( EVM_ALLOW_METADATA_WRITES=0x0004 ))
+(( EVM_SETUP_COMPLETE=0x80000000 ))
+
+cd "$(dirname "$0")" || exit "$FAIL"
+export PATH=$PWD/../src:$PWD/../mount-idmapped:$PATH
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+. ./functions.sh
+_require evmctl
+
+cleanup() {
+	if [ "$g_loop_mounted" = "1" ]; then
+		popd > /dev/null || exit "$FAIL"
+
+		if [ -n "$g_mountpoint_idmapped" ]; then
+			umount "$g_mountpoint_idmapped"
+		fi
+
+		umount "$g_mountpoint"
+	fi
+
+	if [ -n "$g_dev" ]; then
+		losetup -d "$g_dev"
+	fi
+
+	if [ -n "$g_image" ]; then
+		rm -f "$g_image"
+	fi
+
+	if [ -n "$key_path_der" ]; then
+		rm -f "$key_path_der"
+	fi
+
+	if [ -n "$g_mountpoint" ]; then
+		rm -Rf "$g_mountpoint"
+	fi
+
+	if [ -n "$g_mountpoint_idmapped" ]; then
+		rm -Rf "$g_mountpoint_idmapped"
+	fi
+}
+
+get_xattr() {
+	local format="hex"
+
+	if [ "$1" = "security.selinux" ]; then
+		format="text"
+	fi
+
+	getfattr -n "$1" -e $format -d "$2" 2> /dev/null | awk -F "=" '$1 == "'"$1"'" {if ("'$format'" == "hex") v=substr($2, 3); else { split($2, temp, "\""); v=temp[2] }; print v}'
+}
+
+# Use the fsuuid= IMA policy keyword to select only files created/used by the
+# tests below. Also use fowner= to differentiate between files created/used by
+# individual tests.
+IMA_UUID="28b23254-9467-44c0-b6ba-34b12e85a26d"
+APPRAISE_DIGSIG_FOWNER=2000
+APPRAISE_DIGSIG_RULE="appraise fsuuid=$IMA_UUID fowner=$APPRAISE_DIGSIG_FOWNER appraise_type=imasig"
+MEASURE_FOWNER=2001
+MEASURE_RULE="measure fsuuid=$IMA_UUID fowner=$MEASURE_FOWNER template=ima-sig"
+APPRAISE_FOWNER=2002
+APPRAISE_RULE="appraise fsuuid=$IMA_UUID fowner=$APPRAISE_FOWNER"
+METADATA_CHANGE_FOWNER=3001
+METADATA_CHANGE_FOWNER_2=3002
+
+check_load_ima_rule() {
+	local rule_loaded
+	local result
+	local new_policy
+
+	rule_loaded=$(grep "$1" /sys/kernel/security/ima/policy)
+	if [ -z "$rule_loaded" ]; then
+		new_policy=$(mktemp -p "$g_mountpoint")
+		echo "$1" > "$new_policy"
+		evmctl sign -o -a sha256 --imasig --key "$key_path" "$new_policy" &> /dev/null
+		echo "$new_policy" > /sys/kernel/security/ima/policy
+		result=$?
+		rm -f "$new_policy"
+
+		if [ "$result" -ne 0 ]; then
+			echo "${RED}Failed to set IMA policy${NORM}"
+			return "$FAIL"
+		fi
+	fi
+
+	return "$OK"
+}
+
+# The purpose of this test is to verify that the patch 'ima: Allow imasig
+# requirement to be satisfied by EVM portable signatures' didn't break the
+# current behavior (IMA signatures still satisfy the imasig requirement).
+check_ima_sig_appraisal() {
+	local result
+
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ $((evm_value & (EVM_INIT_X509 | EVM_INIT_HMAC))) -ne 0 ]; then
+		echo "${CYAN}EVM mode 0 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl ima_sign -a sha256 --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown "$APPRAISE_DIGSIG_FOWNER" test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	check_load_ima_rule "$APPRAISE_DIGSIG_RULE"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	# Check if appraisal works.
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Ensure that files with IMA signature cannot be updated (immutable).
+	if echo "test" 2> /dev/null >> test-file; then
+		echo "${RED}Write to test-file should not succeed (immutable file)${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_ima_sig_appraisal() {
+	rm -f test-file
+}
+
+# Requires:
+# - ima: Don't remove security.ima if file must not be appraised
+#
+# The purpose of this test is to verify that the patch 'ima: Introduce template
+# field evmsig and write to field sig as fallback' still allows IMA signatures
+# to be displayed in the measurement list.
+check_ima_sig_ima_measurement_list() {
+	local result
+	local ima_sig_fs
+	local ima_sig_list
+
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl ima_sign -a sha256 --imasig --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown "$MEASURE_FOWNER" test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	check_load_ima_rule "$MEASURE_RULE"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	# Read the file to add it to the measurement list.
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	ima_sig_fs=$(get_xattr security.ima test-file)
+	if [ -z "$ima_sig_fs" ]; then
+		echo "${RED}security.ima not found${NORM}"
+		return "$FAIL"
+	fi
+
+	# Search security.ima in the measurement list.
+	ima_sig_list=$(awk '$6 == "'"$ima_sig_fs"'"' < /sys/kernel/security/ima/ascii_runtime_measurements)
+	if [ -z "$ima_sig_list" ]; then
+		echo "${RED}security.ima mismatch (xattr != measurement list)${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_ima_sig_ima_measurement_list() {
+	rm -f test-file
+}
+
+# Requires:
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+#
+# The purpose of this test is to verify that new files can be created when EVM
+# is initialized only with a public key.
+check_create_file() {
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	# To trigger the bug we need to enable public key verification without HMAC key loaded.
+	if [ $((evm_value & EVM_INIT_X509)) -ne "$EVM_INIT_X509" ]; then
+		echo "${CYAN}EVM mode $EVM_INIT_X509 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if [ $((evm_value & EVM_INIT_HMAC)) -eq "$EVM_INIT_HMAC" ]; then
+		echo "${CYAN}EVM mode $EVM_INIT_HMAC must be disabled${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_create_file() {
+	rm -f test-file
+}
+
+# Requires:
+# - evm: Introduce evm_hmac_disabled() to safely ignore verification errors
+# - evm: Allow xattr/attr operations for portable signatures
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+#
+# The purpose of this test is to verify that EVM with the patches above allows
+# metadata to copied one by one, even if the portable signature verification
+# temporarily fails until the copy is completed.
+check_cp_preserve_xattrs() {
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ "$evm_value" -ne "$EVM_INIT_X509" ]; then
+		echo "${CYAN}EVM mode $EVM_INIT_X509 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl sign -o -a sha256 --imahash --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Check if cp is allowed to set metadata for the new file.
+	if ! cp -a test-file test-file.copy; then
+		echo "${RED}Cannot copy test-file with attrs/xattrs preserved${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_cp_preserve_xattrs() {
+	rm -f test-file test-file.copy
+}
+
+# Requires:
+# - evm: Introduce evm_hmac_disabled() to safely ignore verification errors
+# - evm: Allow xattr/attr operations for portable signatures
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+# - ima: Don't remove security.ima if file must not be appraised
+#
+# The purpose of this test is similar to that of the previous test, with the
+# difference that tar is used instead of cp. One remark is that the owner is
+# intentionally different (or it should be) from the current owner, to
+# incrementally test the patches without 'evm: Allow setxattr() and setattr()
+# for unmodified metadata'.
+check_tar_extract_xattrs_different_owner() {
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ "$evm_value" -ne "$EVM_INIT_X509" ]; then
+		echo "${CYAN}EVM mode $EVM_INIT_X509 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! mkdir in out; then
+		echo "${RED}Cannot create directories${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! echo "test" > in/test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown 3000 in/test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chmod 600 in/test-file; then
+		echo "${RED}Cannot change mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl sign -o -a sha256 --imahash --key "$key_path" in/test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! tar --xattrs-include=* -cf test-archive.tar in/test-file; then
+		echo "${RED}Cannot create archive with xattrs${NORM}"
+		return "$FAIL"
+	fi
+
+	# Check if tar is allowed to set metadata for the extracted file.
+	# Ensure that the owner from the archive is different from the
+	# owner of the extracted file to avoid that portable signature
+	# verification succeeds before restoring original metadata
+	# (a patch allows modification of immutable metadata if portable
+	# signature verification fails).
+	if ! tar --xattrs-include=* -xf test-archive.tar -C out; then
+		echo "${RED}Cannot extract archive with xattrs${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_tar_extract_xattrs_different_owner() {
+	rm -Rf in out test-archive.tar
+}
+
+# Requires:
+# - evm: Introduce evm_hmac_disabled() to safely ignore verification errors
+# - evm: Allow xattr/attr operations for portable signatures
+# - evm: Pass user namespace to set/remove xattr hooks
+# - evm: Allow setxattr() and setattr() for unmodified metadata
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+# - ima: Don't remove security.ima if file must not be appraised
+#
+# The purpose of this test is similar to that of the previous two tests. The
+# difference is that tar is used instead of cp, and the extracted files have
+# the same owner as the current one. Thus, this test requires 'evm: Allow
+# setxattr() and setattr() for unmodified metadata'.
+check_tar_extract_xattrs_same_owner() {
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ "$evm_value" -ne "$EVM_INIT_X509" ]; then
+		echo "${CYAN}EVM mode $EVM_INIT_X509 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! mkdir in out; then
+		echo "${RED}Cannot create directories${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! echo "test" > in/test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl sign -o -a sha256 --imahash --key "$key_path" in/test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! tar --xattrs-include=* -cf test-archive.tar in/test-file; then
+		echo "${RED}Cannot create archive with xattrs${NORM}"
+		return "$FAIL"
+	fi
+
+	# Check if tar is allowed to set metadata for the extracted file.
+	# This test is different from the previous one, as the owner
+	# from the archive is the same of the owner of the extracted
+	# file. tar will attempt anyway to restore the original owner but
+	# unlike the previous test, portable signature verification already
+	# succeeds at the time the owner is set (another patch allows
+	# metadata operations if those operations don't modify current
+	# values).
+	if ! tar --xattrs-include=* -xf test-archive.tar -C out; then
+		echo "${RED}Cannot extract archive with xattrs${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_tar_extract_xattrs_same_owner() {
+	rm -Rf in out test-archive.tar
+}
+
+# Requires:
+# - evm: Introduce evm_hmac_disabled() to safely ignore verification errors
+# - evm: Allow xattr/attr operations for portable signatures
+# - evm: Pass user namespace to set/remove xattr hooks
+# - evm: Allow setxattr() and setattr() for unmodified metadata
+# - ima: Don't remove security.ima if file must not be appraised
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+#
+# The purpose of this test is to further verify the patches above, by executing
+# commands to set the same or different metadata. Setting the same metadata
+# should be allowed, setting different metadata should be denied.
+check_metadata_change() {
+	local ima_xattr
+	local label
+	local last_char
+	local msg
+
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ "$evm_value" -ne "$EVM_INIT_X509" ]; then
+		echo "${CYAN}EVM mode $EVM_INIT_X509 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown "$METADATA_CHANGE_FOWNER" test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chgrp "$METADATA_CHANGE_FOWNER" test-file; then
+		echo "${RED}Cannot change group of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chmod 2644 test-file; then
+		echo "${RED}Cannot change mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl sign -o -a sha256 --imahash --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# If metadata modification is not allowed, EVM should deny any
+	# operation that modifies metadata. Check if setting the same
+	# value is allowed.
+	if ! chown "$METADATA_CHANGE_FOWNER" test-file; then
+		echo "${RED}Cannot set same owner for test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Setting a different value should not be allowed.
+	if chown "$METADATA_CHANGE_FOWNER_2" test-file 2> /dev/null; then
+		echo "${RED}Owner change for test-file should not be allowed (immutable metadata)${NORM}"
+		return "$FAIL"
+	fi
+
+	# Repeat the test for the file mode.
+	if ! chmod 2644 test-file; then
+		echo "${RED}Cannot set same mode for test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if chmod 2666 test-file 2> /dev/null; then
+		echo "${RED}Mode change for test-file should not be allowed (immutable metadata)${NORM}"
+		return "$FAIL"
+	fi
+
+	if [ -n "$(command -v chcon 2> /dev/null)" ] && [ -n "$(command -v getenforce 2> /dev/null)" ] && [ "$(getenforce 2> /dev/null)" != "Disabled" ]; then
+		# Repeat the test for the SELinux label.
+		label=$(get_xattr security.selinux test-file)
+
+		if [ -n "$label" ]; then
+			if ! chcon "$label" test-file; then
+				echo "${RED}Cannot set same security.selinux for test-file${NORM}"
+				return "$FAIL"
+			fi
+		fi
+
+		if chcon unconfined_u:object_r:null_device_t:s0 test-file 2> /dev/null; then
+			echo "${RED}security.selinux change for test file should not be allowed (immutable metadata)${NORM}"
+			return "$FAIL"
+		fi
+	fi
+
+	# Repeat the test for the IMA signature.
+	ima_xattr=$(get_xattr security.ima test-file)
+	if [ -z "$ima_xattr" ]; then
+		echo "${RED}security.ima not found${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! setfattr -n security.ima -v 0x"$ima_xattr" test-file; then
+		echo "${RED}Cannot set same security.ima for test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	last_char=${ima_xattr: -1}
+	((last_char += 1))
+	((last_char %= 10))
+	ima_xattr=${ima_xattr:0:-1}$last_char
+
+	if setfattr -n security.ima -v 0x"$ima_xattr" test-file 2> /dev/null; then
+		echo "${RED}Change of security.ima for test-file should not be allowed (immutable metadata)${NORM}"
+		return "$FAIL"
+	fi
+
+	# Repeat the test for ACLs.
+	if ! msg=$(exec 2>&1 && setfacl --set u::rw,g::r,o::r,m:r test-file); then
+		if [ "${msg%not supported}" != "$msg" ]; then
+			return "$OK"
+		fi
+
+		echo "${RED}Cannot preserve system.posix_acl_access for test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if setfacl --set u::rw,g::r,o::r,m:rw test-file 2> /dev/null; then
+		echo "${RED}Change of system.posix_acl_access for test-file should not be allowed (immutable metadata)${NORM}"
+		return "$FAIL"
+	fi
+
+	if [ -n "$g_mountpoint_idmapped" ]; then
+		pushd "$g_mountpoint_idmapped" > /dev/null || exit "$FAIL"
+
+		# Repeat the test for ACLs on an idmapped mount.
+		#
+		# This test relies on the fact that the caller of this script (root) is in
+		# the same owning group of test-file (in the idmapped mount the group is
+		# root, not $METADATA_CHANGE_FOWNER and, for this reason, the S_ISGID bit
+		# is not cleared. If EVM was not aware of the mapping, it would have
+		# determined that root is not in the owning group of test-file and given
+		# that also CAP_FSETID is cleared, the S_ISGID bit would have been cleared
+		# and thus the operation would fail (file metadata changed).
+		if ! capsh --drop='cap_fsetid' -- -c 'setfacl --set u::rw,g::r,o::r test-file'; then
+			echo "${RED}Cannot preserve system.posix_acl_access for test-file${NORM}"
+			popd || exit "$FAIL"
+			return "$FAIL"
+		fi
+
+		popd > /dev/null || exit "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_metadata_change() {
+	rm -f test-file
+}
+
+# Requires:
+# - evm: Introduce evm_revalidate_status()
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+#
+# Note:
+# This test can be run if EVM_ALLOW_METADATA_WRITES is set in advance
+# before running this script. If it is not set before, this script sets
+# EVM_SETUP_COMPLETE, disabling further EVM mode modifications until reboot.
+#
+# Without EVM_ALLOW_METADATA_WRITES, EVM_SETUP_COMPLETE is necessary to ignore
+# the INTEGRITY_NOLABEL and INTEGRITY_NOXATTRS errors.
+#
+# The purpose of this test is to verify that IMA detected a metadata change
+# when EVM_ALLOW_METADATA_WRITES is set (metadata operations are always
+# allowed). After the first successful appraisal, the test intentionally changes
+# metadata and verifies that IMA revoked access to the file. The test also
+# verifies that IMA grants access again to the file after restoring the correct
+# metadata.
+check_evm_revalidate() {
+	local result
+	local ima_xattr
+	local ima_xattr_new
+	local evm_xattr
+	local evm_xattr_new
+	local label
+	local last_char
+	local msg
+
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ "$evm_value" -ne $((EVM_INIT_X509 | EVM_ALLOW_METADATA_WRITES)) ]; then
+		echo "${CYAN}EVM mode $((EVM_INIT_X509 | EVM_ALLOW_METADATA_WRITES)) required, execute echo 4 > /sys/kernel/security/evm before running this test${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chmod 600 test-file; then
+		echo "${RED}Cannot change mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# We need to defer setting the correct owner, as there could be
+	# already an IMA policy rule preventing evmctl from reading the
+	# file to calculate the digest.
+	if ! evmctl sign -o -a sha256 --imahash --uid "$APPRAISE_FOWNER" --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown "$APPRAISE_FOWNER" test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	check_load_ima_rule "$APPRAISE_RULE"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	# Read the file so that IMA would not re-appraise it next time.
+	if ! cat test-file &> /dev/null; then
+		echo "${RED}Cannot read test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# After enabling metadata modification, operations should succeed even
+	# if the file has a portable signature. However, the previously cached
+	# appraisal status should be invalidated.
+	if ! chmod 644 test-file; then
+		echo "${RED}Cannot change mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Here check if IMA re-appraised the file. The read should fail
+	# since now file metadata is invalid.
+	if cat test-file &> /dev/null; then
+		echo "${RED}Read of test-file should not succeed (invalid mode)${NORM}"
+		return "$FAIL"
+	fi
+
+	# Restore metadata back to the original value.
+	if ! chmod 600 test-file; then
+		echo "${RED}Cannot restore original mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Ensure that now IMA appraisal succeeds.
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file after restoring correct mode${NORM}"
+		return "$FAIL"
+	fi
+
+	if [ -n "$(command -v chcon 2> /dev/null)" ] && [ -n "$(command -v getenforce 2> /dev/null)" ] && [ "$(getenforce 2> /dev/null)" != "Disabled" ]; then
+		# Repeat the test for the SELinux label.
+		label=$(get_xattr security.selinux test-file)
+
+		if ! chcon unconfined_u:object_r:null_device_t:s0 test-file; then
+			echo "${RED}Cannot change security.selinux of test-file${NORM}"
+			return "$FAIL"
+		fi
+
+		if cat test-file &> /dev/null; then
+			echo "${RED}Read of test-file should not succeed (invalid security.selinux)${NORM}"
+			return "$FAIL"
+		fi
+
+		if [ -n "$label" ]; then
+			if ! chcon "$label" test-file; then
+				echo "${RED}Cannot restore original security.selinux of test-file${NORM}"
+				return "$FAIL"
+			fi
+		else
+			attr -S -r selinux test-file
+		fi
+
+		if ! cat test-file > /dev/null; then
+			echo "${RED}Cannot read test-file after restoring correct security.selinux${NORM}"
+			return "$FAIL"
+		fi
+	fi
+
+	# Repeat the test for the IMA signature.
+	ima_xattr=$(get_xattr security.ima test-file)
+	if [ -z "$ima_xattr" ]; then
+		echo "${RED}security.ima not found${NORM}"
+		return "$FAIL"
+	fi
+
+	last_char=${ima_xattr: -1}
+	((last_char += 1))
+	((last_char %= 10))
+	ima_xattr_new=${ima_xattr:0:-1}$last_char
+
+	if ! setfattr -n security.ima -v 0x"$ima_xattr_new" test-file; then
+		echo "${RED}Cannot set security.ima of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if cat test-file &> /dev/null; then
+		echo "${RED}Read of test-file should not succeed (invalid security.ima)${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! setfattr -n security.ima -v 0x"$ima_xattr" test-file; then
+		echo "${RED}Cannot restore original security.ima of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file after restoring correct security.ima${NORM}"
+		return "$FAIL"
+	fi
+
+	# Repeat the test for the EVM signature.
+	evm_xattr=$(get_xattr security.evm test-file)
+	if [ -z "$evm_xattr" ]; then
+		echo "${RED}security.evm not found${NORM}"
+		return "$FAIL"
+	fi
+
+	last_char=${evm_xattr: -1}
+	((last_char += 1))
+	((last_char %= 10))
+	evm_xattr_new=${evm_xattr:0:-1}$last_char
+
+	if ! setfattr -n security.evm -v 0x"$evm_xattr_new" test-file; then
+		echo "${RED}Cannot set security.evm of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if cat test-file &> /dev/null; then
+		echo "${RED}Read of test-file should not succeed (invalid security.evm)${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! setfattr -n security.evm -v 0x"$evm_xattr" test-file; then
+		echo "${RED}Cannot restore original security.evm of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file after restoring correct security.evm${NORM}"
+		return "$FAIL"
+	fi
+
+	# Repeat the test for ACLs.
+	if ! setfacl -m u::rwx test-file 2> /dev/null; then
+		echo "${RED}Cannot change system.posix_acl_access${NORM}"
+		return "$FAIL"
+	fi
+
+	if cat test-file &> /dev/null; then
+		echo "${RED}Read of test-file should not succeed (invalid system.posix_acl_access)${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! setfacl -m u::rw test-file; then
+		echo "${RED}Cannot restore original system.posix_acl_access for test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file after restoring correct system.posix_acl_access${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_evm_revalidate() {
+	rm -f test-file
+}
+
+# Requires:
+# - evm: Introduce evm_hmac_disabled() to safely ignore verification errors
+# - evm: Introduce evm_revalidate_status()
+# - ima: Allow imasig requirement to be satisfied by EVM portable signatures
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+#
+# The purpose of this test is to verify that IMA manages files with an EVM
+# portable signature similarly to those with an IMA signature: content can be
+# written to new files after adding the signature and files can be accessed
+# when the imasig requirement is specified in the IMA policy.
+check_evm_portable_sig_ima_appraisal() {
+	local result
+	local xattr_orig
+	local xattr
+	local mode
+	local owner
+
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if [ $((evm_value & EVM_INIT_X509)) -ne "$EVM_INIT_X509" ]; then
+		echo "${CYAN}EVM flag $EVM_INIT_X509 required${NORM}"
+		return "$SKIP"
+	fi
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chmod 600 test-file; then
+		echo "${RED}Cannot change mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# We need to defer setting the correct owner, as there could be
+	# already an IMA policy rule preventing evmctl from reading the
+	# file to calculate the digest.
+	if ! evmctl sign -o -a sha256 --imahash --uid "$APPRAISE_DIGSIG_FOWNER" --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown "$APPRAISE_DIGSIG_FOWNER" test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	check_load_ima_rule "$APPRAISE_DIGSIG_RULE"
+	result=$?
+	if [ "$result" -ne "$OK" ]; then
+		return "$result"
+	fi
+
+	# Ensure that a file with a portable signature satisfies the
+	# appraise_type=imasig requirement specified in the IMA policy.
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Even files with a portable signature should be considered as
+	# immutable by IMA. Write should fail.
+	if echo "test" 2> /dev/null >> test-file; then
+		echo "${RED}Write to test-file should not succeed (immutable metadata)${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! tar --xattrs-include=* -cf test-archive.tar test-file; then
+		echo "${RED}Cannot create archive with xattrs${NORM}"
+		return "$FAIL"
+	fi
+
+	mkdir out
+
+	# Appraisal of the new file, extracted by tar, should succeed
+	# not only if the new file has an IMA signature but also if
+	# it has a portable signature.
+	if ! tar --xattrs-include=* -xf test-archive.tar -C out; then
+		echo "${RED}Cannot extract archive with xattrs${NORM}"
+		return "$FAIL"
+	fi
+
+	# Check if xattrs have been correctly set.
+	xattr_orig=$(get_xattr security.selinux test-file)
+	xattr=$(get_xattr security.selinux out/test-file)
+	if [ "$xattr" != "$xattr_orig" ]; then
+		echo "${RED}security.selinux mismatch between original and extracted file${NORM}"
+		return "$FAIL"
+	fi
+
+	xattr_orig=$(get_xattr security.ima test-file)
+	xattr=$(get_xattr security.ima out/test-file)
+	if [ "$xattr" != "$xattr_orig" ]; then
+		echo "${RED}security.ima mismatch between original and extracted file${NORM}"
+		return "$FAIL"
+	fi
+
+	xattr_orig=$(get_xattr security.evm test-file)
+	xattr=$(get_xattr security.evm out/test-file)
+	if [ "$xattr" != "$xattr_orig" ]; then
+		echo "${RED}security.evm mismatch between original and extracted file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Check if attrs have been correctly set.
+	owner=$(stat -c "%u" out/test-file)
+	if [ "$owner" != "$APPRAISE_DIGSIG_FOWNER" ]; then
+		echo "${RED}owner mismatch between original and extracted file${NORM}"
+		return "$FAIL"
+	fi
+
+	mode=$(stat -c "%a" out/test-file)
+	if [ "$mode" != "600" ]; then
+		echo "${RED}mode mismatch between original and extracted file${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_evm_portable_sig_ima_appraisal() {
+	rm -f test-file test-archive.tar
+	rm -Rf out
+}
+
+# Requires:
+# - ima: Introduce template field evmsig and write to field sig as fallback
+# - evm: Execute evm_inode_init_security() only when an HMAC key is loaded
+# - ima: Don't remove security.ima if file must not be appraised
+#
+# The purpose of this test is to verify that the EVM portable signature is
+# displayed in the measurement list.
+check_evm_portable_sig_ima_measurement_list() {
+	local result
+	local evm_sig_fs
+	local evm_sig_list
+
+	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
+
+	if ! echo "test" > test-file; then
+		echo "${RED}Cannot write test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! chown "$MEASURE_FOWNER" test-file; then
+		echo "${RED}Cannot change owner of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl sign -o -a sha256 --imahash --key "$key_path" test-file &> /dev/null; then
+		echo "${RED}Cannot sign test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	check_load_ima_rule "$MEASURE_RULE"
+	result=$?
+	if [ "$result" -ne "$OK" ]; then
+		return "$result"
+	fi
+
+	# Invalidate previous measurement to add new entry
+	touch test-file
+
+	# Read the file to add it to the measurement list.
+	if ! cat test-file > /dev/null; then
+		echo "${RED}Cannot read test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	evm_sig_fs=$(get_xattr security.evm test-file)
+	if [ -z "$evm_sig_fs" ]; then
+		echo "${RED}security.evm not found${NORM}"
+		return "$FAIL"
+	fi
+
+	# Search security.evm in the measurement list.
+	evm_sig_list=$(awk '$6 == "'"$evm_sig_fs"'"' < /sys/kernel/security/ima/ascii_runtime_measurements)
+	if [ -z "$evm_sig_list" ]; then
+		echo "${RED}security.evm mismatch (xattr != measurement list)${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+cleanup_evm_portable_sig_ima_measurement_list() {
+	rm -f test-file
+}
+
+# Run in the new environment if TST_ENV is set.
+_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE TST_EVM_CHANGE_MODE=$TST_EVM_CHANGE_MODE TST_KEY_PATH=$TST_KEY_PATH"
+
+# Run in the new environment if TST_ENV is set (skipped test).
+_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE TST_EVM_CHANGE_MODE=$TST_EVM_CHANGE_MODE TST_KEY_PATH=$TST_KEY_PATH TST_LIST=check_evm_revalidate"
+
+# Exit from the creator of the new environment.
+_exit_env "$TST_KERNEL"
+
+# Mount filesystems in the new environment.
+_init_env
+
+g_mountpoint=$(mktemp -d)
+g_image=$(mktemp)
+
+if [ -z "$g_mountpoint" ]; then
+	echo "${RED}Mountpoint directory not created${NORM}"
+	exit "$FAIL"
+fi
+
+if [ "$(whoami)" != "root" ]; then
+	echo "${CYAN}This script must be executed as root${NORM}"
+	exit "$SKIP"
+fi
+
+if [ -n "$TST_KEY_PATH" ]; then
+	if [ "${TST_KEY_PATH:0:1}" != "/" ]; then
+		echo "${RED}Absolute path required for the signing key${NORM}"
+		exit "$FAIL"
+	fi
+
+	if [ ! -f "$TST_KEY_PATH" ]; then
+		echo "${RED}Kernel signing key not found in $TST_KEY_PATH${NORM}"
+		exit "$FAIL"
+	fi
+
+	key_path="$TST_KEY_PATH"
+elif [ -f "$PWD/../signing_key.pem" ]; then
+	key_path="$PWD/../signing_key.pem"
+elif [ -f "/lib/modules/$(uname -r)/source/certs/signing_key.pem" ]; then
+	key_path="/lib/modules/$(uname -r)/source/certs/signing_key.pem"
+elif [ -f "/lib/modules/$(uname -r)/build/certs/signing_key.pem" ]; then
+	key_path="/lib/modules/$(uname -r)/build/certs/signing_key.pem"
+else
+	echo "${CYAN}Kernel signing key not found${NORM}"
+	exit "$SKIP"
+fi
+
+key_path_der=$(mktemp)
+
+if [ ! -f "/sys/kernel/security/evm" ]; then
+	echo "${CYAN}EVM support in the kernel disabled${NORM}"
+	exit "$SKIP"
+fi
+
+# Assume that the EVM mode can be changed in a new environment.
+if [ -n "$TST_ENV" ]; then
+	TST_EVM_CHANGE_MODE=1
+fi
+
+evm_value=$(cat /sys/kernel/security/evm)
+
+openssl x509 -in "$key_path" -out "$key_path_der" -outform der
+if ! keyctl padd asymmetric pubkey %keyring:.ima < "$key_path_der" &> /dev/null; then
+	echo "${RED}Public key cannot be added to the IMA keyring${NORM}"
+	exit "$FAIL"
+fi
+
+if ! dd if=/dev/zero of="$g_image" bs=1M count=20 &> /dev/null; then
+	echo "${RED}Cannot create test image${NORM}"
+	exit "$FAIL"
+fi
+
+g_dev=$(losetup -f "$g_image" --show)
+if [ -z "$g_dev" ]; then
+	echo "${RED}Cannot create loop device${NORM}"
+	exit "$FAIL"
+fi
+
+if ! mkfs.ext4 -U "$IMA_UUID" -b 4096 "$g_dev" &> /dev/null; then
+	echo "${RED}Cannot format $g_dev${NORM}"
+	exit "$FAIL"
+fi
+
+if ! mount -o i_version "$g_dev" "$g_mountpoint"; then
+	echo "${RED}Cannot mount loop device${NORM}"
+	exit "$FAIL"
+fi
+
+if [ -n "$(command -v mount-idmapped 2> /dev/null)" ]; then
+	echo "Found mount-idmapped at $(command -v mount-idmapped), testing idmapped mounts"
+	g_mountpoint_idmapped=$(mktemp -d)
+	if ! mount-idmapped --map-mount b:"$METADATA_CHANGE_FOWNER":0:1 "$g_mountpoint" "$g_mountpoint_idmapped"; then
+		echo "${RED}mount-idmapped failed${NORM}"
+		exit "$FAIL"
+	fi
+fi
+
+g_loop_mounted=1
+pushd "$g_mountpoint" > /dev/null || exit "$FAIL"
+
+expect_pass check_ima_sig_appraisal
+cleanup_ima_sig_appraisal
+expect_pass check_ima_sig_ima_measurement_list
+cleanup_ima_sig_ima_measurement_list
+
+if [ "$(echo -e "$(uname -r)\n5.12" | sort -V | head -n 1)" != "5.12" ]; then
+	exit "$OK"
+fi
+
+if [ $((evm_value & EVM_INIT_X509)) -ne "$EVM_INIT_X509" ] && [ "$TST_EVM_CHANGE_MODE" -eq 1 ]; then
+	if ! keyctl padd asymmetric pubkey %keyring:.evm < "$key_path_der" &> /dev/null; then
+		echo "${RED}Public key cannot be added to the EVM keyring${NORM}"
+		exit "$FAIL"
+	fi
+
+	echo "$EVM_INIT_X509" > /sys/kernel/security/evm 2> /dev/null
+fi
+
+if [ "$(expr index "$TST_LIST" "check_evm_revalidate")" -gt 0 ] && [ "$TST_EVM_CHANGE_MODE" -eq 1 ]; then
+	echo "$EVM_ALLOW_METADATA_WRITES" > /sys/kernel/security/evm 2> /dev/null
+fi
+
+# We cannot determine from securityfs if EVM_SETUP_COMPLETE is set, so we set it unless EVM_ALLOW_METADATA_WRITES is set.
+if [ $((evm_value & EVM_ALLOW_METADATA_WRITES)) -ne "$EVM_ALLOW_METADATA_WRITES" ] && [ "$TST_EVM_CHANGE_MODE" -eq 1 ]; then
+	echo "$EVM_SETUP_COMPLETE" > /sys/kernel/security/evm 2> /dev/null
+fi
+
+evm_value=$(cat /sys/kernel/security/evm)
+
+expect_pass check_create_file
+cleanup_create_file
+expect_pass check_cp_preserve_xattrs
+cleanup_cp_preserve_xattrs
+expect_pass check_tar_extract_xattrs_different_owner
+cleanup_tar_extract_xattrs_different_owner
+expect_pass check_tar_extract_xattrs_same_owner
+cleanup_tar_extract_xattrs_same_owner
+expect_pass check_metadata_change
+cleanup_metadata_change
+expect_pass check_evm_revalidate
+cleanup_evm_revalidate
+expect_pass check_evm_portable_sig_ima_appraisal
+cleanup_evm_portable_sig_ima_appraisal
+expect_pass check_evm_portable_sig_ima_measurement_list
+cleanup_evm_portable_sig_ima_measurement_list

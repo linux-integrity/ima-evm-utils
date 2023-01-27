@@ -44,7 +44,13 @@ yum -y install \
 	util-linux \
 	vim-common \
 	wget \
-	which
+	which \
+	zstd \
+	systemd \
+	keyutils \
+	e2fsprogs \
+	acl \
+	libcap
 
 yum -y install docbook5-style-xsl || true
 yum -y install swtpm || true
@@ -55,4 +61,8 @@ if [ -f /etc/centos-release ]; then
 fi
 yum -y install softhsm || true
 
+# haveged is available via EPEL on CentOS stream8.
+yum -y install haveged || true
+
 ./tests/install-fsverity.sh
+./tests/install-mount-idmapped.sh

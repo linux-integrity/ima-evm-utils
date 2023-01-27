@@ -12,7 +12,7 @@
 # for verifying the calculated boot_aggregate is included in this
 # directory as well.
 
-trap cleanup SIGINT SIGTERM EXIT
+trap '_report_exit_and_cleanup cleanup' SIGINT SIGTERM EXIT
 
 # Base VERBOSE on the environment variable, if set.
 VERBOSE="${VERBOSE:-0}"
