@@ -124,7 +124,6 @@ jobs:
             env:
               CC: clang
               TSS: ibmtss
-              COMPILE_SSL: openssl-3.0.5
 
           - container: "opensuse/leap"
             env:
