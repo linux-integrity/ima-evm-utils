@@ -53,7 +53,8 @@ $apt \
 	sudo \
 	util-linux \
 	wget \
-	xsltproc
+	xsltproc \
+	gawk
 
 $apt xxd || $apt vim-common
 $apt libengine-gost-openssl1.1$ARCH || true

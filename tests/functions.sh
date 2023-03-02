@@ -100,6 +100,25 @@ expect_pass() {
   return $ret
 }
 
+expect_pass_if() {
+  local indexes="$1"
+  local ret idx
+
+  shift
+
+  expect_pass "$@"
+  ret=$?
+
+  if [ $ret -ne 0 ] && [ $ret -ne 77 ] && [ -n "$PATCHES" ]; then
+    echo $YELLOW"Possibly missing patches:"$NORM
+    for idx in $indexes; do
+      echo $YELLOW" - ${PATCHES[$((idx))]}"$NORM
+    done
+  fi
+
+  return $ret
+}
+
 # Eval negative test (one that should fail) and account its result
 expect_fail() {
   local ret
@@ -134,6 +153,25 @@ expect_fail() {
   # for tests to run without wrappers
   TFAIL=
   TMODE=+
+  return $ret
+}
+
+expect_fail_if() {
+  local indexes="$1"
+  local ret idx
+
+  shift
+
+  expect_fail "$@"
+  ret=$?
+
+  if { [ $ret -eq 0 ] || [ $ret -eq 99 ]; } && [ -n "$PATCHES" ]; then
+    echo $YELLOW"Possibly missing patches:"$NORM
+    for idx in $indexes; do
+      echo $YELLOW" - ${PATCHES[$((idx))]}"$NORM
+    done
+  fi
+
   return $ret
 }
 
