@@ -1,0 +1,245 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2023 Roberto Sassu <roberto.sassu@huawei.com>
+#
+# Test for ima_policy_check.awk
+
+trap '_report_exit_and_cleanup' SIGINT SIGTERM EXIT
+
+cd "$(dirname "$0")" || exit 1
+. ./functions.sh
+
+export PATH=$PWD:$PATH
+
+check_result() {
+	local result
+
+	echo -e "\nTest: $1"
+	echo "New rule: $2"
+	echo "IMA policy: $3"
+
+	echo -n "Result (expect $4): "
+
+	echo -e "$2\n$3" | ima_policy_check.awk
+	result=$?
+
+	if [ "$result" -ne "$4" ]; then
+		echo "${RED}$result${NORM}"
+		return "$FAIL"
+	fi
+
+	echo "${GREEN}$result${NORM}"
+	return "$OK"
+}
+
+# ima_policy_check.awk returns a bit mask with the following values:
+# - 1: invalid new rule;
+# - 2: overlap of the new rule with an existing rule in the IMA policy;
+# - 4: new rule exists in the IMA policy.
+
+# Basic checks.
+desc="empty IMA policy"
+rule="measure func=FILE_CHECK"
+ima_policy=""
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Empty new rule"
+rule=""
+ima_policy=""
+expect_pass check_result "$desc" "$rule" "$ima_policy" 1
+
+desc="Unknown policy keyword fun"
+rule="measure fun=FILE_CHECK"
+ima_policy=""
+expect_pass check_result "$desc" "$rule" "$ima_policy" 1
+
+desc="Missing action"
+rule="func=FILE_CHECK"
+ima_policy=""
+expect_pass check_result "$desc" "$rule" "$ima_policy" 1
+
+# Non-overlapping rules.
+desc="Non-overlapping by action measure/dont_appraise, same func"
+rule="measure func=FILE_CHECK"
+ima_policy="dont_appraise func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by action audit/dont_appraise, same func"
+rule="audit func=FILE_CHECK"
+ima_policy="dont_appraise func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by action appraise/dont_measure, same func"
+rule="appraise func=FILE_CHECK"
+ima_policy="dont_measure func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by action dont_measure/hash, same func"
+rule="dont_measure func=FILE_CHECK"
+ima_policy="hash func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by uid, func is equal"
+rule="measure func=FILE_CHECK uid=0"
+ima_policy="measure uid=1 func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by uid, func is equal, same policy options"
+rule="measure func=FILE_CHECK uid=0 permit_directio"
+ima_policy="measure uid=1 func=FILE_CHECK permit_directio"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by mask, func and uid are equal, same policy options"
+rule="measure func=FILE_CHECK uid=0 permit_directio mask=MAY_READ"
+ima_policy="measure uid=0 mask=MAY_EXEC func=FILE_CHECK permit_directio"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="Non-overlapping by mask, func and uid are equal, different policy options"
+rule="measure func=FILE_CHECK uid=0 permit_directio mask=MAY_READ"
+ima_policy="measure uid=0 mask=MAY_EXEC func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+# Overlapping and different rules.
+desc="same actions, different keywords"
+rule="appraise func=FILE_CHECK"
+ima_policy="appraise uid=0"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="unrelated actions with appraise and a do action, same func"
+rule="appraise func=FILE_CHECK"
+ima_policy="measure func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="unrelated actions with appraise and a do action, different func"
+rule="appraise func=FILE_CHECK"
+ima_policy="measure func=MMAP_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="related actions, same func"
+rule="measure func=FILE_CHECK"
+ima_policy="dont_measure func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="related actions, same func, different policy options"
+rule="measure func=FILE_CHECK"
+ima_policy="dont_measure func=FILE_CHECK permit_directio"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="related actions, same func, different policy options"
+rule="measure func=FILE_CHECK permit_directio"
+ima_policy="dont_measure func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, same func, same mask with different modifier (no disjoint sets with the ^ modifier)"
+rule="measure func=FILE_CHECK mask=MAY_EXEC"
+ima_policy="measure func=FILE_CHECK mask=^MAY_EXEC"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, same func, different mask with same modifier (no disjoint sets with the ^ modifier)"
+rule="measure func=FILE_CHECK mask=^MAY_READ"
+ima_policy="measure func=FILE_CHECK mask=^MAY_EXEC"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, same func, different policy options"
+rule="measure func=FILE_CHECK"
+ima_policy="measure func=FILE_CHECK permit_directio"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, same func, different policy options"
+rule="measure func=FILE_CHECK permit_directio"
+ima_policy="measure func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, MMAP_CHECK and MMAP_CHECK_REQPROT hooks"
+rule="measure func=MMAP_CHECK"
+ima_policy="measure func=MMAP_CHECK_REQPROT"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="related actions, same func, same mask with same modifier"
+rule="measure func=FILE_CHECK mask=^MAY_EXEC"
+ima_policy="dont_measure func=FILE_CHECK mask=^MAY_EXEC"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, same func, different uid with same operator (overlap because operators are not supported)"
+rule="measure func=FILE_CHECK uid>0"
+ima_policy="measure func=FILE_CHECK uid>1"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+desc="same actions, same func, same uid with different operator (overlap because operators are not supported)"
+rule="measure func=FILE_CHECK uid>1"
+ima_policy="measure func=FILE_CHECK uid<1"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 2
+
+# Overlapping and same rules.
+desc="same actions, same func"
+rule="appraise func=FILE_CHECK"
+ima_policy="appraise func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func, same mask"
+rule="appraise mask=MAY_READ func=FILE_CHECK"
+ima_policy="appraise func=FILE_CHECK mask=MAY_READ"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func, same mask, same policy options"
+rule="appraise mask=MAY_READ func=FILE_CHECK permit_directio appraise_type=imasig"
+ima_policy="appraise func=FILE_CHECK mask=MAY_READ permit_directio appraise_type=imasig"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func"
+rule="measure func=MMAP_CHECK_REQPROT"
+ima_policy="measure func=MMAP_CHECK_REQPROT"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func with alias (PATH_CHECK = FILE_CHECK)"
+rule="measure func=FILE_CHECK"
+ima_policy="measure func=PATH_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func with alias (PATH_CHECK = FILE_CHECK), same mask with same modifiers"
+rule="measure mask=^MAY_READ func=FILE_CHECK"
+ima_policy="measure func=PATH_CHECK mask=^MAY_READ"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func with alias (PATH_CHECK = FILE_CHECK) and same mask with same modifiers, same uid with same operators"
+rule="measure mask=^MAY_READ uid>0 func=FILE_CHECK"
+ima_policy="measure func=PATH_CHECK mask=^MAY_READ uid>0"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+desc="same actions, same func with alias (PATH_CHECK = FILE_CHECK) and same mask with same modifiers, same uid with same operators"
+rule="measure mask=^MAY_READ uid<1 func=FILE_CHECK"
+ima_policy="measure func=PATH_CHECK mask=^MAY_READ uid<1"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4
+
+# Overlapping and two rules (one same, one different).
+desc="first: same actions, same func, second: unrelated actions with appraise and a do action"
+rule="appraise func=FILE_CHECK"
+ima_policy="appraise func=FILE_CHECK\nmeasure func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 6
+
+desc="first: unrelated actions with appraise and a do action, same func, second: same actions"
+rule="appraise func=FILE_CHECK"
+ima_policy="measure func=FILE_CHECK\nappraise func=FILE_CHECK"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 6
+
+desc="first: same actions, same func, same mask, second: different policy options"
+rule="appraise mask=MAY_READ func=FILE_CHECK"
+ima_policy="appraise func=FILE_CHECK mask=MAY_READ\nappraise func=FILE_CHECK mask=MAY_READ permit_directio"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 6
+
+desc="first: same actions, same func with alias (PATH_CHECK = FILE_CHECK), same mask, second: different policy options"
+rule="appraise mask=MAY_READ func=FILE_CHECK"
+ima_policy="appraise func=PATH_CHECK mask=MAY_READ\nappraise func=FILE_CHECK mask=MAY_READ permit_directio"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 6
+
+# Non-overlapping and three rules.
+desc="same actions, same func and mask, different uid"
+rule="appraise mask=MAY_READ func=FILE_CHECK uid=0"
+ima_policy="appraise mask=MAY_READ func=FILE_CHECK uid=1\nappraise mask=MAY_READ func=FILE_CHECK uid=2\nappraise mask=MAY_READ func=FILE_CHECK uid=3"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 0
+
+desc="same actions, same func and mask, different uid, except one that is the same"
+rule="appraise mask=MAY_READ func=FILE_CHECK uid=0"
+ima_policy="appraise mask=MAY_READ func=FILE_CHECK uid=1\nappraise mask=MAY_READ func=FILE_CHECK uid=0\nappraise mask=MAY_READ func=FILE_CHECK uid=3"
+expect_pass check_result "$desc" "$rule" "$ima_policy" 4

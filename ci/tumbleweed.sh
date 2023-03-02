@@ -42,7 +42,8 @@ zypper --non-interactive install --force-resolution --no-recommends \
 	vim \
 	wget \
 	which \
-	xsltproc
+	xsltproc \
+	gawk
 
 zypper --non-interactive install --force-resolution --no-recommends \
 	gnutls openssl-engine-libp11 softhsm || true
