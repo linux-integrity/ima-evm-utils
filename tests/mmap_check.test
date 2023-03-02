@@ -1,0 +1,407 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2022-2023 Roberto Sassu <roberto.sassu@huawei.com>
+#
+# Check the behavior of MMAP_CHECK and MMAP_CHECK_REQPROT
+
+trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
+
+PATCHES=(
+'ima: Align ima_file_mmap() parameters with mmap_file LSM hook'
+'ima: Introduce MMAP_CHECK_REQPROT hook'
+)
+
+RET_INVALID_RULE=$((0x0001))
+RET_RULE_OVERLAP=$((0x0002))
+RET_SAME_RULE_EXISTS=$((0x0004))
+
+EVM_INIT_HMAC=$((0x0001))
+EVM_INIT_X509=$((0x0002))
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+
+# Errors defined in test_mmap
+ERR_SETUP=1
+ERR_TEST=2
+
+cd "$(dirname "$0")" || exit 1
+export PATH=$PWD/../src:$PWD:$PATH
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+. ./functions.sh
+_require evmctl
+
+cleanup() {
+	if [ "$g_loop_mounted" = "1" ]; then
+		popd > /dev/null || exit "$FAIL"
+		umount "$g_mountpoint"
+	fi
+
+	if [ -n "$g_dev" ]; then
+		losetup -d "$g_dev"
+	fi
+
+	if [ -n "$g_image" ]; then
+		rm -f "$g_image"
+	fi
+
+	if [ -n "$g_mountpoint" ]; then
+		rm -Rf "$g_mountpoint"
+	fi
+
+	if [ -n "$g_key_path_der" ]; then
+		rm -f "$g_key_path_der"
+	fi
+}
+
+# Use the fsuuid= IMA policy keyword to select only files created/used by the
+# tests below. Also use fowner= to differentiate between files created/used by
+# individual tests.
+IMA_UUID="28b23254-9467-44c0-b6ba-34b12e85a26e"
+MEASURE_MMAP_CHECK_FOWNER=2000
+MEASURE_MMAP_CHECK_REQPROT_FOWNER=2001
+MEASURE_MMAP_CHECK_RULE="measure func=MMAP_CHECK fsmagic=0xef53 fsuuid=$IMA_UUID fowner=$MEASURE_MMAP_CHECK_FOWNER"
+MEASURE_MMAP_CHECK_REQPROT_RULE="measure func=MMAP_CHECK_REQPROT fsmagic=0xef53 fsuuid=$IMA_UUID fowner=$MEASURE_MMAP_CHECK_REQPROT_FOWNER"
+APPRAISE_MMAP_CHECK_FOWNER=2002
+APPRAISE_MMAP_CHECK_REQPROT_FOWNER=2003
+APPRAISE_MMAP_CHECK_RULE="appraise func=MMAP_CHECK fsmagic=0xef53 fsuuid=$IMA_UUID fowner=$APPRAISE_MMAP_CHECK_FOWNER"
+APPRAISE_MMAP_CHECK_REQPROT_RULE="appraise func=MMAP_CHECK_REQPROT fsmagic=0xef53 fsuuid=$IMA_UUID fowner=$APPRAISE_MMAP_CHECK_REQPROT_FOWNER"
+
+check_load_ima_rule() {
+	local result new_policy color
+
+	echo -e "$1\n$(cat /sys/kernel/security/ima/policy)" | ima_policy_check.awk
+	result=$?
+
+	if [ $((result & RET_INVALID_RULE)) -eq $RET_INVALID_RULE ]; then
+		echo "${RED}Invalid rule${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	if [ $((result & RET_RULE_OVERLAP)) -eq $RET_RULE_OVERLAP ]; then
+		color=${YELLOW}
+		if [ -n "$TST_ENV" ]; then
+			color=${RED}
+		fi
+
+		echo "${color}Possible interference with existing IMA policy rule${NORM}"
+		if [ -n "$TST_ENV" ]; then
+			return "$HARDFAIL"
+		fi
+	fi
+
+	if [ $((result & RET_SAME_RULE_EXISTS)) -eq $RET_SAME_RULE_EXISTS ]; then
+		return "$OK"
+	fi
+
+	new_policy=$(mktemp -p "$g_mountpoint")
+	echo "$1" > "$new_policy"
+	echo "$new_policy" > /sys/kernel/security/ima/policy
+	result=$?
+	rm -f "$new_policy"
+
+	if [ "$result" -ne 0 ]; then
+		echo "${RED}Failed to set IMA policy${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	return "$OK"
+}
+
+check_mmap() {
+	local hook="$1"
+	local arg="$2"
+	local test_file fowner rule result test_file_entry
+
+	echo -e "\nTest: ${FUNCNAME[0]} (hook=\"$hook\", test_mmap arg: \"$arg\")"
+
+	if ! test_file=$(mktemp -p "$PWD"); then
+		echo "${RED}Cannot create $test_file${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	if ! echo "test" > "$test_file"; then
+		echo "${RED}Cannot write $test_file${NORM}"
+		return "$FAIL"
+	fi
+
+	fowner="$MEASURE_MMAP_CHECK_FOWNER"
+	rule="$MEASURE_MMAP_CHECK_RULE"
+
+	if [ "$hook" = "MMAP_CHECK_REQPROT" ]; then
+		fowner="$MEASURE_MMAP_CHECK_REQPROT_FOWNER"
+		rule="$MEASURE_MMAP_CHECK_REQPROT_RULE"
+	fi
+
+	if ! chown "$fowner" "$test_file"; then
+		echo "${RED}Cannot change owner of $test_file${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	check_load_ima_rule "$rule"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	test_mmap "$test_file" "$arg"
+	result=$?
+
+	if [ $result -ne 0 ] && [ $result -ne "$ERR_TEST" ]; then
+		echo "${RED}Unexpected exit status $result from test_mmap${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	if [ "$TFAIL" != "yes" ]; then
+		echo -n "Result (expect found): "
+	else
+		echo -n "Result (expect not found): "
+	fi
+
+	test_file_entry=$(awk '$5 == "'"$test_file"'"' < /sys/kernel/security/ima/ascii_runtime_measurements)
+	if [ -z "$test_file_entry" ]; then
+		if [ "$TFAIL" != "yes" ]; then
+			echo "${RED}not found${NORM}"
+		else
+			echo "${GREEN}not found${NORM}"
+		fi
+		return "$FAIL"
+	fi
+
+	if [ "$TFAIL" != "yes" ]; then
+		echo "${GREEN}found${NORM}"
+	else
+		echo "${RED}found${NORM}"
+	fi
+
+	if [ "$VERBOSE" -gt 0 ]; then
+		echo "$test_file_entry"
+	fi
+
+	return "$OK"
+}
+
+check_deny() {
+	local hook="$1"
+	local arg="$2"
+	local test_file fowner rule result
+
+	echo -e "\nTest: ${FUNCNAME[0]} (hook=\"$hook\", test_mmap arg: \"$arg\")"
+
+	if ! test_file=$(mktemp -p "$PWD"); then
+		echo "${RED}Cannot create $test_file${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	if ! echo "test" > "$test_file"; then
+		echo "${RED}Cannot write $test_file${NORM}"
+		return "$FAIL"
+	fi
+
+	if ! evmctl ima_sign -a sha256 --key "$g_key_path" "$test_file" &> /dev/null; then
+		echo "${RED}Cannot sign $test_file${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	fowner="$APPRAISE_MMAP_CHECK_FOWNER"
+	rule="$APPRAISE_MMAP_CHECK_RULE"
+
+	if [ "$hook" = "MMAP_CHECK_REQPROT" ]; then
+		fowner="$APPRAISE_MMAP_CHECK_REQPROT_FOWNER"
+		rule="$APPRAISE_MMAP_CHECK_REQPROT_RULE"
+	fi
+
+	if ! chown "$fowner" "$test_file"; then
+		echo "${RED}Cannot change owner of $test_file${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	check_load_ima_rule "$rule"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	test_mmap "$test_file" exec
+	result=$?
+
+	if [ $result -ne 0 ] && [ $result -ne "$ERR_TEST" ]; then
+		echo "${RED}Unexpected exit status $result from test_mmap${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	test_mmap "$test_file" "$arg"
+	result=$?
+
+	if [ $result -ne 0 ] && [ $result -ne "$ERR_TEST" ]; then
+		echo "${RED}Unexpected exit status $result from test_mmap${NORM}"
+		return "$HARDFAIL"
+	fi
+
+	if [ "$TFAIL" != "yes" ]; then
+		echo -n "Result (expect denied): "
+	else
+		echo -n "Result (expect allowed): "
+	fi
+
+	if [ $result -eq 0 ]; then
+		if [ "$TFAIL" != "yes" ]; then
+			echo "${RED}allowed${NORM}"
+		else
+			echo "${GREEN}allowed${NORM}"
+		fi
+		return "$FAIL"
+	fi
+
+	if [ "$TFAIL" != "yes" ]; then
+		echo "${GREEN}denied${NORM}"
+	else
+		echo "${RED}denied${NORM}"
+	fi
+
+	return "$OK"
+}
+
+# Run in the new environment if TST_ENV is set.
+_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE TST_KEY_PATH=$TST_KEY_PATH"
+
+# Exit from the creator of the new environment.
+_exit_env "$TST_KERNEL"
+
+# Mount filesystems in the new environment.
+_init_env
+
+if [ "$(whoami)" != "root" ]; then
+	echo "${CYAN}This script must be executed as root${NORM}"
+	exit "$SKIP"
+fi
+
+if [ ! -f /sys/kernel/security/ima/policy ]; then
+	echo "${CYAN}IMA policy file not found${NORM}"
+	exit "$SKIP"
+fi
+
+if ! cat /sys/kernel/security/ima/policy &> /dev/null; then
+	echo "${CYAN}IMA policy file is not readable${NORM}"
+	exit "$SKIP"
+fi
+
+if [ -n "$TST_KEY_PATH" ]; then
+	if [ "${TST_KEY_PATH:0:1}" != "/" ]; then
+		echo "${RED}Absolute path required for the signing key${NORM}"
+		exit "$FAIL"
+	fi
+
+	if [ ! -f "$TST_KEY_PATH" ]; then
+		echo "${RED}Kernel signing key not found in $TST_KEY_PATH${NORM}"
+		exit "$FAIL"
+	fi
+
+	g_key_path="$TST_KEY_PATH"
+elif [ -f "$PWD/../signing_key.pem" ]; then
+	g_key_path="$PWD/../signing_key.pem"
+elif [ -f "/lib/modules/$(uname -r)/source/certs/signing_key.pem" ]; then
+	g_key_path="/lib/modules/$(uname -r)/source/certs/signing_key.pem"
+elif [ -f "/lib/modules/$(uname -r)/build/certs/signing_key.pem" ]; then
+	g_key_path="/lib/modules/$(uname -r)/build/certs/signing_key.pem"
+else
+	echo "${CYAN}Kernel signing key not found${NORM}"
+	exit "$SKIP"
+fi
+
+evm_value=$(cat /sys/kernel/security/evm)
+if [ $((evm_value & EVM_INIT_X509)) -eq "$EVM_INIT_X509" ]; then
+	if [ $((evm_value & EVM_INIT_HMAC)) -ne "$EVM_INIT_HMAC" ]; then
+		echo "${CYAN}Incompatible EVM mode $evm_value${NORM}"
+		exit "$SKIP"
+	fi
+fi
+
+g_key_path_der=$(mktemp)
+
+openssl x509 -in "$g_key_path" -out "$g_key_path_der" -outform der
+if ! keyctl padd asymmetric pubkey %keyring:.ima < "$g_key_path_der" &> /dev/null; then
+	echo "${RED}Public key cannot be added to the IMA keyring${NORM}"
+	exit "$FAIL"
+fi
+
+g_mountpoint=$(mktemp -d)
+g_image=$(mktemp)
+
+if [ -z "$g_mountpoint" ]; then
+	echo "${RED}Mountpoint directory not created${NORM}"
+	exit "$FAIL"
+fi
+
+if ! dd if=/dev/zero of="$g_image" bs=1M count=20 &> /dev/null; then
+	echo "${RED}Cannot create test image${NORM}"
+	exit "$FAIL"
+fi
+
+g_dev=$(losetup -f "$g_image" --show)
+if [ -z "$g_dev" ]; then
+	echo "${RED}Cannot create loop device${NORM}"
+	exit "$FAIL"
+fi
+
+if ! mkfs.ext4 -U "$IMA_UUID" -b 4096 "$g_dev" &> /dev/null; then
+	echo "${RED}Cannot format $g_dev${NORM}"
+	exit "$FAIL"
+fi
+
+if ! mount -o iversion "$g_dev" "$g_mountpoint"; then
+	echo "${RED}Cannot mount loop device${NORM}"
+	exit "$FAIL"
+fi
+
+g_loop_mounted=1
+pushd "$g_mountpoint" > /dev/null || exit "$FAIL"
+
+# Ensure that IMA does not add a new measurement entry if an application calls
+# mmap() with PROT_READ, and a policy rule contains the MMAP_CHECK hook.
+# In this case, both the protections requested by the application and the final
+# protections applied by the kernel contain only PROT_READ, so there is no
+# match with the IMA rule, which expects PROT_EXEC to be set.
+expect_fail check_mmap "MMAP_CHECK" ""
+
+# Ensure that IMA adds a new measurement entry if an application calls mmap()
+# with PROT_READ | PROT_EXEC, and a policy rule contains the MMAP_CHECK hook.
+expect_pass check_mmap "MMAP_CHECK" "exec"
+
+# Same as in the first test, but in this case the application calls the
+# personality() system call with READ_IMPLIES_EXEC, which causes the kernel to
+# add PROT_EXEC in the final protections passed to the MMAP_CHECK hook.
+#
+# Ensure that the bug introduced by 98de59bfe4b2 ("take calculation of final
+# protections in security_mmap_file() into a helper") is fixed, by passing the
+# final protections again to the MMAP_CHECK hook. Due to the bug, the hook
+# received the protections requested by the application. Since those protections
+# don't have PROT_EXEC, IMA was not creating a measurement entry.
+expect_pass_if '0' check_mmap "MMAP_CHECK" "read_implies_exec"
+
+# Repeat the previous three tests, but with the new MMAP_CHECK_REQPROT hook,
+# which behaves like the buggy MMAP_CHECK hook. In the third test, expect that
+# no new measurement entry is created, since the MMAP_CHECK_REQPROT hook sees
+# the protections requested by the application (PROT_READ).
+expect_fail_if '1' check_mmap "MMAP_CHECK_REQPROT" ""
+expect_pass_if '1' check_mmap "MMAP_CHECK_REQPROT" "exec"
+expect_fail_if '1' check_mmap "MMAP_CHECK_REQPROT" "read_implies_exec"
+
+# Ensure that IMA refuses an mprotect() with PROT_EXEC on a memory area
+# obtained with an mmap() with PROT_READ. This is due to the inability of IMA
+# to measure/appraise the file for which mmap() was called (locking issue).
+expect_pass check_deny "MMAP_CHECK" "mprotect"
+
+# Ensure that MMAP_CHECK_REQPROT has the same behavior of MMAP_CHECK for the
+# previous test.
+expect_pass_if '1' check_deny "MMAP_CHECK_REQPROT" "mprotect"
+
+# Ensure that there cannot be an mmap() with PROT_EXEC on a file with writable
+# mappings, due to the inability of IMA to make a reliable measurement of that
+# file.
+expect_pass check_deny "MMAP_CHECK" "exec_on_writable"
+
+# Ensure that MMAP_CHECK_REQPROT has the same behavior of MMAP_CHECK for the
+# previous test.
+expect_pass_if '1' check_deny "MMAP_CHECK_REQPROT" "exec_on_writable"
