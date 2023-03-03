@@ -25,29 +25,34 @@ COMMANDS
 
  --version
  help <command>
- import [--rsa] pubkey keyring
- sign [-r] [--imahash | --imasig ] [--portable] [--key key] [--pass password] file
+ import  [--rsa (deprecated)] pubkey keyring
+ sign [-r] [--imahash | --imasig ] [--key key] [--pass[=<password>] file
  verify file
- ima_boot_aggregate [--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log]
- ima_sign [--sigfile] [--key key] [--pass password] file
+ ima_sign [--sigfile] [--key key] [--pass[=<password>]] file
  ima_verify file
+ ima_setxattr [--sigfile file]
  ima_hash file
- ima_measurement [--ignore-violations] [--verify-sig [--key "key1, key2, ..."]]  [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...] file
+ ima_measurement [--ignore-violations] [--verify-sig [--key "key1, key2, ..."]]
+   [--pcrs [hash-algorithm,]file [--pcrs hash-algorithm,file] ...]
+   [--verify-bank hash-algorithm] file
+ ima_boot_aggregate [--pcrs hash-algorithm,file] [TPM 1.2 BIOS event log]
+   [--hwtpm]
  ima_fix [-t fdsxm] path
- sign_hash [--veritysig] [--key key] [--pass password]
+ ima_clear [-t fdsxm] path
+ sign_hash [--veritysig] [--key key] [--pass=<password>]
  hmac [--imahash | --imasig ] file
 
 
 OPTIONS
 -------
 
-  -a, --hashalgo     sha1, sha224, sha256, sha384, sha512
+  -a, --hashalgo     sha1, sha224, sha256, sha384, sha512, streebog256, streebog512 (default: sha256)
   -s, --imasig       make IMA signature
       --veritysig    sign an fs-verity file digest hash
   -d, --imahash      make IMA hash
   -f, --sigfile      store IMA signature in .sig file instead of xattr
       --xattr-user   store xattrs in user namespace (for testing purposes)
-      --rsa          use RSA key type and signing scheme v1
+      --rsa          use RSA key type and signing scheme v1 (deprecated)
   -k, --key          path to signing key (default: /etc/keys/{privkey,pubkey}_evm.pem)
                      or a pkcs11 URI
       --keyid n      overwrite signature keyid with a 32-bit value in hex (for signing)
@@ -64,7 +69,15 @@ OPTIONS
       --smack        use extra SMACK xattrs for EVM
       --m32          force EVM hmac/signature for 32 bit target system
       --m64          force EVM hmac/signature for 64 bit target system
-      --engine e     preload OpenSSL engine e (such as: gost)
+      --engine e     preload OpenSSL engine e (such as: gost) is deprecated
+      --ino          use custom inode for EVM
+      --uid          use custom UID for EVM
+      --gid          use custom GID for EVM
+      --mode         use custom Mode for EVM
+      --generation   use custom Generation for EVM(unspecified: from FS, empty: use 0)
+      --ima          use custom IMA signature for EVM
+      --selinux      use custom Selinux label for EVM
+      --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)
       --pcrs         file containing TPM pcrs, one per hash-algorithm/bank
       --ignore-violations ignore ToMToU measurement violations
       --verify-sig   verify the file signature based on the file hash, both
@@ -206,7 +219,7 @@ asymmetric keys support:
 
 Configuration file x509_evm.genkey:
 
-	# Begining of the file
+	# Beginning of the file
 	[ req ]
 	default_bits = 1024
 	distinguished_name = req_distinguished_name
@@ -257,7 +270,7 @@ following steps:
 
 Configuration file ima-local-ca.genkey:
 
-	# Begining of the file
+	# Beginning of the file
 	[ req ]
 	default_bits = 2048
 	distinguished_name = req_distinguished_name
@@ -288,7 +301,7 @@ Produce X509 in DER format for using while building the kernel:
 
 Configuration file ima.genkey:
 
-	# Begining of the file
+	# Beginning of the file
 	[ req ]
 	default_bits = 1024
 	distinguished_name = req_distinguished_name
