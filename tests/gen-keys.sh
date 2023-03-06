@@ -71,7 +71,7 @@ for m in 1024 1024_skid 2048; do
     ext=
   fi
   if [ ! -e test-rsa$m.key ]; then
-    log openssl req -verbose -new -nodes -utf8 -sha1 -days 10000 -batch -x509 $ext \
+    log openssl req -verbose -new -nodes -utf8 -sha256 -days 10000 -batch -x509 $ext \
       -config test-ca.conf \
       -newkey rsa:$bits \
       -out test-rsa$m.cer -outform DER \
@@ -93,7 +93,7 @@ for curve in prime192v1 prime256v1; do
     continue
   fi
   if [ ! -e test-$curve.key ]; then
-    log openssl req -verbose -new -nodes -utf8 -sha1 -days 10000 -batch -x509 \
+    log openssl req -verbose -new -nodes -utf8 -sha256 -days 10000 -batch -x509 \
       -config test-ca.conf \
       -newkey ec \
       -pkeyopt ec_paramgen_curve:$curve \
