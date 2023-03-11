@@ -120,6 +120,9 @@ create_loopback_file() {
 	case $fs_type in
 	ext4|f2fs)
 		options="-O verity"
+		# verity requires blocksize to be equal to pagesize.
+		pagesize=$(getconf PAGE_SIZE)
+		[ "$pagesize" -eq 4096 ] || options+=" -b $pagesize"
 		;;
 	btrfs)
 		;;
@@ -136,7 +139,7 @@ create_loopback_file() {
 	fi
 
 	echo "INFO: Building an $fs_type filesystem"
-	if ! mkfs -t "$fs_type" -q "${TST_IMG}" "$options"; then
+	if ! mkfs -t "$fs_type" -q "${TST_IMG}" $options; then
 		echo "${RED}FAILURE: Creating $fs_type filesystem${NORM}"
 		exit "$FAIL"
 	fi
