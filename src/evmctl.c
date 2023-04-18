@@ -376,7 +376,7 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	if (mode_str)
 		st.st_mode = strtoul(mode_str, NULL, 10);
 
-	if (!evm_immutable) {
+	if (!evm_immutable && !evm_portable) {
 		if (S_ISREG(st.st_mode) && !generation_str) {
 			int fd = open(file, 0);
 
