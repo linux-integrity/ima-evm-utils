@@ -22,7 +22,7 @@ authorityKeyIdentifier=keyid:always,issuer
 # keyUsage = cRLSign, keyCertSign
 __EOF__
 
-openssl req -new -x509 -utf8 -sha1 -days 3650 -batch -config $GENKEY \
+openssl req -new -x509 -utf8 -sha256 -days 3650 -batch -config $GENKEY \
 		-outform DER -out ima-local-ca.x509 -keyout ima-local-ca.priv
 
 openssl x509 -inform DER -in ima-local-ca.x509 -out ima-local-ca.pem
