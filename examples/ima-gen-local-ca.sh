@@ -19,7 +19,7 @@ emailAddress = ca@ima-ca
 basicConstraints=CA:TRUE
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid:always,issuer
-# keyUsage = cRLSign, keyCertSign
+keyUsage = cRLSign, keyCertSign
 __EOF__
 
 openssl req -new -x509 -utf8 -sha256 -days 3650 -batch -config $GENKEY \

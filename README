@@ -235,6 +235,7 @@ Configuration file x509_evm.genkey:
 	[ myexts ]
 	basicConstraints=critical,CA:FALSE
 	keyUsage=digitalSignature
+	extendedKeyUsage=critical,codeSigning
 	subjectKeyIdentifier=hash
 	authorityKeyIdentifier=keyid
 	# EOF
@@ -287,7 +288,7 @@ Configuration file ima-local-ca.genkey:
 	basicConstraints=CA:TRUE
 	subjectKeyIdentifier=hash
 	authorityKeyIdentifier=keyid:always,issuer
-	# keyUsage = cRLSign, keyCertSign
+	keyUsage = cRLSign, keyCertSign
 	# EOF
 
 Generate private key and X509 public key certificate:

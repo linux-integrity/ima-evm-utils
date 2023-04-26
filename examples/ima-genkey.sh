@@ -20,6 +20,7 @@ basicConstraints=critical,CA:FALSE
 #basicConstraints=CA:FALSE
 keyUsage=digitalSignature
 #keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage=critical,codeSigning
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid
 #authorityKeyIdentifier=keyid,issuer
