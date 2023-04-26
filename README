@@ -470,6 +470,9 @@ Examples of scripts to generate X509 public key certificates:
  /usr/share/doc/ima-evm-utils/ima-genkey-self.sh
  /usr/share/doc/ima-evm-utils/ima-genkey.sh
  /usr/share/doc/ima-evm-utils/ima-gen-local-ca.sh
+ /usr/share/doc/ima-evm-utils/ima-genkey-self-ecc.sh
+ /usr/share/doc/ima-evm-utils/ima-genkey-ecc.sh
+ /usr/share/doc/ima-evm-utils/ima-gen-local-ca-ecc.sh
 
 
 AUTHOR

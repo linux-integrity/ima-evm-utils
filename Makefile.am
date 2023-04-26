@@ -7,7 +7,13 @@ if MANPAGE_DOCBOOK_XSL
 dist_man_MANS = evmctl.1
 endif
 
-doc_DATA =  examples/ima-genkey-self.sh examples/ima-genkey.sh examples/ima-gen-local-ca.sh
+doc_DATA = \
+	 examples/ima-genkey-self.sh \
+	 examples/ima-genkey.sh \
+	 examples/ima-gen-local-ca.sh \
+	 examples/ima-genkey-self-ecc.sh \
+	 examples/ima-genkey-ecc.sh \
+	 examples/ima-gen-local-ca-ecc.sh
 EXTRA_DIST = autogen.sh $(doc_DATA)
 
 CLEANFILES = *.html *.xsl
