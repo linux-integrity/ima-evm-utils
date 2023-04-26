@@ -217,6 +217,18 @@ asymmetric keys support:
     	        -x509 -config x509_evm.genkey \
 	        -outform DER -out x509_evm.der -keyout privkey_evm.pem
 
+Create an elliptic curve (EC) key (supported since Linux v5.13)
+
+    openssl ecparam -name prime256v1 -genkey -out privkey_evm.pem
+
+Generate self-signed x509 EC public key certificate and private key for using
+kernel asymmetric key support (supported since Linux v5.13):
+
+   openssl req -new -nodes -utf8 -sha1 -days 36500 -batch \
+                -x509 -config x509_evm.genkey \
+                -outform DER -out x509_evm.der -keyout privkey_evm.pem \
+                -newkey ec -pkeyopt ec_paramgen_curve:prime256v1
+
 Configuration file x509_evm.genkey:
 
 	# Beginning of the file
@@ -245,6 +257,9 @@ Generate public key for using RSA key format:
 
     openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
 
+Similarly generate public EC key:
+
+    openssl ec -pubout -in privkey_evm.pem -out pubkey_evm.pem
 
 Copy keys to /etc/keys:
 
@@ -290,6 +305,12 @@ Configuration file ima-local-ca.genkey:
 	authorityKeyIdentifier=keyid:always,issuer
 	keyUsage = cRLSign, keyCertSign
 	# EOF
+
+Note: To generated elliptic curve keys add the following parameters to
+      the 'req' commands below (supported since Linux v5.13):
+
+      -newkey ec -pkeyopt ec_paramgen_curve:prime256v1
+
 
 Generate private key and X509 public key certificate:
 
