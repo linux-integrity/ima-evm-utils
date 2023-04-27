@@ -4,7 +4,6 @@ GENKEY=x509_evm.genkey
 
 cat << __EOF__ >$GENKEY
 [ req ]
-default_bits = 2048
 distinguished_name = req_distinguished_name
 prompt = no
 string_mask = utf8only
@@ -23,7 +22,7 @@ authorityKeyIdentifier=keyid
 __EOF__
 
 openssl req -x509 -new -nodes -utf8 -sha256 -days 3650 -batch -config $GENKEY \
-		-outform DER -out x509_evm.der -keyout privkey_evm.pem
+		-outform DER -out x509_evm.der -keyout privkey_evm.pem \
+		-newkey ec -pkeyopt ec_paramgen_curve:prime256v1
 
-openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
-
+openssl ec -pubout -in privkey_evm.pem -out pubkey_evm.pem

@@ -200,11 +200,11 @@ Generate signing and verification keys
 
 Generate private key in plain text format:
 
-    openssl genrsa -out privkey_evm.pem 1024
+    openssl genrsa -out privkey_evm.pem 2048
 
 Generate encrypted private key:
 
-    openssl genrsa -des3 -out privkey_evm.pem 1024
+    openssl genrsa -des3 -out privkey_evm.pem 2048
 
 Make encrypted private key from unencrypted:
 
@@ -213,15 +213,27 @@ Make encrypted private key from unencrypted:
 Generate self-signed X509 public key certificate and private key for using kernel
 asymmetric keys support:
 
-    openssl req -new -nodes -utf8 -sha1 -days 36500 -batch \
+    openssl req -new -nodes -utf8 -sha256 -days 36500 -batch \
     	        -x509 -config x509_evm.genkey \
 	        -outform DER -out x509_evm.der -keyout privkey_evm.pem
+
+Create an elliptic curve (EC) key (supported since Linux v5.13)
+
+    openssl ecparam -name prime256v1 -genkey -out privkey_evm.pem
+
+Generate self-signed x509 EC public key certificate and private key for using
+kernel asymmetric key support (supported since Linux v5.13):
+
+   openssl req -new -nodes -utf8 -sha1 -days 36500 -batch \
+                -x509 -config x509_evm.genkey \
+                -outform DER -out x509_evm.der -keyout privkey_evm.pem \
+                -newkey ec -pkeyopt ec_paramgen_curve:prime256v1
 
 Configuration file x509_evm.genkey:
 
 	# Beginning of the file
 	[ req ]
-	default_bits = 1024
+	default_bits = 2048
 	distinguished_name = req_distinguished_name
 	prompt = no
 	string_mask = utf8only
@@ -235,6 +247,7 @@ Configuration file x509_evm.genkey:
 	[ myexts ]
 	basicConstraints=critical,CA:FALSE
 	keyUsage=digitalSignature
+	extendedKeyUsage=critical,codeSigning
 	subjectKeyIdentifier=hash
 	authorityKeyIdentifier=keyid
 	# EOF
@@ -244,6 +257,9 @@ Generate public key for using RSA key format:
 
     openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
 
+Similarly generate public EC key:
+
+    openssl ec -pubout -in privkey_evm.pem -out pubkey_evm.pem
 
 Copy keys to /etc/keys:
 
@@ -287,12 +303,18 @@ Configuration file ima-local-ca.genkey:
 	basicConstraints=CA:TRUE
 	subjectKeyIdentifier=hash
 	authorityKeyIdentifier=keyid:always,issuer
-	# keyUsage = cRLSign, keyCertSign
+	keyUsage = cRLSign, keyCertSign
 	# EOF
+
+Note: To generated elliptic curve keys add the following parameters to
+      the 'req' commands below (supported since Linux v5.13):
+
+      -newkey ec -pkeyopt ec_paramgen_curve:prime256v1
+
 
 Generate private key and X509 public key certificate:
 
- openssl req -new -x509 -utf8 -sha1 -days 3650 -batch -config $GENKEY \
+ openssl req -new -x509 -utf8 -sha256 -days 3650 -batch -config $GENKEY \
              -outform DER -out ima-local-ca.x509 -keyout ima-local-ca.priv
 
 Produce X509 in DER format for using while building the kernel:
@@ -303,7 +325,7 @@ Configuration file ima.genkey:
 
 	# Beginning of the file
 	[ req ]
-	default_bits = 1024
+	default_bits = 2048
 	distinguished_name = req_distinguished_name
 	prompt = no
 	string_mask = utf8only
@@ -327,7 +349,7 @@ Configuration file ima.genkey:
 
 Generate private key and X509 public key certificate signing request:
 
- openssl req -new -nodes -utf8 -sha1 -days 365 -batch -config $GENKEY \
+ openssl req -new -nodes -utf8 -sha256 -days 365 -batch -config $GENKEY \
              -out csr_ima.pem -keyout privkey_ima.pem
 
 Sign X509 public key certificate signing request with local IMA CA private key:
@@ -448,6 +470,9 @@ Examples of scripts to generate X509 public key certificates:
  /usr/share/doc/ima-evm-utils/ima-genkey-self.sh
  /usr/share/doc/ima-evm-utils/ima-genkey.sh
  /usr/share/doc/ima-evm-utils/ima-gen-local-ca.sh
+ /usr/share/doc/ima-evm-utils/ima-genkey-self-ecc.sh
+ /usr/share/doc/ima-evm-utils/ima-genkey-ecc.sh
+ /usr/share/doc/ima-evm-utils/ima-gen-local-ca-ecc.sh
 
 
 AUTHOR

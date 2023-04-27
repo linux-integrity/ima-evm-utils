@@ -4,7 +4,6 @@ GENKEY=ima.genkey
 
 cat << __EOF__ >$GENKEY
 [ req ]
-default_bits = 2048
 distinguished_name = req_distinguished_name
 prompt = no
 string_mask = utf8only
@@ -27,8 +26,8 @@ authorityKeyIdentifier=keyid
 __EOF__
 
 openssl req -new -nodes -utf8 -sha256 -days 365 -batch -config $GENKEY \
-		-out csr_ima.pem -keyout privkey_ima.pem
+		-out csr_ima.pem -keyout privkey_ima.pem \
+		-newkey ec -pkeyopt ec_paramgen_curve:prime256v1
 openssl x509 -req -in csr_ima.pem -days 365 -extfile $GENKEY -extensions v3_usr \
 		-CA ima-local-ca.pem -CAkey ima-local-ca.priv -CAcreateserial \
 		-outform DER -out x509_ima.der
-
