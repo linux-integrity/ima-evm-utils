@@ -27,6 +27,7 @@ zypper --non-interactive install --force-resolution --no-recommends \
 	docbook_5 \
 	docbook5-xsl-stylesheets \
 	e2fsprogs \
+	git-core \
 	gzip \
 	ibmswtpm2 \
 	keyutils-devel \

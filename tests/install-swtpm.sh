@@ -9,13 +9,8 @@ else
 	SUDO=sudo
 fi
 
-version=1682
-
-wget --no-check-certificate https://sourceforge.net/projects/ibmswtpm2/files/ibmtpm${version}.tar.gz/download
-mkdir ibmtpm$version
-cd ibmtpm$version
-tar --no-same-owner -xvzf ../download
-cd src
+git clone https://git.code.sf.net/p/ibmswtpm2/tpm2
+cd tpm2/src
 make -j$(nproc)
 $SUDO cp tpm_server /usr/local/bin/
 cd ../..
