@@ -14,7 +14,7 @@ matrix:
 
         # cross compilation builds
         - os: linux
-          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=ppc64el TSS=ibmtss
+          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=ppc64el TSS=tpm2-tss
           compiler: powerpc64le-linux-gnu-gcc
 
         - os: linux
@@ -22,7 +22,7 @@ matrix:
           compiler: aarch64-linux-gnu-gcc
 
         - os: linux
-          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=s390x TSS=ibmtss
+          env: DISTRO=debian:stable VARIANT=cross-compile ARCH=s390x TSS=tpm2-tss
           compiler: s390x-linux-gnu-gcc
 
         # musl

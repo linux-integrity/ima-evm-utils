@@ -96,7 +96,7 @@ jobs:
             env:
               ARCH: ppc64el
               CC: powerpc64le-linux-gnu-gcc
-              TSS: ibmtss
+              TSS: tpm2-tss
               VARIANT: cross-compile
 
           - container: "debian:stable"
@@ -110,7 +110,7 @@ jobs:
             env:
               ARCH: s390x
               CC: s390x-linux-gnu-gcc
-              TSS: ibmtss
+              TSS: tpm2-tss
               VARIANT: cross-compile
 
           # musl (native)
