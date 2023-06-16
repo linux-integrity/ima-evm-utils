@@ -152,6 +152,7 @@ jobs:
               TSS: ibmtss
               TST_ENV: um
               TST_KERNEL: ../linux
+              TST_EVM_CHANGE_MODE: 1
 
           - container: "centos:7"
             env:

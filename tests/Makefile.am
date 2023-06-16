@@ -3,7 +3,7 @@ TESTS = $(check_SCRIPTS)
 
 check_SCRIPTS += ima_hash.test sign_verify.test boot_aggregate.test \
 		 fsverity.test portable_signatures.test ima_policy_check.test \
-		 mmap_check.test
+		 mmap_check.test evm_hmac.test
 
 check_PROGRAMS := test_mmap
 
