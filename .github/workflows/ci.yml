@@ -30,6 +30,8 @@ jobs:
           if [ -z "$LINUX_BRANCH" ]; then
               LINUX_BRANCH=next-integrity
           fi
+          echo "url : $LINUX_URL"
+          echo "branch: $LINUX_BRANCH"
           git remote add origin $LINUX_URL
           LINUX_SHA=$(git ls-remote origin $GITHUB_REF_NAME | awk '{print $1}')
           [ -z "$LINUX_SHA" ] && LINUX_SHA=$(git ls-remote origin $LINUX_BRANCH | awk '{print $1}')
