@@ -40,7 +40,7 @@ COMMANDS
  ima_fix [-t fdsxm] path
  ima_clear [-t fdsxm] path
  sign_hash [--veritysig] [--key key] [--pass=<password>]
- hmac [--imahash | --imasig ] file
+ hmac [--imahash | --imasig] [--hmackey key] file
 
 
 OPTIONS
@@ -82,6 +82,7 @@ OPTIONS
       --ignore-violations ignore ToMToU measurement violations
       --verify-sig   verify the file signature based on the file hash, both
                      stored in the template data.
+      --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)
   -v                 increase verbosity level
   -h, --help         display this help and exit
 

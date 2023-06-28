@@ -221,6 +221,7 @@ struct libimaevm_params {
 	const char *keypass;
 	uint32_t keyid;		/* keyid overriding value, unless 0. (Host order.) */
 	ENGINE *eng;
+	const char *hmackeyfile;
 };
 
 struct RSA_ASN1_template {

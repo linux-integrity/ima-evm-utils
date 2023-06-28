@@ -434,6 +434,9 @@ _init_env() {
   mount -t proc proc /proc
   mount -t sysfs sysfs /sys
   mount -t securityfs securityfs /sys/kernel/security
+  if grep -q smack < /sys/kernel/security/lsm; then
+    mount -t smackfs smackfs /sys/fs/smackfs
+  fi
 
   if [ -n "$(command -v haveged 2> /dev/null)" ]; then
     $(command -v haveged) -w 1024 &> /dev/null
@@ -455,6 +458,9 @@ _cleanup_env() {
 
   $1
 
+  if grep -q smack < /sys/kernel/security/lsm; then
+    umount /sys/fs/smackfs
+  fi
   umount /sys/kernel/security
   umount /sys
   umount /proc

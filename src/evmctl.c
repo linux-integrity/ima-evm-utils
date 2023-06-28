@@ -1199,6 +1199,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 	int keylen;
 	unsigned char evmkey[MAX_KEY_SIZE];
 	char list[1024];
+	char uuid[16];
 	ssize_t list_size;
 	struct h_misc_64 hmac_misc;
 	int hmac_size;
@@ -1228,7 +1229,11 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 		goto out;
 	}
 
-	if (S_ISREG(st.st_mode)) {
+	if (S_ISREG(st.st_mode) || S_ISDIR(st.st_mode)) {
+		/*
+		 * We cannot at the moment get generation of special files..
+		 * kernel API does not support it.
+		 */
 		int fd = open(file, 0);
 
 		if (fd < 0) {
@@ -1330,6 +1335,18 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 		log_err("EVP_DigestSignUpdate() failed\n");
 		goto out_ctx_cleanup;
 	}
+	if (!(hmac_flags & HMAC_FLAG_NO_UUID)) {
+		err = get_uuid(&st, uuid);
+		if (err)
+			goto out_ctx_cleanup;
+
+		err = EVP_DigestSignUpdate(pctx, (const unsigned char *)uuid,
+					   sizeof(uuid));
+		if (!err) {
+			log_err("EVP_DigestSignUpdate() failed\n");
+			goto out_ctx_cleanup;
+		}
+	}
 	err = EVP_DigestSignFinal(pctx, sig, &siglen);
 	if (err != 1)
 		log_err("EVP_DigestSignFinal() failed\n");
@@ -1400,7 +1417,8 @@ static int cmd_hmac_evm(struct command *cmd)
 			return err;
 	}
 
-	return hmac_evm(file, "/etc/keys/evm-key-plain");
+	return hmac_evm(file, imaevm_params.hmackeyfile ? :
+			"/etc/keys/evm-key-plain");
 }
 
 static int ima_fix(const char *path)
@@ -2856,6 +2874,9 @@ static void usage(void)
 		"      --engine e     preload OpenSSL engine e (such as: gost) is deprecated\n"
 #endif
 		"      --ignore-violations ignore ToMToU measurement violations\n"
+#ifdef DEBUG
+		"      --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)\n"
+#endif
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n"
@@ -2885,7 +2906,7 @@ struct command cmds[] = {
 	{"ima_clear", cmd_ima_clear, 0, "[-t fdsxm] path", "Recursively remove IMA/EVM xattrs.\n"},
 	{"sign_hash", cmd_sign_hash, 0, "[--veritysig] [--key key] [--pass[=<password>]]", "Sign hashes from either shaXsum or \"fsverity digest\" output.\n"},
 #ifdef DEBUG
-	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig ] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
+	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig] [--hmackey key] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
 	{0, 0, 0, NULL}
 };
@@ -2927,6 +2948,7 @@ static struct option opts[] = {
 	{"keyid-from-cert", 1, 0, 145},
 	{"veritysig", 0, 0, 146},
 	{"hwtpm", 0, 0, 147},
+	{"hmackey", 1, 0, 148},
 	{}
 
 };
@@ -3171,6 +3193,9 @@ int main(int argc, char *argv[])
 			break;
 		case 147:
 			hwtpm = 1;
+			break;
+		case 148:
+			imaevm_params.hmackeyfile = optarg;
 			break;
 		case '?':
 			exit(1);

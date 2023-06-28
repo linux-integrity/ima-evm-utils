@@ -1,0 +1,281 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2023 Roberto Sassu <roberto.sassu@huawei.com>
+#
+# Check if the kernel and evmctl provide the same result for HMAC calculation.
+
+trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+TST_EVM_CHANGE_MODE="${TST_EVM_CHANGE_MODE:-0}"
+IMA_UUID="28b23254-9467-44c0-b6ba-34b12e85a26f"
+
+PATCHES=(
+'KEYS: encrypted: fix key instantiation with user-provided data'
+'KEYS: encrypted: Instantiate key with user-provided decrypted data'
+'smack: Set the SMACK64TRANSMUTE xattr in smack_inode_init_security()'
+)
+
+# From security/integrity/evm/evm.h in kernel source directory
+(( EVM_INIT_HMAC=0x0001 ))
+
+cd "$(dirname "$0")" || exit 1
+export PATH=$PWD/../src:$PATH
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+. ./functions.sh
+_require evmctl
+
+cleanup() {
+	if [ "$g_loop_mounted" = "1" ]; then
+		popd > /dev/null || exit "$FAIL"
+		umount "$g_mountpoint"
+	fi
+
+	if [ -n "$g_dev" ]; then
+		losetup -d "$g_dev"
+	fi
+
+	if [ -n "$g_image" ]; then
+		rm -f "$g_image"
+	fi
+
+	if [ -n "$g_mountpoint" ]; then
+		rm -Rf "$g_mountpoint"
+	fi
+}
+
+get_xattr() {
+	local format="hex"
+
+	if [ "$1" = "security.selinux" ]; then
+		format="text"
+	fi
+
+	getfattr -n "$1" -e "$format" -d "$2" 2> /dev/null | awk -F "=" '$1 == "'"$1"'" {if ("'"$format"'" == "hex") v=substr($2, 3); else { split($2, temp, "\""); v=temp[2] }; print v}'
+}
+
+# Compare HMAC calculated by the kernel with that calculated by evmctl.
+compare_xattr() {
+	local algo=$1
+	local path=$2
+	local evm_xattr evm_xattr_evmctl true_digest
+
+	evm_xattr="$(get_xattr security.evm "$path")"
+	true_digest=$("$algo"sum /bin/true | awk '{print $1}')
+	# evm_xattr has an extra byte at the beginning for the xattr type.
+	if [ "${#evm_xattr}" != $(( ${#true_digest} + 2 )) ]; then
+		echo "${RED}Unexpected size of security.evm for $path${NORM}"
+		return "$FAIL"
+	fi
+
+	evm_xattr_evmctl="$(evmctl hmac --smack -v -n "$path" --uuid="$IMA_UUID" -a "$algo" --hmackey "$g_hmackey" 2>&1 | awk -F " " '$1 == "hmac:" {print $2}')"
+	if [ "$evm_xattr" != "02$evm_xattr_evmctl" ]; then
+		echo "${RED}$path security.evm mismatch between the kernel and evmctl${NORM}"
+		return "$FAIL"
+	fi
+
+	return "$OK"
+}
+
+# The purpose of this test is to verify if the kernel and evmctl produce the
+# same HMAC.
+check_evm_hmac() {
+	echo "Test: ${FUNCNAME[0]} (evm_hash: $1, evm_value: $g_evm_value, algo: $1, fs: $2, lsm: $3)"
+
+	if ! grep -q "$3" < /sys/kernel/security/lsm; then
+		echo "${CYAN}$3 LSM not active${NORM}"
+		return "$SKIP"
+	fi
+
+	if [ "$3" = "selinux" ] && [ -n "$TST_ENV" ]; then
+		if [ -z "$(command -v load_policy 2> /dev/null)" ]; then
+			echo "${CYAN}Cannot find load_policy${NORM}"
+			return "$SKIP"
+		fi
+
+		if ! load_policy -i; then
+			echo "${RED}SELinux policy loading failed${NORM}"
+			return "$FAIL"
+		else
+			# Undo selinuxfs mount done by load_policy (sysfs cannot be mounted twice, procfs works but causes umount warning)
+			umount /sys/fs/selinux
+		fi
+	fi
+
+	if ! touch test-file; then
+		echo "${RED}Cannot create test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	compare_xattr "$1" test-file
+	return $?
+}
+
+cleanup_evm_hmac() {
+	rm -f test-file
+}
+
+# The purpose of this test is to verify that SMACK64TRANSMUTE is successfully
+# set on a newly created directory, and that the HMAC on that directory is valid.
+check_evm_hmac_transmute() {
+	echo "Test: ${FUNCNAME[0]} (evm_hash: $1, evm_value: $g_evm_value, algo: $1, fs: $2, lsm: $3)"
+
+	if ! grep -q "$3" < /sys/kernel/security/lsm; then
+		echo "${CYAN}$3 LSM not active${NORM}"
+		return "$SKIP"
+	fi
+
+	if [ ! -f /sys/kernel/security/integrity/evm/evm_xattrs ] ||
+	   ! grep -q SMACK64TRANSMUTE < /sys/kernel/security/integrity/evm/evm_xattrs; then
+		echo "${CYAN}Set CONFIG_EVM_ADD_XATTRS=y and CONFIG_EVM_EXTRA_SMACK_XATTRS=y in the kernel configuration${NORM}"
+		exit "$SKIP"
+	fi
+
+	# Add a Smack rule for transmuting of test-dir/test-dir2
+	if ! echo "_ system rwxatl" > /sys/fs/smackfs/load2; then
+		echo "${RED}Cannot set Smack policy${NORM}"
+		return "$FAIL"
+	fi
+
+	# Smack adds security.SMACK64=_.
+	if ! mkdir test-dir; then
+		echo "${RED}Cannot create test-dir${NORM}"
+		return "$FAIL"
+	fi
+
+	# Change the directory label so that transmuting happens.
+	if ! setfattr -n security.SMACK64 -v system test-dir; then
+		echo "${RED}Cannot set security.SMACK64 on test-dir${NORM}"
+		return "$FAIL"
+	fi
+
+	# Add the transmute xattr so that transmuting happens.
+	if ! setfattr -n security.SMACK64TRANSMUTE -v TRUE test-dir; then
+		echo "${RED}Cannot set security.SMACK64TRANSMUTE on test-dir${NORM}"
+		return "$FAIL"
+	fi
+
+	compare_xattr "$1" test-dir
+	result=$?
+
+	if [ "$result" -ne "$OK" ]; then
+		return "$result"
+	fi
+
+	# Smack adds security.SMACK64=system and security.SMACK64TRANSMUTE=TRUE.
+	if ! mkdir test-dir/test-dir2; then
+		echo "${RED}Cannot create test-dir/test-dir2${NORM}"
+		return "$FAIL"
+	fi
+
+	compare_xattr "$1" test-dir/test-dir2
+	return $?
+}
+
+cleanup_evm_hmac_transmute() {
+	rm -Rf test-dir
+}
+
+if [ $$ -ne 1 ]; then
+	# Run in the new environment if TST_ENV is set.
+
+	# SElinux enabled
+	_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE TST_LIST=check_evm_hmac security=selinux enforcing=0"
+
+	# Smack enabled
+	_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE security=smack"
+
+	# Exit from the creator of the new environment.
+	_exit_env "$TST_KERNEL"
+fi
+
+# Mount filesystems in the new environment.
+_init_env
+
+# Assume that the EVM mode can be changed in a new environment.
+if [ -z "$TST_ENV" ] && [ "$TST_EVM_CHANGE_MODE" -eq 0 ]; then
+	echo "${CYAN}TST_EVM_CHANGE_MODE env variable must be set to 1${NORM}"
+	exit "$SKIP"
+fi
+
+g_lsm_init_xattr=$(awk '$1 ~ /(smack|selinux)/' < /sys/kernel/security/lsm)
+if [ -z "$g_lsm_init_xattr" ]; then
+	echo "${CYAN}Either Smack or SELinux must be active in the system for security.evm to be set${NORM}"
+	exit "$SKIP"
+fi
+
+g_mountpoint="$(mktemp -d)"
+g_image="$(mktemp)"
+
+if [ -z "$g_mountpoint" ]; then
+	echo "${RED}Mountpoint directory not created${NORM}"
+	exit "$FAIL"
+fi
+
+if [ "$(whoami)" != "root" ]; then
+	echo "${CYAN}This script must be executed as root${NORM}"
+	exit "$SKIP"
+fi
+
+if ! evmctl -h | grep -q hmackey; then
+	echo "${CYAN}Missing HMAC support, run: ./configure --enable-debug${NORM}"
+	exit "$SKIP"
+fi
+
+if ! dd if=/dev/zero of="$g_image" bs=1M count=10 &> /dev/null; then
+	echo "${RED}Cannot create test image${NORM}"
+	exit "$FAIL"
+fi
+
+g_dev="$(losetup -f "$g_image" --show)"
+if [ -z "$g_dev" ]; then
+	echo "${RED}Cannot create loop device${NORM}"
+	exit "$FAIL"
+fi
+
+if ! mkfs.ext4 -U $IMA_UUID -b 4096 "$g_dev" &> /dev/null; then
+	echo "${RED}Cannot format $g_dev${NORM}"
+	exit "$FAIL"
+fi
+
+if ! mount "$g_dev" "$g_mountpoint"; then
+	echo "${RED}Cannot mount loop device${NORM}"
+	exit "$FAIL"
+fi
+
+g_loop_mounted=1
+chmod 777 "$g_mountpoint"
+pushd "$g_mountpoint" > /dev/null || exit "$FAIL"
+
+if [ -f /sys/kernel/security/evm ]; then
+	g_evm_value=$(cat /sys/kernel/security/evm)
+fi
+
+g_hmackey_data="abcdefABCDEF1234567890aaaaaaaaaaabcdefABCDEF1234567890aaaaaaaaaa"
+
+g_hmackey="$(mktemp)"
+echo $g_hmackey_data | xxd -r -p > "$g_hmackey"
+
+if [ -n "$g_evm_value" ] && [ $((g_evm_value & EVM_INIT_HMAC)) -ne $EVM_INIT_HMAC ]; then
+	g_evm_id="$(keyctl add encrypted evm-key "new enc32 user:kmk 32 $g_hmackey_data" @u)"
+	if ! echo "$EVM_INIT_HMAC" | tee /sys/kernel/security/evm &> /dev/null; then
+		# Retry with sudo -i, to force search in the root user keyring.
+		if ! echo "$EVM_INIT_HMAC" | sudo -i tee /sys/kernel/security/evm &> /dev/null; then
+			keyctl unlink "$g_evm_id"
+			echo "${RED}Failed to initialize EVM${NORM}"
+			exit "$FAIL"
+		fi
+	fi
+
+	g_evm_value=$(cat /sys/kernel/security/evm)
+fi
+
+expect_pass_if '0 1' check_evm_hmac sha1 ext4 selinux
+cleanup_evm_hmac
+expect_pass_if '0 1' check_evm_hmac sha1 ext4 smack
+cleanup_evm_hmac
+
+expect_pass_if '2' check_evm_hmac_transmute sha1 ext4 smack
+cleanup_evm_hmac_transmute
