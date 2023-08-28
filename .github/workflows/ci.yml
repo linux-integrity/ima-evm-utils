@@ -138,6 +138,11 @@ jobs:
               TSS: ibmtss
               COMPILE_SSL: openssl-3.0.5
 
+          - container: "ubuntu:mantic"
+            env:
+              CC: gcc
+              TSS: ibmtss
+
           - container: "ubuntu:xenial"
             env:
               CC: clang
