@@ -372,12 +372,13 @@ struct public_key_entry {
 };
 static struct public_key_entry *g_public_keys = NULL;
 
-static EVP_PKEY *find_keyid(uint32_t keyid)
+static EVP_PKEY *find_keyid(struct public_key_entry *public_keys,
+			    uint32_t keyid)
 {
-	struct public_key_entry *entry, *tail = g_public_keys;
+	struct public_key_entry *entry, *tail = public_keys;
 	int i = 1;
 
-	for (entry = g_public_keys; entry; entry = entry->next) {
+	for (entry = public_keys; entry; entry = entry->next) {
 		if (entry->keyid == keyid)
 			return entry->key;
 		i++;
@@ -394,7 +395,7 @@ static EVP_PKEY *find_keyid(uint32_t keyid)
 	if (tail)
 		tail->next = entry;
 	else
-		g_public_keys = entry;
+		public_keys = entry;
 	log_err("key %d: %x (unknown keyid)\n", i, __be32_to_cpup(&keyid));
 	return 0;
 }
@@ -412,13 +413,19 @@ void imaevm_free_public_keys(struct public_key_entry *public_keys)
 	}
 }
 
-void init_public_keys(const char *keyfiles)
+int imaevm_init_public_keys(const char *keyfiles,
+			    struct public_key_entry **public_keys)
 {
 	struct public_key_entry *entry;
 	char *tmp_keyfiles, *keyfiles_free;
 	char *keyfile;
 	int err = 0;
 	int i = 1;
+
+	if (!public_keys)
+		return -EINVAL;
+
+	*public_keys = NULL;
 
 	tmp_keyfiles = strdup(keyfiles);
 	keyfiles_free = tmp_keyfiles;
@@ -444,12 +451,19 @@ void init_public_keys(const char *keyfiles)
 		calc_keyid_v2(&entry->keyid, entry->name, entry->key);
 		sprintf(entry->name, "%x", __be32_to_cpup(&entry->keyid));
 		log_info("key %d: %s %s\n", i++, entry->name, keyfile);
-		entry->next = g_public_keys;
-		g_public_keys = entry;
+		entry->next = *public_keys;
+		*public_keys = entry;
 	}
+
 	free(keyfiles_free);
 	if (err < 0)
-		imaevm_free_public_keys(g_public_keys);
+		imaevm_free_public_keys(*public_keys);
+	return err;
+}
+
+void init_public_keys(const char *keyfiles)
+{
+	imaevm_init_public_keys(keyfiles, &g_public_keys);
 }
 
 /*
@@ -466,7 +480,8 @@ void init_public_keys(const char *keyfiles)
  *
  * (Note: signature_v2_hdr struct does not contain the 'type'.)
  */
-static int verify_hash_common(const char *file, const unsigned char *hash,
+static int verify_hash_common(struct public_key_entry *public_keys,
+			      const char *file, const unsigned char *hash,
 			      int size, unsigned char *sig, int siglen)
 {
 	int ret = -1;
@@ -481,7 +496,7 @@ static int verify_hash_common(const char *file, const unsigned char *hash,
 		log_dump(hash, size);
 	}
 
-	pkey = find_keyid(hdr->keyid);
+	pkey = find_keyid(public_keys, hdr->keyid);
 	if (!pkey) {
 		uint32_t keyid = hdr->keyid;
 
@@ -543,11 +558,13 @@ err:
  *
  * Return: 0 verification good, 1 verification bad, -1 error.
  */
-static int verify_hash_v2(const char *file, const unsigned char *hash,
+static int verify_hash_v2(struct public_key_entry *public_keys,
+			  const char *file, const unsigned char *hash,
 			  int size, unsigned char *sig, int siglen)
 {
 	/* note: signature_v2_hdr does not contain 'type', use sig + 1 */
-	return verify_hash_common(file, hash, size, sig + 1, siglen - 1);
+	return verify_hash_common(public_keys, file, hash, size,
+				  sig + 1, siglen - 1);
 }
 
 /*
@@ -556,7 +573,8 @@ static int verify_hash_v2(const char *file, const unsigned char *hash,
  *
  * Return: 0 verification good, 1 verification bad, -1 error.
  */
-static int verify_hash_v3(const char *file, const unsigned char *hash,
+static int verify_hash_v3(struct public_key_entry *public_keys,
+			  const char *file, const unsigned char *hash,
 			  int size, unsigned char *sig, int siglen)
 {
 	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
@@ -567,7 +585,8 @@ static int verify_hash_v3(const char *file, const unsigned char *hash,
 		return ret;
 
 	/* note: signature_v2_hdr does not contain 'type', use sig + 1 */
-	return verify_hash_common(file, sigv3_hash, size, sig + 1, siglen - 1);
+	return verify_hash_common(public_keys, file, sigv3_hash, size,
+				  sig + 1, siglen - 1);
 }
 
 #define HASH_MAX_DIGESTSIZE 64	/* kernel HASH_MAX_DIGESTSIZE is 64 bytes */
@@ -710,8 +729,9 @@ int imaevm_hash_algo_from_sig(unsigned char *sig)
 		return -1;
 }
 
-int verify_hash(const char *file, const unsigned char *hash, int size,
-		unsigned char *sig, int siglen)
+int imaevm_verify_hash(struct public_key_entry *public_keys, const char *file,
+		       const unsigned char *hash, int size,
+		       unsigned char *sig, int siglen)
 {
 	/* Get signature type from sig header */
 	if (sig[1] == DIGSIG_VERSION_1) {
@@ -730,15 +750,24 @@ int verify_hash(const char *file, const unsigned char *hash, int size,
 		return -1;
 #endif
 	} else if (sig[1] == DIGSIG_VERSION_2) {
-		return verify_hash_v2(file, hash, size, sig, siglen);
+		return verify_hash_v2(public_keys, file, hash, size,
+				      sig, siglen);
 	} else if (sig[1] == DIGSIG_VERSION_3) {
-		return verify_hash_v3(file, hash, size, sig, siglen);
+		return verify_hash_v3(public_keys, file, hash, size,
+				      sig, siglen);
 	} else
 		return -1;
 }
 
-int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
-			 unsigned char *digest, int digestlen)
+int verify_hash(const char *file, const unsigned char *hash, int size,
+		unsigned char *sig, int siglen)
+{
+	return imaevm_verify_hash(g_public_keys, file, hash, size, sig, siglen);
+}
+
+int ima_verify_signature2(struct public_key_entry *public_keys, const char *file,
+			  unsigned char *sig, int siglen,
+			  unsigned char *digest, int digestlen)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	int hashlen, sig_hash_algo;
@@ -766,14 +795,23 @@ int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
 	 * measurement list, not by calculating the local file digest.
 	 */
 	if (digest && digestlen > 0)
-		return verify_hash(file, digest, digestlen, sig, siglen);
+		return imaevm_verify_hash(public_keys, file, digest, digestlen,
+					  sig, siglen);
 
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)
 		return hashlen;
 	assert(hashlen <= sizeof(hash));
 
-	return verify_hash(file, hash, hashlen, sig, siglen);
+	return imaevm_verify_hash(public_keys, file, hash, hashlen,
+				  sig, siglen);
+}
+
+int ima_verify_signature(const char *file, unsigned char *sig, int siglen,
+			 unsigned char *digest, int digestlen)
+{
+	return ima_verify_signature2(g_public_keys, file, sig, siglen,
+				     digest, digestlen);
 }
 
 #if CONFIG_SIGV1
