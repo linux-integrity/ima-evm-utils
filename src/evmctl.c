@@ -1625,7 +1625,8 @@ static int lookup_template_name_entry(char *template_name)
 	return 0;
 }
 
-void ima_ng_show(struct template_entry *entry)
+static void ima_ng_show(struct public_key_entry *public_keys,
+			struct template_entry *entry)
 {
 	uint8_t *fieldp = entry->template;
 	uint32_t field_len;
@@ -1751,10 +1752,12 @@ void ima_ng_show(struct template_entry *entry)
 		 * the measurement list or calculate the hash.
 		 */
 		if (verify_list_sig)
-			err = ima_verify_signature(path, sig, sig_len,
-						   digest, digest_len);
+			err = ima_verify_signature2(public_keys, path,
+						    sig, sig_len,
+						    digest, digest_len);
 		else
-			err = ima_verify_signature(path, sig, sig_len, NULL, 0);
+			err = ima_verify_signature2(public_keys, path,
+						    sig, sig_len, NULL, 0);
 
 		if (!err && imaevm_params.verbose > LOG_INFO)
 			log_info("%s: verification is OK\n", path);
@@ -2225,6 +2228,7 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 
 static int ima_measurement(const char *file)
 {
+	struct public_key_entry *public_keys = NULL;
 	struct tpm_bank_info *pseudo_padded_banks;
 	struct tpm_bank_info *pseudo_banks = NULL;
 	struct tpm_bank_info *tpm_banks = NULL;
@@ -2263,10 +2267,16 @@ static int ima_measurement(const char *file)
 	}
 
 	if (imaevm_params.keyfile)	/* Support multiple public keys */
-		init_public_keys(imaevm_params.keyfile);
+		err = imaevm_init_public_keys(imaevm_params.keyfile,
+					      &public_keys);
 	else				/* assume read pubkey from x509 cert */
-		init_public_keys("/etc/keys/x509_evm.der");
-	if (errno)
+		err = imaevm_init_public_keys("/etc/keys/x509_evm.der",
+					      &public_keys);
+	/*
+	 * Without public keys, cannot validate signatures, but can
+	 * still calculate and verify the measurement list against TPM PCRs.
+	 */
+	if (errno || err < 0)
 		log_errno_reset(LOG_DEBUG,
 				"Failure in initializing public keys");
 
@@ -2416,7 +2426,7 @@ static int ima_measurement(const char *file)
 		if (is_ima_template)
 			ima_show(&entry);
 		else
-			ima_ng_show(&entry);
+			ima_ng_show(public_keys, &entry);
 
 		if (!tpmbanks)
 			continue;
@@ -2475,6 +2485,7 @@ out_free:
 	free(pseudo_banks);
 	free(pseudo_padded_banks);
 	free(entry.template);
+	imaevm_free_public_keys(public_keys);
 
 	return err;
 }
