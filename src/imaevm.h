@@ -233,6 +233,7 @@ struct RSA_ASN1_template {
 #define DEFAULT_PCR 10
 
 extern struct libimaevm_params imaevm_params;
+struct public_key_entry;
 
 void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool cr);
 void imaevm_hexdump(const void *ptr, int len);
@@ -250,6 +251,7 @@ int sign_hash(const char *algo, const unsigned char *hash, int size, const char 
 int verify_hash(const char *file, const unsigned char *hash, int size, unsigned char *sig, int siglen);
 int ima_verify_signature(const char *file, unsigned char *sig, int siglen, unsigned char *digest, int digestlen);
 void init_public_keys(const char *keyfiles);
+void imaevm_free_public_keys(struct public_key_entry *public_keys);
 int imaevm_hash_algo_from_sig(unsigned char *sig);
 const char *imaevm_hash_algo_by_id(int algo);
 int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo, const unsigned char *in_hash, unsigned char *out_hash);

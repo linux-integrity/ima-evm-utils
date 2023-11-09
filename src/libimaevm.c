@@ -399,11 +399,25 @@ static EVP_PKEY *find_keyid(uint32_t keyid)
 	return 0;
 }
 
+void imaevm_free_public_keys(struct public_key_entry *public_keys)
+{
+	struct public_key_entry *entry = public_keys, *next;
+
+	while (entry) {
+		next = entry->next;
+		if (entry->key)
+			free(entry->key);
+		free(entry);
+		entry = next;
+	}
+}
+
 void init_public_keys(const char *keyfiles)
 {
 	struct public_key_entry *entry;
 	char *tmp_keyfiles, *keyfiles_free;
 	char *keyfile;
+	int err = 0;
 	int i = 1;
 
 	tmp_keyfiles = strdup(keyfiles);
@@ -417,6 +431,7 @@ void init_public_keys(const char *keyfiles)
 		entry = malloc(sizeof(struct public_key_entry));
 		if (!entry) {
 			perror("malloc");
+			err = -ENOMEM;
 			break;
 		}
 
@@ -433,6 +448,8 @@ void init_public_keys(const char *keyfiles)
 		g_public_keys = entry;
 	}
 	free(keyfiles_free);
+	if (err < 0)
+		imaevm_free_public_keys(g_public_keys);
 }
 
 /*
