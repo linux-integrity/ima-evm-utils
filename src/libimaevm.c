@@ -370,14 +370,14 @@ struct public_key_entry {
 	char name[9];
 	EVP_PKEY *key;
 };
-static struct public_key_entry *public_keys = NULL;
+static struct public_key_entry *g_public_keys = NULL;
 
 static EVP_PKEY *find_keyid(uint32_t keyid)
 {
-	struct public_key_entry *entry, *tail = public_keys;
+	struct public_key_entry *entry, *tail = g_public_keys;
 	int i = 1;
 
-	for (entry = public_keys; entry != NULL; entry = entry->next) {
+	for (entry = g_public_keys; entry; entry = entry->next) {
 		if (entry->keyid == keyid)
 			return entry->key;
 		i++;
@@ -394,7 +394,7 @@ static EVP_PKEY *find_keyid(uint32_t keyid)
 	if (tail)
 		tail->next = entry;
 	else
-		public_keys = entry;
+		g_public_keys = entry;
 	log_err("key %d: %x (unknown keyid)\n", i, __be32_to_cpup(&keyid));
 	return 0;
 }
@@ -429,8 +429,8 @@ void init_public_keys(const char *keyfiles)
 		calc_keyid_v2(&entry->keyid, entry->name, entry->key);
 		sprintf(entry->name, "%x", __be32_to_cpup(&entry->keyid));
 		log_info("key %d: %s %s\n", i++, entry->name, keyfile);
-		entry->next = public_keys;
-		public_keys = entry;
+		entry->next = g_public_keys;
+		g_public_keys = entry;
 	}
 	free(keyfiles_free);
 }
