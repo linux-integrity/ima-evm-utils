@@ -181,7 +181,7 @@ out:
 	return err;
 }
 
-int ima_calc_hash(const char *file, uint8_t *hash)
+int ima_calc_hash2(const char *file, const char *hash_algo, uint8_t *hash)
 {
 	const EVP_MD *md;
 	struct stat st;
@@ -202,10 +202,9 @@ int ima_calc_hash(const char *file, uint8_t *hash)
 		goto err;
 	}
 
-	md = EVP_get_digestbyname(imaevm_params.hash_algo);
+	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname(%s) failed\n",
-			imaevm_params.hash_algo);
+		log_err("EVP_get_digestbyname(%s) failed\n", hash_algo);
 		err = 1;
 		goto err;
 	}
@@ -244,6 +243,11 @@ err:
 	EVP_MD_CTX_free(pctx);
 #endif
 	return err;
+}
+
+int ima_calc_hash(const char *file, uint8_t *hash)
+{
+	return ima_calc_hash2(file, imaevm_params.hash_algo, hash);
 }
 
 EVP_PKEY *read_pub_pkey(const char *keyfile, int x509)
