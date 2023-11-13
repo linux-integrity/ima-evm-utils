@@ -340,7 +340,8 @@ err:
  * Returns 0 for EVP_ function failures. Return -1 for other failures.
  * Return hash algorithm size on success.
  */
-static int calc_evm_hash(const char *file, unsigned char *hash)
+static int calc_evm_hash(const char *file, const char *hash_algo,
+			 unsigned char *hash)
 {
         const EVP_MD *md;
 	struct stat st;
@@ -408,10 +409,9 @@ static int calc_evm_hash(const char *file, unsigned char *hash)
 	}
 #endif
 
-	md = EVP_get_digestbyname(imaevm_params.hash_algo);
+	md = EVP_get_digestbyname(hash_algo);
 	if (!md) {
-		log_err("EVP_get_digestbyname(%s) failed\n",
-			imaevm_params.hash_algo);
+		log_err("EVP_get_digestbyname(%s) failed\n", hash_algo);
 		err = 0;
 		goto out;
 	}
@@ -570,7 +570,7 @@ static int sign_evm(const char *file, const char *key)
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len, err;
 
-	len = calc_evm_hash(file, hash);
+	len = calc_evm_hash(file, imaevm_params.hash_algo, hash);
 	if (len <= 1)
 		return len;
 	assert(len <= sizeof(hash));
@@ -909,6 +909,7 @@ static int verify_evm(struct public_key_entry *public_keys, const char *file)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
+	const char *hash_algo = NULL;
 	int sig_hash_algo;
 	int mdlen;
 	int len;
@@ -938,15 +939,15 @@ static int verify_evm(struct public_key_entry *public_keys, const char *file)
 		log_err("unknown hash algo: %s\n", file);
 		return -1;
 	}
-	imaevm_params.hash_algo = imaevm_hash_algo_by_id(sig_hash_algo);
+	hash_algo = imaevm_hash_algo_by_id(sig_hash_algo);
 
-	mdlen = calc_evm_hash(file, hash);
+	mdlen = calc_evm_hash(file, hash_algo, hash);
 	if (mdlen <= 1)
 		return mdlen;
 	assert(mdlen <= sizeof(hash));
 
-	return imaevm_verify_hash(public_keys, file, imaevm_params.hash_algo,
-				  hash, mdlen, sig, len);
+	return imaevm_verify_hash(public_keys, file, hash_algo, hash,
+				  mdlen, sig, len);
 }
 
 static int cmd_verify_evm(struct command *cmd)
