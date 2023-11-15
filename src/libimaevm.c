@@ -730,8 +730,8 @@ int imaevm_hash_algo_from_sig(unsigned char *sig)
 }
 
 int imaevm_verify_hash(struct public_key_entry *public_keys, const char *file,
-		       const unsigned char *hash, int size,
-		       unsigned char *sig, int siglen)
+		       const char *hash_algo, const unsigned char *hash,
+		       int size, unsigned char *sig, int siglen)
 {
 	/* Get signature type from sig header */
 	if (sig[1] == DIGSIG_VERSION_1) {
@@ -762,7 +762,8 @@ int imaevm_verify_hash(struct public_key_entry *public_keys, const char *file,
 int verify_hash(const char *file, const unsigned char *hash, int size,
 		unsigned char *sig, int siglen)
 {
-	return imaevm_verify_hash(g_public_keys, file, hash, size, sig, siglen);
+	return imaevm_verify_hash(g_public_keys, file, NULL, hash, size,
+				  sig, siglen);
 }
 
 int ima_verify_signature2(struct public_key_entry *public_keys, const char *file,
@@ -795,15 +796,15 @@ int ima_verify_signature2(struct public_key_entry *public_keys, const char *file
 	 * measurement list, not by calculating the local file digest.
 	 */
 	if (digest && digestlen > 0)
-		return imaevm_verify_hash(public_keys, file, digest, digestlen,
-					  sig, siglen);
+		return imaevm_verify_hash(public_keys, file, NULL, digest,
+					  digestlen, sig, siglen);
 
 	hashlen = ima_calc_hash(file, hash);
 	if (hashlen <= 1)
 		return hashlen;
 	assert(hashlen <= sizeof(hash));
 
-	return imaevm_verify_hash(public_keys, file, hash, hashlen,
+	return imaevm_verify_hash(public_keys, file, NULL, hash, hashlen,
 				  sig, siglen);
 }
 

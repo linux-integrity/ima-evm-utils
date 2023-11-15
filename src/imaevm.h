@@ -261,6 +261,9 @@ IMAEVM_DEPRECATED int ima_verify_signature(const char *file, unsigned char *sig,
 					   int digestlen);
 IMAEVM_DEPRECATED void init_public_keys(const char *keyfiles);
 
+int imaevm_verify_hash(struct public_key_entry *public_keys, const char *file,
+		       const char *hash_algo, const unsigned char *hash,
+		       int size, unsigned char *sig, int siglen);
 int ima_verify_signature2(struct public_key_entry *public_keys, const char *file,
 			  unsigned char *sig, int siglen,
 			  unsigned char *digest, int digestlen);
