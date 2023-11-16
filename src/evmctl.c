@@ -140,6 +140,7 @@ static bool evm_immutable;
 static bool evm_portable;
 static bool veritysig;
 static bool hwtpm;
+static char *g_hash_algo = DEFAULT_HASH_ALGO;
 
 #define HMAC_FLAG_NO_UUID	0x0001
 #define HMAC_FLAG_CAPS_SET	0x0002
@@ -564,18 +565,18 @@ out:
 	return err;
 }
 
-static int sign_evm(const char *file, const char *key)
+static int sign_evm(const char *file, char *hash_algo, const char *key)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len, err;
 
-	len = calc_evm_hash(file, imaevm_params.hash_algo, hash);
+	len = calc_evm_hash(file, hash_algo, hash);
 	if (len <= 1)
 		return len;
 	assert(len <= sizeof(hash));
 
-	len = sign_hash(imaevm_params.hash_algo, hash, len, key, NULL, sig + 1);
+	len = sign_hash(hash_algo, hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 	assert(len < sizeof(sig));
@@ -609,10 +610,10 @@ static int hash_ima(const char *file)
 {
 	unsigned char hash[MAX_DIGEST_SIZE + 2]; /* +2 byte xattr header */
 	int len, err, offset;
-	int algo = imaevm_get_hash_algo(imaevm_params.hash_algo);
+	int algo = imaevm_get_hash_algo(g_hash_algo);
 
 	if (algo < 0) {
-		log_err("Unknown hash algo: %s\n", imaevm_params.hash_algo);
+		log_err("Unknown hash algo: %s\n", g_hash_algo);
 		return -1;
 	}
 	if (algo > PKEY_HASH_SHA1) {
@@ -624,7 +625,7 @@ static int hash_ima(const char *file)
 		offset = 1;
 	}
 
-	len = ima_calc_hash(file, hash + offset);
+	len = ima_calc_hash2(file, g_hash_algo, hash + offset);
 	if (len <= 1)
 		return len;
 	assert(len + offset <= sizeof(hash));
@@ -632,7 +633,7 @@ static int hash_ima(const char *file)
 	len += offset;
 
 	if (imaevm_params.verbose >= LOG_INFO)
-		log_info("hash(%s): ", imaevm_params.hash_algo);
+		log_info("hash(%s): ", g_hash_algo);
 
 	if (sigdump || imaevm_params.verbose >= LOG_INFO)
 		imaevm_hexdump(hash, len);
@@ -650,18 +651,18 @@ static int hash_ima(const char *file)
 	return 0;
 }
 
-static int sign_ima(const char *file, const char *key)
+static int sign_ima(const char *file, char *hash_algo, const char *key)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	int len, err;
 
-	len = ima_calc_hash(file, hash);
+	len = ima_calc_hash2(file, hash_algo, hash);
 	if (len <= 1)
 		return len;
 	assert(len <= sizeof(hash));
 
-	len = sign_hash(imaevm_params.hash_algo, hash, len, key, NULL, sig + 1);
+	len = sign_hash(hash_algo, hash, len, key, NULL, sig + 1);
 	if (len <= 1)
 		return len;
 	assert(len < sizeof(sig));
@@ -751,7 +752,7 @@ static int sign_ima_file(const char *file)
 
 	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
-	return sign_ima(file, key);
+	return sign_ima(file, g_hash_algo, key);
 }
 
 static int cmd_sign_ima(struct command *cmd)
@@ -854,7 +855,7 @@ static int cmd_sign_hash(struct command *cmd)
 			assert(hashlen / 2 <= sizeof(hash));
 			hex2bin(hash, line, hashlen / 2);
 
-			siglen = sign_hash(imaevm_params.hash_algo, hash,
+			siglen = sign_hash(g_hash_algo, hash,
 					   hashlen / 2, key, NULL, sig + 1);
 			sig[0] = EVM_IMA_XATTR_DIGSIG;
 		}
@@ -874,7 +875,6 @@ static int cmd_sign_hash(struct command *cmd)
 		print_usage(cmd);
 		return -1;
 	}
-
 	return 0;
 }
 
@@ -886,7 +886,7 @@ static int sign_evm_path(const char *file)
 	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
-		err = sign_ima(file, key);
+		err = sign_ima(file, g_hash_algo, key);
 		if (err)
 			return err;
 	}
@@ -897,7 +897,7 @@ static int sign_evm_path(const char *file)
 			return err;
 	}
 
-	return sign_evm(file, key);
+	return sign_evm(file, g_hash_algo, key);
 }
 
 static int cmd_sign_evm(struct command *cmd)
@@ -1426,7 +1426,7 @@ static int cmd_hmac_evm(struct command *cmd)
 	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
 	if (digsig) {
-		err = sign_ima(file, key);
+		err = sign_ima(file, g_hash_algo, key);
 		if (err)
 			return err;
 	}
@@ -3088,7 +3088,7 @@ int main(int argc, char *argv[])
 			sigdump = 1;
 			break;
 		case 'a':
-			imaevm_params.hash_algo = optarg;
+			g_hash_algo = optarg;
 			break;
 		case 'p':
 			if (optarg)
