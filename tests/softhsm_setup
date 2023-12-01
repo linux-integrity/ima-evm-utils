@@ -15,7 +15,7 @@ fi
 
 MAJOR=$(softhsm2-util -v | cut -d '.' -f1)
 MINOR=$(softhsm2-util -v | cut -d '.' -f2)
-if [ "${MAJOR}" -lt 2 ] || [ "${MAJOR}" -eq 2 -a "${MINOR}" -lt 2 ]; then
+if [[ "${MAJOR}" -lt 2 || ( "${MAJOR}" -eq 2  && "${MINOR}" -lt 2 ) ]]; then
 	echo "Need softhsm v2.2.0 or later"
 	exit 77
 fi
