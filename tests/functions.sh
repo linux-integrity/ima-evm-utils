@@ -272,7 +272,7 @@ _test_xattr() {
   local file=$1 attr=$2 prefix=$3
   local text_for=${ADD_TEXT_FOR:+ for $ADD_TEXT_FOR}
 
-  if ! getfattr -n "$attr" -e hex "$file" | egrep -qx "$attr=$prefix"; then
+  if ! getfattr -n "$attr" -e hex "$file" | grep -qx -E "$attr=$prefix"; then
     color_red_on_failure
     echo "Did not find expected hash$text_for:"
     echo "    $attr=$prefix"
