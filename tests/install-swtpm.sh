@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 # No need to run via sudo if we already have permissions.
 # Also, some distros do not have sudo configured for root:
@@ -10,7 +10,7 @@ else
 fi
 
 git clone https://git.code.sf.net/p/ibmswtpm2/tpm2
-cd tpm2/src
-make -j$(nproc)
+pushd tpm2/src 1>/dev/null || exit 1
+make -j"$(nproc)"
 $SUDO cp tpm_server /usr/local/bin/
-cd ../..
+popd 1>/dev/null

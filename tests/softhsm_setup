@@ -82,7 +82,7 @@ setup_softhsm() {
 		fi
 		sudo mv /etc/gnutls/pkcs11.conf \
 			/etc/gnutls/pkcs11.conf.bak &>/dev/null
-		if [ $(id -u) -eq 0 ]; then
+		if [ "$(id -u)" -eq 0 ]; then
 			SONAME="$(sudo -u nobody brew ls --verbose softhsm | \
 				  grep -E "\.so$")"
 		else
