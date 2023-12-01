@@ -5,6 +5,8 @@
 #
 # Check the behavior of MMAP_CHECK and MMAP_CHECK_REQPROT
 
+# shellcheck disable=SC2034
+
 trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
 
 PATCHES=(
