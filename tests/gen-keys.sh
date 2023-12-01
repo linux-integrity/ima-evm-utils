@@ -21,7 +21,7 @@ type openssl
 
 log() {
   echo >&2 - "$*"
-  eval "$@"
+  eval "$*"
 }
 
 if [ "$1" = clean ]; then
