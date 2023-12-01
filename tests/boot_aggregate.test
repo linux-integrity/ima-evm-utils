@@ -128,8 +128,7 @@ check() {
 		echo "${CYAN}SKIP: evmctl ima_boot_aggregate: $bootaggr${NORM}"
 		exit "$SKIP"
 	fi
-
-	boot_aggr=( $bootaggr )
+	IFS=$'\n' readarray -t boot_aggr <<< "$bootaggr"
 
 	echo "INFO: Searching for the boot_aggregate in ${ASCII_RUNTIME_MEASUREMENTS}"
 	for hash in "${boot_aggr[@]}"; do
