@@ -1090,7 +1090,7 @@ if [ $((evm_value & EVM_INIT_X509)) -ne "$EVM_INIT_X509" ] && [ "$TST_EVM_CHANGE
 	echo "$EVM_INIT_X509" > /sys/kernel/security/evm 2> /dev/null
 fi
 
-if [ "$(expr index "$TST_LIST" "check_evm_revalidate")" -gt 0 ] && [ "$TST_EVM_CHANGE_MODE" -eq 1 ]; then
+if echo "$TST_LIST" | grep -q -w check_evm_revalidate && [ "$TST_EVM_CHANGE_MODE" -eq 1 ]; then
 	echo "$EVM_ALLOW_METADATA_WRITES" > /sys/kernel/security/evm 2> /dev/null
 fi
 
