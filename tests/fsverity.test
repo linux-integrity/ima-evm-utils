@@ -169,7 +169,7 @@ unqualified_bprm_rule() {
 	local rule_match="measure func=BPRM_CHECK"
 	local rule_dontmatch="fsuuid"
 
-	if [ -z "${rule##*$digest_type=verity*}" ]; then
+	if [ -z "${rule##*digest_type=verity*}" ]; then
 		if grep "$rule_match" $IMA_POLICY_FILE | grep -v "$rule_dontmatch"  &> /dev/null; then
 			return "$SKIP"
 		fi
