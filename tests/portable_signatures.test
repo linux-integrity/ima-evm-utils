@@ -80,7 +80,6 @@ METADATA_CHANGE_FOWNER_2=3002
 
 check_load_ima_rule() {
 	local rule_loaded
-	local result
 	local new_policy
 
 	rule_loaded=$(grep "$1" /sys/kernel/security/ima/policy)
@@ -88,14 +87,12 @@ check_load_ima_rule() {
 		new_policy=$(mktemp -p "$g_mountpoint")
 		echo "$1" > "$new_policy"
 		evmctl sign -o -a sha256 --imasig --key "$key_path" "$new_policy" &> /dev/null
-		echo "$new_policy" > /sys/kernel/security/ima/policy
-		result=$?
-		rm -f "$new_policy"
-
-		if [ "$result" -ne 0 ]; then
+		if ! echo "$new_policy" > /sys/kernel/security/ima/policy; then
+			rm -f "$new_policy"
 			echo "${RED}Failed to set IMA policy${NORM}"
 			return "$FAIL"
 		fi
+		rm -f "${new_policy}"
 	fi
 
 	return "$OK"
