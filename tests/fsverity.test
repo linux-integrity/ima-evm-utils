@@ -29,6 +29,8 @@
 # since the policy rules are walked sequentially, the system's IMA
 # custom policy rules might take precedence.
 
+# shellcheck disable=SC2317
+
 cd "$(dirname "$0")" || exit 1
 PATH=../src:../fsverity-utils:/usr/sbin:$PATH
 source ./functions.sh
