@@ -185,8 +185,7 @@ check_sign() {
 
   # Insert keyid from cert into PREFIX in-place of marker `:K:'
   if [[ $PREFIX =~ :K: ]]; then
-    keyid=$(_keyid_from_cert "$key")
-    if [ $? -ne 0 ]; then
+    if ! keyid=$(_keyid_from_cert "$key"); then
       color_red
       echo "Unable to determine keyid for $key"
       color_restore

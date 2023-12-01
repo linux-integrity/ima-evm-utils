@@ -368,8 +368,7 @@ _softhsm_setup() {
 
   mkdir -p "${SOFTHSM_SETUP_CONFIGDIR}"
 
-  msg=$(./softhsm_setup setup 2>&1)
-  if [ $? -eq 0 ]; then
+  if msg=$(./softhsm_setup setup 2>&1); then
     echo "softhsm_setup setup succeeded: $msg"
     PKCS11_KEYURI=$(echo "$msg" | sed -n 's|^keyuri: \(.*\)|\1|p')
 

@@ -47,8 +47,7 @@ swtpm_start() {
 	fi
 
 	if [ -n "${swtpm}" ]; then
-		pgrep swtpm
-		if [ $? -eq 0 ]; then
+		if pgrep swtpm; then
 			echo "INFO: Software TPM (swtpm) already running"
 			return 114
 		else
@@ -60,8 +59,7 @@ swtpm_start() {
 	elif [ -n "${tpm_server}" ]; then
 		# tpm_server uses the Microsoft simulator encapsulated packet format
 		export TPM_SERVER_TYPE="mssim"
-		pgrep tpm_server
-		if [ $? -eq 0 ]; then
+		if pgrep tpm_server; then
 			echo "INFO: Software TPM (tpm_server) already running"
 			return 114
 		else
@@ -81,16 +79,13 @@ swtpm_init() {
 	fi
 
 	echo "INFO: Sending software TPM startup"
-	"${TSSDIR}/tssstartup"
-	if [ $? -ne 0 ]; then
+	if ! "${TSSDIR}/tssstartup"; then
 		echo "INFO: Retry sending software TPM startup"
 		sleep 1
-		"${TSSDIR}/tssstartup"
-	fi
-
-	if [ $? -ne 0 ]; then
-		echo "INFO: Software TPM startup failed"
-		return "$SKIP"
+		if ! "${TSSDIR}/tssstartup"; then
+			echo "INFO: Software TPM startup failed"
+			return "$SKIP"
+		fi
 	fi
 
 	echo "INFO: Walking ${BINARY_BIOS_MEASUREMENTS} initializing the software TPM"
@@ -129,8 +124,7 @@ check() {
 	local options=$1
 
 	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 9) for multiple banks"
-	bootaggr=$(evmctl ima_boot_aggregate ${options:+${options}})
-	if [ $? -ne 0 ]; then
+	if ! bootaggr=$(evmctl ima_boot_aggregate ${options:+${options}}); then
 		echo "${CYAN}SKIP: evmctl ima_boot_aggregate: $bootaggr${NORM}"
 		exit "$SKIP"
 	fi
