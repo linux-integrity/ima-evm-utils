@@ -141,7 +141,7 @@ check_sign() {
   local FILE=${FILE:-$ALG.txt}
 
   # Normalize key filename if it's not a pkcs11 URI
-  if [ ${KEY:0:7} != pkcs11: ]; then
+  if [ "${KEY:0:7}" != pkcs11: ]; then
     key=${KEY%.*}.key
     key=test-${key#test-}
   else
@@ -152,8 +152,8 @@ check_sign() {
   # leave only good files for verify tests.
   _test_expected_to_fail && FILE+='~'
 
-  rm -f $FILE
-  if ! touch $FILE; then
+  rm -f "$FILE"
+  if ! touch "$FILE"; then
     color_red
     echo "Can't create test file: $FILE"
     color_restore
@@ -372,7 +372,7 @@ try_different_sigs() {
 
 ## Test v1 signatures
 # Signature v1 only supports sha1 and sha256 so any other should fail
-if [ $SIGV1 -eq 0 ]; then
+if [ "$SIGV1" -eq 0 ]; then
   __skip() { echo "IMA signature v1 tests are skipped: not supported"; return $SKIP; }
   expect_pass __skip
 else
@@ -440,8 +440,8 @@ expect_fail \
 # Test signing with key described by pkcs11 URI
 _softhsm_setup "${WORKDIR}"
 if [ -n "${PKCS11_KEYURI}" ]; then
-  expect_pass check_sign FILE=pkcs11test TYPE=ima KEY=${PKCS11_KEYURI} ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS=--keyid=aabbccdd
-  expect_pass check_sign FILE=pkcs11test TYPE=ima KEY=${PKCS11_KEYURI} ALG=sha1   PREFIX=0x030202aabbccdd0100 OPTS=--keyid=aabbccdd
+  expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_KEYURI}" ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS=--keyid=aabbccdd
+  expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_KEYURI}" ALG=sha1   PREFIX=0x030202aabbccdd0100 OPTS=--keyid=aabbccdd
 else
   # to have a constant number of tests, skip these two tests
   __skip() { echo "pkcs11 test is skipped: could not setup softhsm"; return $SKIP; }

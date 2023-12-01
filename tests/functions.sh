@@ -42,7 +42,7 @@ exit_early() {
 _require() {
   ret=
   for i; do
-    if ! type $i; then
+    if ! type "$i"; then
       echo "$i is required for test"
       ret=1
     fi
@@ -79,7 +79,7 @@ expect_pass() {
   fi
 
   if [ $TNESTED -gt 0 ]; then
-    echo $RED"expect_pass should not be run nested"$NORM
+    echo "${RED}expect_pass should not be run nested${NORM}"
     testsfail+=1
     exit "$HARDFAIL"
   fi
@@ -110,9 +110,9 @@ expect_pass_if() {
   ret=$?
 
   if [ $ret -ne 0 ] && [ $ret -ne 77 ] && [ -n "$PATCHES" ]; then
-    echo $YELLOW"Possibly missing patches:"$NORM
+    echo "${YELLOW}Possibly missing patches:${NORM}"
     for idx in $indexes; do
-      echo $YELLOW" - ${PATCHES[$((idx))]}"$NORM
+      echo "${YELLOW} - ${PATCHES[$((idx))]}${NORM}"
     done
   fi
 
@@ -130,7 +130,7 @@ expect_fail() {
   fi
 
   if [ $TNESTED -gt 0 ]; then
-    echo $RED"expect_fail should not be run nested"$NORM
+    echo "${RED}expect_fail should not be run nested${NORM}"
     testsfail+=1
     exit "$HARDFAIL"
   fi
@@ -166,9 +166,9 @@ expect_fail_if() {
   ret=$?
 
   if { [ $ret -eq 0 ] || [ $ret -eq 99 ]; } && [ -n "$PATCHES" ]; then
-    echo $YELLOW"Possibly missing patches:"$NORM
+    echo "${YELLOW}Possibly missing patches:${NORM}"
     for idx in $indexes; do
-      echo $YELLOW" - ${PATCHES[$((idx))]}"$NORM
+      echo "${YELLOW} - ${PATCHES[$((idx))]}${NORM}"
     done
   fi
 
@@ -177,12 +177,12 @@ expect_fail_if() {
 
 # return true if current test is positive
 _test_expected_to_pass() {
-  [ ! $TFAIL ]
+  [ ! "$TFAIL" ]
 }
 
 # return true if current test is negative
 _test_expected_to_fail() {
-  [ $TFAIL ]
+  [ "$TFAIL" ]
 }
 
 # Show blank line and color following text to red
@@ -201,7 +201,7 @@ color_red() {
 }
 
 color_restore() {
-  [ $COLOR_RESTORE ] && echo "$NORM"
+  [ "$COLOR_RESTORE" ] && echo "$NORM"
   COLOR_RESTORE=
 }
 
@@ -216,7 +216,7 @@ _evmctl_run() {
   # ADD_TEXT_FOR: append to text as 'for $ADD_TEXT_FOR'
 
   cmd="evmctl $V $EVMCTL_ENGINE $*"
-  echo $YELLOW$TMODE "$cmd"$NORM
+  echo "${YELLOW}$TMODE $cmd${NORM}"
   $cmd >"$out" 2>&1
   ret=$?
 
@@ -226,7 +226,7 @@ _evmctl_run() {
     echo "evmctl $op failed hard with ($ret) $text_for"
     sed 's/^/  /' "$out"
     color_restore
-    rm "$out" $ADD_DEL
+    rm "$out" "$ADD_DEL"
     ADD_DEL=
     ADD_TEXT_FOR=
     return "$HARDFAIL"
@@ -238,7 +238,7 @@ _evmctl_run() {
       sed 's/^/  /' "$out"
     fi
     color_restore
-    rm "$out" $ADD_DEL
+    rm "$out" "$ADD_DEL"
     ADD_DEL=
     ADD_TEXT_FOR=
     return "$FAIL"
@@ -371,7 +371,7 @@ _softhsm_setup() {
   msg=$(./softhsm_setup setup 2>&1)
   if [ $? -eq 0 ]; then
     echo "softhsm_setup setup succeeded: $msg"
-    PKCS11_KEYURI=$(echo $msg | sed -n 's|^keyuri: \(.*\)|\1|p')
+    PKCS11_KEYURI=$(echo "$msg" | sed -n 's|^keyuri: \(.*\)|\1|p')
 
     export EVMCTL_ENGINE="--engine pkcs11"
     export OPENSSL_ENGINE="-engine pkcs11"
@@ -402,7 +402,7 @@ _run_env() {
   if [ "$TST_ENV" = "um" ]; then
     expect_pass "$1" rootfstype=hostfs rw init="$2" quiet mem=2048M "$3"
   else
-    echo $RED"Testing environment $TST_ENV not supported"$NORM
+    echo "${RED}Testing environment $TST_ENV not supported${NORM}"
     exit "$FAIL"
   fi
 }

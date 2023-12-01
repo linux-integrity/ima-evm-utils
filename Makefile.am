@@ -50,4 +50,7 @@ rmman:
 doc: evmctl.1.html rmman evmctl.1
 endif
 
-.PHONY: $(tarname)
+shellcheck:
+	make -C tests shellcheck
+
+.PHONY: $(tarname) shellcheck

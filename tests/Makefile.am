@@ -24,6 +24,14 @@ clean-local:
 	-rm -f *.txt *.out *.sig *.sig2
 
 distclean: distclean-keys
-.PHONY: distclean-keys
+
+shellcheck:
+	shellcheck -i SC2086 \
+		functions.sh gen-keys.sh install-fsverity.sh \
+		install-mount-idmapped.sh install-openssl3.sh \
+		install-swtpm.sh install-tss.sh softhsm_setup \
+		$(check_SCRIPTS)
+
+.PHONY: distclean-keys shellcheck
 distclean-keys:
 	./gen-keys.sh clean

@@ -50,9 +50,9 @@ _require dd mkfs blkid e2fsck tune2fs evmctl setfattr
 trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM EXIT
 
 cleanup() {
-        if [ -e $TST_MNT ]; then
-		if [ $LOOPBACK_MOUNTED -eq 1 ]; then
-			umount $TST_MNT
+        if [ -e "$TST_MNT" ]; then
+		if [ "$LOOPBACK_MOUNTED" -eq 1 ]; then
+			umount "$TST_MNT"
 		fi
 		if [ -f "$TST_IMG" ]; then
 			rm "$TST_IMG"
@@ -139,7 +139,7 @@ create_loopback_file() {
 	fi
 
 	echo "INFO: Building an $fs_type filesystem"
-	if ! mkfs -t "$fs_type" -q "${TST_IMG}" $options; then
+	if ! mkfs -t "$fs_type" -q "${TST_IMG}" ${options:+${options}}; then
 		echo "${RED}FAILURE: Creating $fs_type filesystem${NORM}"
 		exit "$FAIL"
 	fi
@@ -202,7 +202,7 @@ create_file() {
 	local test=$1
 	local type=$2
 
-	TST_FILE=$(mktemp -p $TST_MNT -t "${type}".XXXXXX)
+	TST_FILE=$(mktemp -p "$TST_MNT" -t "${type}".XXXXXX)
 	[ "$VERBOSE" -ge 1 ] && echo "INFO: creating $TST_FILE"
 
 	# heredoc to create a script
@@ -251,13 +251,13 @@ measure-verity() {
 	digest_filename=$("$FSVERITY" digest "$TST_FILE")
 	[ "$VERBOSE" -ge 2 ] && echo "INFO: verity:$digest_filename"
 
-	grep "verity:$digest_filename" $IMA_MEASUREMENT_LIST &> /dev/null
+	grep "verity:$digest_filename" "$IMA_MEASUREMENT_LIST" &> /dev/null
 	ret=$?
 
 	# Not finding the "fsverity digest" result in the IMA measurement
 	# list is expected for non fs-verity enabled files.  The measurement
 	# list will contain zeros for the file hash.
-	if [ $ret -eq 1 ]; then
+	if [ "$ret" -eq 1 ]; then
 		error="$FAIL"
 		if [ "$verity" = "enabled" ]; then
 			echo "${RED}FAILURE: ${msg} ${NORM}"
@@ -285,7 +285,7 @@ measure-ima() {
 	create_file "$test" ima-hash
 	"$TST_FILE"
 
-	hashalg=$(grep "${TST_FILE}" $IMA_MEASUREMENT_LIST | cut -d':' -f2)
+	hashalg=$(grep "${TST_FILE}" "$IMA_MEASUREMENT_LIST" | cut -d':' -f2)
 	if [ -z "${hashalg}" ]; then
 		echo "${CYAN}SKIP: Measurement record with algorithm not found${NORM}"
 		return "$SKIP"
@@ -301,7 +301,7 @@ measure-ima() {
 	# Remove the extra space before the filename
 	digest_filename=$(${digestsum} "$TST_FILE" | sed "s/\ \ /\ /")
 	[ "$VERBOSE" -ge 2 ] && echo "$test: $digest_filename"
-	if grep "$digest_filename" $IMA_MEASUREMENT_LIST &> /dev/null; then
+	if grep "$digest_filename" "$IMA_MEASUREMENT_LIST" &> /dev/null; then
 		echo "${GREEN}SUCCESS: Measuring $TST_FILE ${NORM}"
 	else
 		error="$FAIL"

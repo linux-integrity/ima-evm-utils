@@ -129,7 +129,7 @@ check() {
 	local options=$1
 
 	echo "INFO: Calculating the boot_aggregate (PCRs 0 - 9) for multiple banks"
-	bootaggr=$(evmctl ima_boot_aggregate ${options})
+	bootaggr=$(evmctl ima_boot_aggregate ${options:+${options}})
 	if [ $? -ne 0 ]; then
 		echo "${CYAN}SKIP: evmctl ima_boot_aggregate: $bootaggr${NORM}"
 		exit "$SKIP"
@@ -197,4 +197,4 @@ if [ "$(id -u)" != 0 ] || [ ! -c "/dev/tpm0" ]; then
 	fi
 fi
 
-expect_pass check $BOOTAGGR_OPTIONS
+expect_pass check "$BOOTAGGR_OPTIONS"
