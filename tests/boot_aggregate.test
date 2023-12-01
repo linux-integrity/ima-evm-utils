@@ -17,7 +17,7 @@ trap '_report_exit_and_cleanup cleanup' SIGINT SIGTERM EXIT
 # Base VERBOSE on the environment variable, if set.
 VERBOSE="${VERBOSE:-0}"
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 export PATH=../src:$PATH
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 . ./functions.sh
