@@ -1112,7 +1112,8 @@ static int get_hash_algo_v1(const char *algo)
 }
 
 static int sign_hash_v1(const char *hashalgo, const unsigned char *hash,
-			int size, const char *keyfile, unsigned char *sig)
+			int size, const char *keyfile, const char *keypass,
+			unsigned char *sig)
 {
 	int len = -1, hashalgo_idx;
 	SHA_CTX ctx;
@@ -1146,7 +1147,7 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash,
 	log_info("hash(%s): ", hashalgo);
 	log_dump(hash, size);
 
-	key = read_priv_key(keyfile, imaevm_params.keypass);
+	key = read_priv_key(keyfile, keypass);
 	if (!key)
 		return -1;
 
@@ -1199,7 +1200,8 @@ out:
  * Return: -1 signing error, >0 length of signature
  */
 static int sign_hash_v2(const char *algo, const unsigned char *hash,
-			int size, const char *keyfile, unsigned char *sig)
+			int size, const char *keyfile, const char *keypass,
+			unsigned char *sig)
 {
 	struct signature_v2_hdr *hdr;
 	int len = -1;
@@ -1234,7 +1236,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	log_info("hash(%s): ", algo);
 	log_dump(hash, size);
 
-	pkey = read_priv_pkey(keyfile, imaevm_params.keypass);
+	pkey = read_priv_pkey(keyfile, keypass);
 	if (!pkey)
 		return -1;
 
@@ -1304,14 +1306,14 @@ err:
 
 int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, const char *keypass, unsigned char *sig)
 {
-	if (keypass)
-		imaevm_params.keypass = keypass;
+	if (!keypass)	/* Avoid breaking existing libimaevm usage */
+		keypass = imaevm_params.keypass;
 
 	if (imaevm_params.x509)
-		return sign_hash_v2(hashalgo, hash, size, keyfile, sig);
+		return sign_hash_v2(hashalgo, hash, size, keyfile, keypass, sig);
 #if CONFIG_SIGV1
 	else
-		return sign_hash_v1(hashalgo, hash, size, keyfile, sig);
+		return sign_hash_v1(hashalgo, hash, size, keyfile, keypass, sig);
 #endif
 	log_info("Signature version 1 deprecated.");
 	return -1;
