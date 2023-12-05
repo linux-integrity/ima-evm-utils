@@ -141,6 +141,7 @@ static bool evm_portable;
 static bool veritysig;
 static bool hwtpm;
 static char *g_hash_algo = DEFAULT_HASH_ALGO;
+static char *g_keypass;
 
 #define HMAC_FLAG_NO_UUID	0x0001
 #define HMAC_FLAG_CAPS_SET	0x0002
@@ -576,7 +577,7 @@ static int sign_evm(const char *file, char *hash_algo, const char *key)
 		return len;
 	assert(len <= sizeof(hash));
 
-	len = sign_hash(hash_algo, hash, len, key, NULL, sig + 1);
+	len = sign_hash(hash_algo, hash, len, key, g_keypass, sig + 1);
 	if (len <= 1)
 		return len;
 	assert(len < sizeof(sig));
@@ -662,7 +663,7 @@ static int sign_ima(const char *file, char *hash_algo, const char *key)
 		return len;
 	assert(len <= sizeof(hash));
 
-	len = sign_hash(hash_algo, hash, len, key, NULL, sig + 1);
+	len = sign_hash(hash_algo, hash, len, key, g_keypass, sig + 1);
 	if (len <= 1)
 		return len;
 	assert(len < sizeof(sig));
@@ -844,7 +845,7 @@ static int cmd_sign_hash(struct command *cmd)
 			}
 
 			siglen = sign_hash(algo, sigv3_hash, hashlen / 2,
-					   key, NULL, sig + 1);
+					   key, g_keypass, sig + 1);
 
 			sig[0] = IMA_VERITY_DIGSIG;
 			sig[1] = DIGSIG_VERSION_3;	/* sigv3 */
@@ -856,7 +857,7 @@ static int cmd_sign_hash(struct command *cmd)
 			hex2bin(hash, line, hashlen / 2);
 
 			siglen = sign_hash(g_hash_algo, hash,
-					   hashlen / 2, key, NULL, sig + 1);
+					   hashlen / 2, key, g_keypass, sig + 1);
 			sig[0] = EVM_IMA_XATTR_DIGSIG;
 		}
 
@@ -3092,9 +3093,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'p':
 			if (optarg)
-				imaevm_params.keypass = optarg;
+				g_keypass = optarg;
 			else
-				imaevm_params.keypass = get_password();
+				g_keypass = get_password();
 			break;
 		case 'f':
 			sigfile = 1;
@@ -3236,8 +3237,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!imaevm_params.keypass)
-		imaevm_params.keypass = getenv("EVMCTL_KEY_PASSWORD");
+	if (!g_keypass)
+		g_keypass = getenv("EVMCTL_KEY_PASSWORD");
 
 	if (imaevm_params.keyfile != NULL &&
 	    imaevm_params.eng == NULL &&
