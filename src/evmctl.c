@@ -388,7 +388,9 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 				return -1;
 			}
 			if (ioctl(fd, FS_IOC_GETVERSION, &generation)) {
-				log_err("ioctl() failed\n");
+				log_errno_reset(LOG_ERR,
+						"FS_IOC_GETVERSION failed: %s",
+						file);
 				close(fd);
 				return -1;
 			}
