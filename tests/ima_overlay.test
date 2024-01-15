@@ -1,0 +1,264 @@
+#!/bin/bash
+#
+# Determine whether changes made to the backing file are detected on
+# the overlay.
+#
+# Assumptions:
+# - A signed file not in the IMA policy.
+# - The public key for verifying the signed file's signature is loaded
+#   onto the IMA keyring.
+#
+# Side affects:
+# - Overlay IMA measure and appraise policy rules
+#
+# Detect missing commits:
+# 18b44bc5a672 ("ovl: Always reevaluate the file signature for IMA")
+# b836c4d29f27 ("ima: detect changes to the backing overlay file")
+
+trap '_report_exit_and_cleanup cleanup' SIGINT SIGTERM SIGSEGV EXIT
+
+VERBOSE="${VERBOSE:-0}"
+
+MNTPOINT="/dev/shm/mnt"
+TEST_IMG="test.img"
+
+LOWER="$MNTPOINT/lower"
+UPPER="$MNTPOINT/upper"
+WORKDIR="$MNTPOINT/workdir"
+OVERLAY="$MNTPOINT/overlay"
+
+INFILE="/bin/more"
+OUTFILE="test-file"
+LOWER_FILE="$LOWER/$OUTFILE"
+OVERLAY_FILE="$OVERLAY/$OUTFILE"
+
+source ./functions.sh
+
+cleanup() {
+	if [ -e $OVERLAY ]; then
+		sudo umount $OVERLAY
+		rmdir $OVERLAY
+	fi
+	if [ -e $TEST_IMG ]; then
+		rm $TEST_IMG
+	fi
+}
+
+missing_commits() {
+	echo "Missing commits"
+	echo "18b44bc5a672 (\"ovl: Always reevaluate the file signature for IMA\")"
+	echo "b836c4d29f27 (\"ima: detect changes to the backing overlay file\")"
+}
+
+get_xattr() {
+	local file=$1
+	local xattr
+
+	xattr=$(getfattr -n security.ima -e hex --dump --absolute-names "$file" \
+		 | cut -s -d= -f2)
+	echo "$xattr"
+}
+
+compare_xattrs() {
+	local file=$1
+	local cmp_xattr=$2
+	local xattr
+
+	xattr=$(get_xattr "$file")
+	if [ "$xattr" = "$cmp_xattr" ]; then
+		log_info "$file: security.ima file signature copied"
+		return 1
+	else
+		log_info "$file: security.ima file signature NOT copied, fail test"
+		log_info "$file: $xattr"
+		log_info "base: $cmp_xattr"
+		return 0
+	fi
+}
+
+is_signed() {
+	local xattr=$1
+
+	if [ -z "$xattr" ]; then
+		return 0
+	elif [ "${xattr:0:4}" = "0x04" ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+is_imakey_loaded() {
+	local infile_xattr=$1
+	local xattr_keyid
+	local keyid_list
+	local keyids
+	local keyid
+
+	# The keyid is 8 characters
+	xattr_keyid=${infile_xattr:8:8}
+	if [ -z $xattr_keyid ]; then
+		return 0;
+	fi
+
+	keyids=$(keyctl show %:.ima | grep 'asymmetric: ........' | sed -n 's/.*\(.\{8\}$\)/\1 /p' | tr -d '\n')
+
+	# Walk through the list of keyids loaded on the IMA keyring
+	keyid_list=(${keyids})
+	for keyid in "${keyid_list[@]}"; do
+		if [ "$xattr_keyid" = "$keyid" ]; then
+			return 1
+		fi
+	done
+	return 0
+}
+
+# only add rule if not already defined
+add_rule() {
+	local rule="$1"
+	local securityfs_ima_policy="/sys/kernel/security/ima/policy"
+
+	if [ -z "$rule" ]; then
+		log_info "no IMA policy rule specified"
+	fi
+
+	grep --count -q -e "$rule" "$securityfs_ima_policy"
+	if [ $? -eq 1 ]; then
+		echo "$rule" > $securityfs_ima_policy
+	else
+		log_info "IMA policy exists: $rule"
+	fi
+}
+
+test1() {
+	log_test "test1: checking file signature is copied"
+
+	infile_xattr=$(get_xattr $INFILE)
+
+	is_signed "$infile_xattr"
+	if [ $? -ne 1 ]; then
+		log_skip "$INFILE is not signed, skip test"
+		return "$SKIP"
+	fi
+
+	mkdir -p $LOWER
+	cp --preserve=xattr,all $INFILE $LOWER_FILE
+
+	compare_xattrs "$LOWER_FILE" "$infile_xattr"
+	if [ $? -eq 1 ]; then
+		log_pass "test1: file signature copied"
+		return "$OK"
+	else
+		log_fail "test1: file signature not copied"
+		return "$FAIL"
+	fi
+}
+
+test2() {
+	local lower_xattr
+
+	log_test "test2: checking backing file signature is copied up to overlay"
+	# Create the remaining necessary directories.
+	mkdir -p $UPPER $WORKDIR $OVERLAY
+
+	if [ ! -e $LOWER_FILE ]; then
+		log_skip "$LOWER_FILE does not exist, skip test"
+		return "$SKIP"
+	fi
+
+	lower_xattr=$(get_xattr $LOWER_FILE)
+	is_signed "$lower_xattr"
+	if [ $? -ne 1 ]; then
+		log_fail "$LOWER_FILE is not signed, fail test"
+		return "$FAIL"
+	fi
+
+	mount -t overlay -o lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORKDIR \
+		none $OVERLAY
+
+	if [ $? -ne 0 ]; then
+		log_skip "overlay mount failed"
+		dmesg | tail
+		return "$SKIP"
+	fi
+
+	compare_xattrs "$OVERLAY_FILE" "$lower_xattr"
+	if [ $? -eq 1 ]; then
+		log_pass "test2: file signature copied up to overlay"
+		return "$OK"
+	else
+		log_fail "test2: file signature not copied up to overlay"
+		return "$FAIL"
+	fi
+}
+
+test3() {
+	local lower_xattr
+
+	log_test "test3: detecting modified backing file "
+	if [ ! -e $LOWER_FILE ]; then
+		log_skip "$LOWER_FILE does not exist, skip test"
+		return "$SKIP"
+	fi
+	lower_xattr=$(get_xattr $LOWER_FILE)
+
+	if [ ! -e $OVERLAY_FILE ]; then
+		log_skip "$OVERLAY_FILE does not exist, skip test"
+		return "$SKIP"
+	fi
+
+	if ! $LOWER_FILE --help &> /bin/null; then
+		log_fail "failed to execute lower file"
+		return "$FAIL"
+	else
+		log_info "successfully executed lower file"
+	fi
+
+	# Force caching the integrity results
+	add_rule "appraise func=FILE_CHECK fsname=overlay"
+	add_rule "measure func=FILE_CHECK fsname=overlay"
+
+	overlay_xattr=$(get_xattr $OVERLAY_FILE)
+	is_signed "$overlay_xattr"
+	if [ $? -ne 1 ]; then
+		log_fail "$OVERLAY_FILE is not signed, fail test"
+
+		# force negative test failure, return OK
+		return "$OK"
+	fi
+
+	is_imakey_loaded $overlay_xattr
+	if [ $? -eq 1 ]; then
+		log_info "file signature keyid ${overlay_xattr:8:8} is on IMA keyring"
+	else
+		log_fail "file signature keyid ${overlay_xattr:8:8} is not on IMA keyring"
+		# force negative test failure, return OK
+		return "$OK"
+	fi
+
+	if ! $OVERLAY_FILE --help &> /bin/null; then
+		log_fail "failed to execute overlay file"
+		return "$FAIL"
+	else
+		log_info "successfuly executed overlay file"
+	fi
+
+	# modify backing file
+	log_info "modify backing file"
+	echo "modify lower file" >> $LOWER_FILE
+
+	if ! $OVERLAY_FILE --help &> /bin/null; then
+		log_pass "test3: properly detected modified backing file"
+		return "$FAIL"
+	else
+		log_fail "test3: did not detect modified backing file"
+		missing_commits
+		return "$OK"
+	fi
+}
+
+mkdir -p $MNTPOINT
+
+expect_pass test1
+expect_pass test2
+expect_fail test3

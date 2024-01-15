@@ -351,6 +351,39 @@ _report_exit_and_cleanup() {
   fi
 }
 
+log_test() {
+	msg=$1
+
+	# Separate tests
+	[ -n "$msg" ] && echo "$msg"
+}
+
+log_pass() {
+	msg=$1
+
+	[ -n "$msg" ] && echo -e "${GREEN}SUCCESS: $msg${NORM}\n"
+}
+
+log_skip() {
+	msg=$1
+
+	[ -n "$msg" ] && echo -e "${CYAN}SKIP: $msg${NORM}\n"
+}
+
+log_fail() {
+	msg=$1
+
+	[ -n "$msg" ] && echo -e "${RED}FAILURE: $msg${NORM}\n"
+}
+
+log_info() {
+	msg=$1
+
+	if [ -n "$msg" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: $msg"
+	fi
+}
+
 # Setup SoftHSM for local testing by calling the softhsm_setup script.
 # Use the provided workdir as the directory where SoftHSM will store its state
 # into.
