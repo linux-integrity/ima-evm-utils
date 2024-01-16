@@ -122,6 +122,12 @@ add_rule() {
 		log_info "no IMA policy rule specified"
 	fi
 
+
+	ls -lat "$securityfs_ima_policy"
+	mount | grep "security"
+	# chmod 600 "$securityfs_ima_policy"
+	cat "$securityfs_ima_policy"
+
 	grep --count -q -e "$rule" "$securityfs_ima_policy"
 	if [ $? -eq 1 ]; then
 		echo "$rule" > $securityfs_ima_policy
