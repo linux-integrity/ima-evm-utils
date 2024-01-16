@@ -17,6 +17,8 @@ esac
 # ibmswtpm2 requires gcc
 [ "$CC" = "gcc" ] || CC="gcc $CC"
 
+yum -y install rpm-plugin-ima || true
+
 yum -y install \
 	$CC $TSS \
 	asciidoc \
