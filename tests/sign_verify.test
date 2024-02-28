@@ -447,10 +447,24 @@ if [ -n "${PKCS11_KEYURI}" ]; then
     expect_pass __skip
     expect_pass __skip
   fi
+
+  # provider may not be supported or pkcs11 provider not installed
+  if evmctl --help 2>/dev/null | grep -q provider && \
+     openssl list -providers -provider pkcs11 2>/dev/null; then
+    PKCS11_PRIVKEYURI=${PKCS11_KEYURI//type=public/type=private}
+
+    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_PRIVKEYURI}" ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS="--keyid=aabbccdd --provider pkcs11"
+    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_PRIVKEYURI}" ALG=sha1   PREFIX=0x030202aabbccdd0100 OPTS="--keyid=aabbccdd --provider pkcs11"
+  else
+    __skip() { echo "pkcs11 test with provider is skipped since no provider support or pkcs11 not installed"; return "$SKIP"; }
+    expect_pass __skip
+    expect_pass __skip
+  fi
 else
   # to have a constant number of tests, skip these two tests
-  __skip() { echo "pkcs11 test is skipped: could not setup softhsm"; return $SKIP; }
-  expect_pass __skip
-  expect_pass __skip
+  __skip() { echo "pkcs11 test is skipped: could not setup softhsm"; return "$SKIP"; }
+  for i in $(seq 0 3); do
+    expect_pass __skip
+  done
 fi
 _softhsm_teardown "${WORKDIR}"
