@@ -1031,33 +1031,53 @@ uint32_t imaevm_read_keyid(const char *certfile)
 	return ntohl(keyid_be);
 }
 
-static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
+static EVP_PKEY *read_priv_pkey_engine(ENGINE *e, const char *keyfile,
+				       const char *keypass, uint32_t keyid)
+{
+#ifdef CONFIG_IMA_EVM_ENGINE
+	EVP_PKEY *pkey;
+
+	if (!keyid) {
+		log_err("When using a pkcs11 URI you must provide the keyid with an option\n");
+		return NULL;
+	}
+
+	if (keypass) {
+		if (!ENGINE_ctrl_cmd_string(e, "PIN", keypass, 0)) {
+			log_err("Failed to set the PIN for the private key\n");
+			goto err_engine;
+		}
+	}
+	pkey = ENGINE_load_private_key(e, keyfile, NULL, NULL);
+	if (!pkey) {
+		log_err("Failed to load private key %s\n", keyfile);
+		goto err_engine;
+	}
+	return pkey;
+
+err_engine:
+	output_openssl_errors();
+	return NULL;
+#else
+	log_err("OpenSSL \"engine\" support is disabled\n");
+	return NULL;
+#endif
+}
+
+static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
+				const struct imaevm_ossl_access *access_info,
+				uint32_t keyid)
 {
 	FILE *fp;
 	EVP_PKEY *pkey = NULL;
 
 	if (!strncmp(keyfile, "pkcs11:", 7)) {
-#ifdef CONFIG_IMA_EVM_ENGINE
-		if (!imaevm_params.keyid) {
-			log_err("When using a pkcs11 URI you must provide the keyid with an option\n");
-			return NULL;
+		switch (access_info->type) {
+		case IMAEVM_OSSL_ACCESS_TYPE_ENGINE:
+			pkey = read_priv_pkey_engine(access_info->u.engine,
+						     keyfile, keypass, keyid);
+			break;
 		}
-
-		if (keypass) {
-			if (!ENGINE_ctrl_cmd_string(imaevm_params.eng, "PIN", keypass, 0)) {
-				log_err("Failed to set the PIN for the private key\n");
-				goto err_engine;
-			}
-		}
-		pkey = ENGINE_load_private_key(imaevm_params.eng, keyfile, NULL, NULL);
-		if (!pkey) {
-			log_err("Failed to load private key %s\n", keyfile);
-			goto err_engine;
-		}
-#else
-		log_err("OpenSSL \"engine\" support is disabled\n");
-		goto err_engine;
-#endif
 	} else {
 		fp = fopen(keyfile, "r");
 		if (!fp) {
@@ -1076,18 +1096,17 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass)
 
 	return pkey;
 
-err_engine:
-	output_openssl_errors();
-	return NULL;
 }
 
 #if CONFIG_SIGV1
-static RSA *read_priv_key(const char *keyfile, const char *keypass)
+static RSA *read_priv_key(const char *keyfile, const char *keypass,
+			  const struct imaevm_ossl_access *access_info,
+			  uint32_t keyid)
 {
 	EVP_PKEY *pkey;
 	RSA *key;
 
-	pkey = read_priv_pkey(keyfile, keypass);
+	pkey = read_priv_pkey(keyfile, keypass, access_info, keyid);
 	if (!pkey)
 		return NULL;
 	key = EVP_PKEY_get1_RSA(pkey);
@@ -1113,7 +1132,9 @@ static int get_hash_algo_v1(const char *algo)
 
 static int sign_hash_v1(const char *hashalgo, const unsigned char *hash,
 			int size, const char *keyfile, const char *keypass,
-			unsigned char *sig)
+			unsigned char *sig,
+			const struct imaevm_ossl_access *access_info,
+			uint32_t keyid)
 {
 	int len = -1, hashalgo_idx;
 	SHA_CTX ctx;
@@ -1147,7 +1168,7 @@ static int sign_hash_v1(const char *hashalgo, const unsigned char *hash,
 	log_info("hash(%s): ", hashalgo);
 	log_dump(hash, size);
 
-	key = read_priv_key(keyfile, keypass);
+	key = read_priv_key(keyfile, keypass, access_info, keyid);
 	if (!key)
 		return -1;
 
@@ -1201,7 +1222,9 @@ out:
  */
 static int sign_hash_v2(const char *algo, const unsigned char *hash,
 			int size, const char *keyfile, const char *keypass,
-			unsigned char *sig)
+			unsigned char *sig,
+			const struct imaevm_ossl_access *access_info,
+			uint32_t keyid)
 {
 	struct signature_v2_hdr *hdr;
 	int len = -1;
@@ -1211,7 +1234,6 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	const EVP_MD *md;
 	size_t sigsize;
 	const char *st;
-	uint32_t keyid;
 
 	if (!hash) {
 		log_err("sign_hash_v2: hash is null\n");
@@ -1236,7 +1258,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	log_info("hash(%s): ", algo);
 	log_dump(hash, size);
 
-	pkey = read_priv_pkey(keyfile, keypass);
+	pkey = read_priv_pkey(keyfile, keypass, access_info, keyid);
 	if (!pkey)
 		return -1;
 
@@ -1259,8 +1281,8 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	}
 #endif
 
-	if (imaevm_params.keyid)
-		keyid = htonl(imaevm_params.keyid);
+	if (keyid)
+		keyid = htonl(keyid);
 	else {
 		int keyid_read_failed = read_keyid_from_cert(&keyid, keyfile, false);
 
@@ -1303,20 +1325,68 @@ err:
 	return len;
 }
 
-
-int sign_hash(const char *hashalgo, const unsigned char *hash, int size, const char *keyfile, const char *keypass, unsigned char *sig)
+static int check_ossl_access(const struct imaevm_ossl_access *access_info)
 {
+	switch (access_info->type) {
+	case IMAEVM_OSSL_ACCESS_TYPE_NONE:
+#ifdef CONFIG_IMA_EVM_ENGINE
+	case IMAEVM_OSSL_ACCESS_TYPE_ENGINE:
+#endif
+		return 0;
+
+	default:
+		errno = EINVAL;
+		return -1;
+	}
+}
+
+int imaevm_signhash(const char *hashalgo, const unsigned char *hash, int size,
+		    const char *keyfile, const char *keypass,
+		    unsigned char *sig, long sigflags,
+		    const struct imaevm_ossl_access *access_info,
+		    uint32_t keyid)
+{
+	int rc;
+
+	if (access_info) {
+		rc = check_ossl_access(access_info);
+		if (rc)
+			return rc;
+	}
+	if (sigflags & ~IMAEVM_SIGFLAGS_SUPPORT) {
+		/* unsupported flag */
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (sigflags & IMAEVM_SIGFLAG_SIGNATURE_V1) {
+#if CONFIG_SIGV1
+		return sign_hash_v1(hashalgo, hash, size, keyfile, keypass, sig,
+				    access_info, keyid);
+#else
+		log_info("Signature version 1 deprecated.");
+		return -1;
+#endif
+	}
+
+	return sign_hash_v2(hashalgo, hash, size, keyfile, keypass, sig,
+			    access_info, keyid);
+}
+
+
+int sign_hash(const char *hashalgo, const unsigned char *hash, int size,
+	      const char *keyfile, const char *keypass, unsigned char *sig)
+{
+	const struct imaevm_ossl_access access_info = {
+		.type = IMAEVM_OSSL_ACCESS_TYPE_ENGINE,
+		.u.engine = imaevm_params.eng,
+	};
+	int sigflags = imaevm_params.x509 ? 0 : IMAEVM_SIGFLAG_SIGNATURE_V1;
 	if (!keypass)	/* Avoid breaking existing libimaevm usage */
 		keypass = imaevm_params.keypass;
 
-	if (imaevm_params.x509)
-		return sign_hash_v2(hashalgo, hash, size, keyfile, keypass, sig);
-#if CONFIG_SIGV1
-	else
-		return sign_hash_v1(hashalgo, hash, size, keyfile, keypass, sig);
-#endif
-	log_info("Signature version 1 deprecated.");
-	return -1;
+	return imaevm_signhash(hashalgo, hash, size, keyfile, keypass, sig,
+			       sigflags, &access_info, imaevm_params.keyid);
 }
 
 static void libinit()
