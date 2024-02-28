@@ -27,3 +27,5 @@ apt-get install -y \
 		xsltproc \
 		xxd \
 	&& control openssl-gost enabled
+
+apt-get install -y pkcs11-provider || true

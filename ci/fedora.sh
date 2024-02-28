@@ -60,6 +60,7 @@ if [ -f /etc/centos-release ]; then
 	yum -y install epel-release
 fi
 yum -y install softhsm || true
+yum -y install softhsm pkcs11-provider || true
 
 # haveged is available via EPEL on CentOS stream8.
 yum -y install haveged || true

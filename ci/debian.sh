@@ -59,3 +59,4 @@ $apt \
 $apt xxd || $apt vim-common
 $apt libengine-gost-openssl1.1$ARCH || true
 $apt softhsm gnutls-bin libengine-pkcs11-openssl1.1$ARCH || true
+$apt softhsm gnutls-bin pkcs11-provider || true
