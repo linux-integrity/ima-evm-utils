@@ -62,6 +62,12 @@
 #include <openssl/err.h>
 #include <openssl/engine.h>
 
+#if CONFIG_IMA_EVM_PROVIDER
+#include <openssl/provider.h>
+#include <openssl/ui.h>
+#include <openssl/store.h>
+#endif
+
 #include "imaevm.h"
 #include "hash_info.h"
 
@@ -1064,6 +1070,64 @@ err_engine:
 #endif
 }
 
+#ifdef CONFIG_IMA_EVM_PROVIDER
+static int ui_get_pin(UI *ui, UI_STRING *uis)
+{
+	return UI_set_result(ui, uis, UI_get0_user_data(ui));
+}
+
+static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
+					 const char *keypass, uint32_t keyid)
+{
+	UI_METHOD *ui_method = NULL;
+	OSSL_STORE_INFO *info;
+	OSSL_STORE_CTX *store;
+	EVP_PKEY *pkey = NULL;
+	int typ;
+
+	if (!keyid) {
+		log_err("When using a pkcs11 URI you must provide the keyid with an option\n");
+		return NULL;
+	}
+
+	if (keypass) {
+		ui_method = UI_create_method("PIN reader");
+		if (!ui_method)
+			return NULL;
+		UI_method_set_reader(ui_method, ui_get_pin);
+	}
+	store = OSSL_STORE_open_ex(keyfile, NULL, "provider=pkcs11", ui_method,
+				   (void *)keypass, NULL, NULL, NULL);
+	if (!store) {
+		log_err("Failed to open store for provider=pkcs11\n");
+		goto err_provider;
+	}
+	for (info = OSSL_STORE_load(store);
+	     info != NULL && pkey == NULL;
+	     info = OSSL_STORE_load(store)) {
+		typ = OSSL_STORE_INFO_get_type(info);
+
+		switch (typ) {
+		case OSSL_STORE_INFO_PKEY:
+			pkey = OSSL_STORE_INFO_get1_PKEY(info);
+			break;
+		}
+		OSSL_STORE_INFO_free(info);
+	}
+	OSSL_STORE_close(store);
+
+	if (!pkey) {
+		log_err("Failed to load private key %s\n", keyfile);
+		goto err_provider;
+	}
+	return pkey;
+
+err_provider:
+	output_openssl_errors();
+	return NULL;
+}
+#endif
+
 static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 				const struct imaevm_ossl_access *access_info,
 				uint32_t keyid)
@@ -1077,6 +1141,12 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 			pkey = read_priv_pkey_engine(access_info->u.engine,
 						     keyfile, keypass, keyid);
 			break;
+#ifdef CONFIG_IMA_EVM_PROVIDER
+		case IMAEVM_OSSL_ACCESS_TYPE_PROVIDER:
+			pkey = read_priv_pkey_provider(access_info->u.provider,
+						       keyfile, keypass, keyid);
+			break;
+#endif
 		}
 	} else {
 		fp = fopen(keyfile, "r");
@@ -1331,6 +1401,9 @@ static int check_ossl_access(const struct imaevm_ossl_access *access_info)
 	case IMAEVM_OSSL_ACCESS_TYPE_NONE:
 #ifdef CONFIG_IMA_EVM_ENGINE
 	case IMAEVM_OSSL_ACCESS_TYPE_ENGINE:
+#endif
+#ifdef CONFIG_IMA_EVM_PROVIDER
+	case IMAEVM_OSSL_ACCESS_TYPE_PROVIDER:
 #endif
 		return 0;
 

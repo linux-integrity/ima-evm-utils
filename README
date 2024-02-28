@@ -69,7 +69,6 @@ OPTIONS
       --smack        use extra SMACK xattrs for EVM
       --m32          force EVM hmac/signature for 32 bit target system
       --m64          force EVM hmac/signature for 64 bit target system
-      --engine e     preload OpenSSL engine e (such as: gost) is deprecated
       --ino          use custom inode for EVM
       --uid          use custom UID for EVM
       --gid          use custom GID for EVM
@@ -79,9 +78,11 @@ OPTIONS
       --selinux      use custom Selinux label for EVM
       --caps         use custom Capabilities for EVM(unspecified: from FS, empty: do not use)
       --pcrs         file containing TPM pcrs, one per hash-algorithm/bank
-      --ignore-violations ignore ToMToU measurement violations
       --verify-sig   verify the file signature based on the file hash, both
                      stored in the template data.
+      --engine e     preload OpenSSL engine e (such as: gost) is deprecated
+      --provider p   preload OpenSSL provider (such as: pkcs11)
+      --ignore-violations ignore ToMToU measurement violations
       --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)
   -v                 increase verbosity level
   -h, --help         display this help and exit

@@ -7,12 +7,18 @@ libimaevm_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 libimaevm_la_LDFLAGS = -version-info 4:0:0
 libimaevm_la_LIBADD =  $(LIBCRYPTO_LIBS)
 
+libimaevm_la_CFLAGS =
+
 if CONFIG_SIGV1
-libimaevm_la_CFLAGS = -DCONFIG_SIGV1
+libimaevm_la_CFLAGS += -DCONFIG_SIGV1
 endif
 
 if CONFIG_IMA_EVM_ENGINE
-libimaevm_la_CFLAGS = -DCONFIG_IMA_EVM_ENGINE
+libimaevm_la_CFLAGS += -DCONFIG_IMA_EVM_ENGINE
+endif
+
+if CONFIG_IMA_EVM_PROVIDER
+libimaevm_la_CFLAGS += -DCONFIG_IMA_EVM_PROVIDER
 endif
 
 include_HEADERS = imaevm.h
@@ -30,14 +36,21 @@ evmctl_CPPFLAGS = $(AM_CPPFLAGS) $(LIBCRYPTO_CFLAGS)
 evmctl_LDFLAGS = $(LDFLAGS_READLINE)
 evmctl_LDADD =  $(LIBCRYPTO_LIBS) -lkeyutils libimaevm.la
 
+evmctl_CFLAGS =
+
 # Enable IMA signature version 1
 if CONFIG_SIGV1
-evmctl_CFLAGS = -DCONFIG_SIGV1
+evmctl_CFLAGS += -DCONFIG_SIGV1
 endif
 
 # Enable "--engine" support
 if CONFIG_IMA_EVM_ENGINE
-evmctl_CFLAGS = -DCONFIG_IMA_EVM_ENGINE
+evmctl_CFLAGS += -DCONFIG_IMA_EVM_ENGINE
+endif
+
+# Enable "--provider" support
+if CONFIG_IMA_EVM_PROVIDER
+evmctl_CFLAGS += -DCONFIG_IMA_EVM_PROVIDER
 endif
 
 # USE_PCRTSS uses the Intel TSS

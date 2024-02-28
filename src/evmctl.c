@@ -68,6 +68,9 @@
 #if CONFIG_IMA_EVM_ENGINE
 #include <openssl/engine.h>
 #endif
+#if CONFIG_IMA_EVM_PROVIDER
+#include <openssl/provider.h>
+#endif
 #include <openssl/x509v3.h>
 #include "hash_info.h"
 #include "pcr.h"
@@ -2915,6 +2918,9 @@ static void usage(void)
 #if CONFIG_IMA_EVM_ENGINE
 		"      --engine e     preload OpenSSL engine e (such as: gost) is deprecated\n"
 #endif
+#if CONFIG_IMA_EVM_PROVIDER
+		"      --provider p   preload OpenSSL provider (such as: pkcs11)\n"
+#endif
 		"      --ignore-violations ignore ToMToU measurement violations\n"
 #ifdef DEBUG
 		"      --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)\n"
@@ -2991,6 +2997,9 @@ static struct option opts[] = {
 	{"veritysig", 0, 0, 146},
 	{"hwtpm", 0, 0, 147},
 	{"hmackey", 1, 0, 148},
+#if CONFIG_IMA_EVM_PROVIDER
+	{"provider", 1, 0, 149},
+#endif
 	{}
 
 };
@@ -3035,6 +3044,25 @@ static char *get_password(void)
 
 	return password;
 }
+
+
+#if CONFIG_IMA_EVM_PROVIDER
+static OSSL_PROVIDER *setup_provider(const char *name)
+{
+	OSSL_PROVIDER *p = OSSL_PROVIDER_load(NULL, name);
+
+	if (!p) {
+		log_err("provider %s isn't available\n", optarg);
+		ERR_print_errors_fp(stderr);
+	} else if (!OSSL_PROVIDER_self_test(p)) {
+		log_err("provider %s self test failed\n", optarg);
+		ERR_print_errors_fp(stderr);
+		OSSL_PROVIDER_unload(p);
+		p = NULL;
+	}
+	return p;
+}
+#endif
 
 #if CONFIG_IMA_EVM_ENGINE
 static ENGINE *setup_engine(const char *engine_id)
@@ -3240,6 +3268,16 @@ int main(int argc, char *argv[])
 		case 148:
 			imaevm_params.hmackeyfile = optarg;
 			break;
+#if CONFIG_IMA_EVM_PROVIDER
+		case 149: /* --provider p */
+			access_info.u.provider = setup_provider(optarg);
+			if (!access_info.u.provider) {
+				log_info("setup_provider failed\n");
+				goto error;
+			}
+			access_info.type = IMAEVM_OSSL_ACCESS_TYPE_PROVIDER;
+			break;
+#endif
 		case '?':
 			exit(1);
 			break;
@@ -3254,6 +3292,13 @@ int main(int argc, char *argv[])
 	if (imaevm_params.keyfile != NULL &&
 	    access_info.type == IMAEVM_OSSL_ACCESS_TYPE_NONE &&
 	    !strncmp(imaevm_params.keyfile, "pkcs11:", 7)) {
+#if CONFIG_IMA_EVM_PROVIDER
+		if (access_info.type == IMAEVM_OSSL_ACCESS_TYPE_NONE) {
+			access_info.u.provider = setup_provider("pkcs11");
+			if (access_info.u.provider)
+				access_info.type = IMAEVM_OSSL_ACCESS_TYPE_PROVIDER;
+		}
+#endif
 #if CONFIG_IMA_EVM_ENGINE
 		if (access_info.type == IMAEVM_OSSL_ACCESS_TYPE_NONE) {
 			access_info.u.engine = setup_engine("pkcs11");
@@ -3294,6 +3339,10 @@ error:
 		ENGINE_cleanup();
 #endif
 	}
+#endif
+#if CONFIG_IMA_EVM_PROVIDER
+	if (access_info.type == IMAEVM_OSSL_ACCESS_TYPE_PROVIDER)
+		OSSL_PROVIDER_unload(access_info.u.provider);
 #endif
 	ERR_free_strings();
 	EVP_cleanup();

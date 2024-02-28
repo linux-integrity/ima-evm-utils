@@ -57,6 +57,13 @@ struct engine_st;
 typedef struct engine_st ENGINE; /* unused when no engine support */
 #endif
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+# include <openssl/provider.h>
+#else
+struct ossl_provider_st;
+typedef struct ossl_provider_st OSSL_PROVIDER;
+#endif
+
 #ifdef USE_FPRINTF
 #define do_log(level, fmt, args...)	\
 	({ if (level <= imaevm_params.verbose) fprintf(stderr, fmt, ##args); })
@@ -268,8 +275,10 @@ struct imaevm_ossl_access {
 	int type;
 #define IMAEVM_OSSL_ACCESS_TYPE_NONE   0
 #define IMAEVM_OSSL_ACCESS_TYPE_ENGINE 1  /* also: engine field exists */
+#define IMAEVM_OSSL_ACCESS_TYPE_PROVIDER 2 /* also: provider field exists */
 	union {
 		ENGINE *engine;
+		OSSL_PROVIDER *provider;
 	} u;
 };
 
