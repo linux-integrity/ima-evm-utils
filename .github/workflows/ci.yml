@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Determine last kernel commit
         id: last-commit
@@ -40,14 +40,14 @@ jobs:
 
       - name: Cache UML kernel
         id: cache-linux
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: linux
           key: linux-${{ steps.last-commit.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
 
       - name: Cache signing key
         id: cache-key
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: signing_key.pem
           key: signing_key.pem-${{ steps.last-commit.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
@@ -218,7 +218,7 @@ jobs:
 
     - name: Retrieve UML kernel
       if: ${{ matrix.env.TST_ENV }}
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       continue-on-error: false
       with:
         path: linux
@@ -227,7 +227,7 @@ jobs:
     - name: Retrieve signing key
       if: ${{ matrix.env.TST_ENV }}
       continue-on-error: false
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: signing_key.pem
         key: signing_key.pem-${{ needs.build.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
