@@ -342,6 +342,11 @@ if [ -z "$FSVERITY" ]; then
 	exit "$SKIP"
 fi
 
+if ! evmctl --help | grep -q veritysig ; then
+	echo -e "${CYAN}SKIP: evmctl "--veritysig" option not supported${NORM}"
+	exit "$SKIP"
+fi
+
 if [ "x$(id -u)" != "x0" ]; then
 	echo "${CYAN}SKIP: Must be root to execute this test${NORM}"
 	exit "$SKIP"
