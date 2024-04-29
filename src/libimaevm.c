@@ -71,6 +71,9 @@
 #include "imaevm.h"
 #include "hash_info.h"
 
+static int read_keyid_from_cert(uint32_t *keyid_be, const char *certfile,
+				int try_der);
+
 /* Names that are primary for OpenSSL. */
 static const char *const pkey_hash_algo[PKEY_HASH__LAST] = {
 	[PKEY_HASH_MD4]		= "md4",
@@ -458,7 +461,9 @@ int imaevm_init_public_keys(const char *keyfiles,
 			continue;
 		}
 
-		calc_keyid_v2(&entry->keyid, entry->name, entry->key);
+		if (read_keyid_from_cert(&entry->keyid, keyfile, 1) < 0)
+			calc_keyid_v2(&entry->keyid, entry->name, entry->key);
+
 		sprintf(entry->name, "%x", __be32_to_cpup(&entry->keyid));
 		log_info("key %d: %s %s\n", i++, entry->name, keyfile);
 		entry->next = *public_keys;
