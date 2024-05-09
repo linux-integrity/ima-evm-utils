@@ -57,6 +57,6 @@ $apt \
 	gawk
 
 $apt xxd || $apt vim-common
-$apt libengine-gost-openssl1.1$ARCH || true
-$apt softhsm gnutls-bin libengine-pkcs11-openssl1.1$ARCH || true
-$apt softhsm gnutls-bin pkcs11-provider || true
+$apt libengine-gost-openssl || true
+$apt softhsm2 gnutls-bin libengine-pkcs11-openssl || true
+$apt softhsm2 gnutls-bin pkcs11-provider || true
