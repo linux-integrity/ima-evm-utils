@@ -3049,7 +3049,7 @@ static char *get_password(void)
 #if CONFIG_IMA_EVM_PROVIDER
 static OSSL_PROVIDER *setup_provider(const char *name)
 {
-	OSSL_PROVIDER *p = OSSL_PROVIDER_load(NULL, name);
+	OSSL_PROVIDER *p = OSSL_PROVIDER_try_load(NULL, name, 1);
 
 	if (!p) {
 		log_err("provider %s isn't available\n", optarg);
