@@ -132,13 +132,12 @@ jobs:
               CC: gcc
               TSS: tpm2-tss
 
-          - container: "ubuntu:jammy"
+          - container: "ubuntu:noble"
             env:
               CC: gcc
               TSS: ibmtss
-              COMPILE_SSL: openssl-3.0.5
 
-          - container: "ubuntu:mantic"
+          - container: "ubuntu:jammy"
             env:
               CC: gcc
               TSS: ibmtss

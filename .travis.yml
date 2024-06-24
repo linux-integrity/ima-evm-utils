@@ -40,11 +40,11 @@ matrix:
           compiler: gcc
 
         - os: linux
-          env: DISTRO=ubuntu:mantic TSS=ibmtss
+          env: DISTRO=ubuntu:noble TSS=ibmtss
           compiler: gcc
 
         - os: linux
-          env: DISTRO=ubuntu:jammy TSS=ibmtss COMPILE_SSL=openssl-3.0.5
+          env: DISTRO=ubuntu:jammy TSS=ibmtss
           compiler: gcc
 
         - os: linux
