@@ -3347,5 +3347,8 @@ error:
 	ERR_free_strings();
 	EVP_cleanup();
 	BIO_free(NULL);
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	OPENSSL_cleanup();
+#endif
 	return err;
 }
