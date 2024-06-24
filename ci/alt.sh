@@ -28,4 +28,4 @@ apt-get install -y \
 		xxd \
 	&& control openssl-gost enabled
 
-apt-get install -y pkcs11-provider || true
+# apt-get install -y pkcs11-provider || true
