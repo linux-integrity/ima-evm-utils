@@ -7,6 +7,12 @@ if [ -z "$CC" ]; then
 	exit 1
 fi
 
+# Install crb for tss2-devel and tpm2-tss-devel on CentOS stream 9
+if [ -f /etc/centos-release ]; then
+	yum -y install dnf-plugins-core
+	yum -y config-manager --set-enabled crb
+fi
+
 case "$TSS" in
 ibmtss) TSS="tss2-devel";;
 tpm2-tss) TSS="tpm2-tss-devel";;

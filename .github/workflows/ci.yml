@@ -160,9 +160,9 @@ jobs:
               TST_KERNEL: ../linux
               TST_EVM_CHANGE_MODE: 1
 
-          - container: "centos:7"
+          - container: "quay.io/centos/centos:stream9"
             env:
-              CC: gcc
+              CC: clang
               TSS: tpm2-tss
 
           - container: "debian:testing"
