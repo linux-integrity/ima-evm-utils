@@ -1,3 +1,25 @@
+2024-7-1  Mimi Zohar <zohar@linux.ibm.com>
+
+	version 1.6:
+
+	* CI changes:
+	  * Update distros, removing EOL
+	  * Limit installing PKCS11 provider package until dependency (e.g.
+	    OpenSSL, p11-kit-modules, SoftHSM) deadlock on alt:sisyphus
+	    and debian:testing are addressed.
+	* License change:
+	  * Update package and library license from GPLv2 to GPL-2.0-or-later
+	    and LGPL-2.0-or-later respectively.
+	* Tests:
+	  * New ima_policy_check.test, mmap_check.test
+	  * Add PKCS11 provider test to sign_verify.test; skip PKCS11 engine
+	    test when OpenSSL engine is not supported.
+	* Misc bug fixes and code cleanup:
+	  * Instead of relying on libimaevm global variables (e.g. public_keys,
+	    struct libimaevm_params variables), which is not concurrency safe,
+	    define and pass local variables.
+	  * New ShellCheck target
+
 2023-2-24  Mimi Zohar <zohar@linux.ibm.com>
 
 	version 1.5:
