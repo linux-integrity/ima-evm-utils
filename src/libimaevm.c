@@ -1118,6 +1118,11 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 	EVP_PKEY *pkey = NULL;
 
 	if (!strncmp(keyfile, "pkcs11:", 7)) {
+		if (!access_info) {
+			log_err("PKCS11 engine or provider not specified");
+			return NULL;
+		}
+
 		switch (access_info->type) {
 		case IMAEVM_OSSL_ACCESS_TYPE_ENGINE:
 			pkey = read_priv_pkey_engine(access_info->u.engine,
