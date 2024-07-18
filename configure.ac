@@ -59,6 +59,7 @@ AC_ARG_ENABLE(sigv1,
 AC_ARG_ENABLE(engine,
 	      [AS_HELP_STRING([--disable-engine], [build ima-evm-utils without OpenSSL engine support])],,[enable_engine=yes])
 	AC_CHECK_LIB([crypto], [ENGINE_init],, [enable_engine=no])
+	AC_CHECK_HEADERS(openssl/engine.h, , [enable_engine=no])
 	AM_CONDITIONAL([CONFIG_IMA_EVM_ENGINE], [test "x$enable_engine" = "xyes"])
 
 AC_ARG_ENABLE(provider,
