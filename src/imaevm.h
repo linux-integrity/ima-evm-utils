@@ -27,7 +27,8 @@
 #include <openssl/rsa.h>
 #include <openssl/opensslconf.h>
 
-#if !defined(OPENSSL_NO_ENGINE) && !defined(OPENSSL_NO_DYNAMIC_ENGINE)
+#if !defined(OPENSSL_NO_ENGINE) && !defined(OPENSSL_NO_DYNAMIC_ENGINE) \
+ && !defined(OPENSSL_NO_STATIC_ENGINE)
 # include <openssl/engine.h>
 #else
 struct engine_st;

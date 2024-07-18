@@ -37,7 +37,10 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
+
+#if CONFIG_IMA_EVM_ENGINE
 #include <openssl/engine.h>
+#endif
 
 #if CONFIG_IMA_EVM_PROVIDER
 #include <openssl/provider.h>
