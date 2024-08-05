@@ -6,8 +6,12 @@ libimaevm is provided under:
 
 	https://spdx.org/licenses/LGPL-2.0-or-later.html
 
+	See COPYING.LGPL
+
 evmctl is provided under:
 
 	SPDX-License-Identifier: GPL-2.0-or-later
 
 	https://spdx.org/licenses/GPL-2.0-or-later.html
+
+	See COPYING
