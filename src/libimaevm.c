@@ -1447,12 +1447,16 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size,
 		.type = IMAEVM_OSSL_ACCESS_TYPE_ENGINE,
 		.u.engine = imaevm_params.eng,
 	};
+	struct imaevm_ossl_access const *paccess_info = NULL;
+	if (imaevm_params.eng)
+		paccess_info = &access_info;
+
 	int sigflags = imaevm_params.x509 ? 0 : IMAEVM_SIGFLAG_SIGNATURE_V1;
 	if (!keypass)	/* Avoid breaking existing libimaevm usage */
 		keypass = imaevm_params.keypass;
 
 	return imaevm_signhash(hashalgo, hash, size, keyfile, keypass, sig,
-			       sigflags, &access_info, imaevm_params.keyid);
+			       sigflags, paccess_info, imaevm_params.keyid);
 }
 
 static void libinit()
