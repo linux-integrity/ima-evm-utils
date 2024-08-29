@@ -1060,10 +1060,12 @@ static int ui_get_pin(UI *ui, UI_STRING *uis)
 {
 	return UI_set_result(ui, uis, UI_get0_user_data(ui));
 }
+#endif
 
 static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
 					 const char *keypass, uint32_t keyid)
 {
+#ifdef CONFIG_IMA_EVM_PROVIDER
 	UI_METHOD *ui_method = NULL;
 	OSSL_STORE_INFO *info;
 	OSSL_STORE_CTX *store;
@@ -1110,8 +1112,11 @@ static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
 err_provider:
 	output_openssl_errors();
 	return NULL;
-}
+#else
+	log_err("OpenSSL \"provider\" support is disabled\n");
+	return NULL;
 #endif
+}
 
 static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 				const struct imaevm_ossl_access *access_info,
@@ -1131,12 +1136,10 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 			pkey = read_priv_pkey_engine(access_info->u.engine,
 						     keyfile, keypass, keyid);
 			break;
-#ifdef CONFIG_IMA_EVM_PROVIDER
 		case IMAEVM_OSSL_ACCESS_TYPE_PROVIDER:
 			pkey = read_priv_pkey_provider(access_info->u.provider,
 						       keyfile, keypass, keyid);
 			break;
-#endif
 		}
 	} else {
 		fp = fopen(keyfile, "r");
