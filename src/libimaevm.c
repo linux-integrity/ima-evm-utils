@@ -1388,16 +1388,16 @@ err:
 	return len;
 }
 
+/*
+ * Check whether access_info contains a valid type. Whether the type
+ * (engine or provider) is supported must be checked elsewhere.
+ */
 static int check_ossl_access(const struct imaevm_ossl_access *access_info)
 {
 	switch (access_info->type) {
 	case IMAEVM_OSSL_ACCESS_TYPE_NONE:
-#ifdef CONFIG_IMA_EVM_ENGINE
 	case IMAEVM_OSSL_ACCESS_TYPE_ENGINE:
-#endif
-#ifdef CONFIG_IMA_EVM_PROVIDER
 	case IMAEVM_OSSL_ACCESS_TYPE_PROVIDER:
-#endif
 		return 0;
 
 	default:
