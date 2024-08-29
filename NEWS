@@ -1,3 +1,9 @@
+2024-8-28 Mimi Zohar <zohar@linux.ibm.com>
+	version 1.6.1:
+
+	* Add copies of the license texts
+	* Fix build to address missing openssl/engine.h file
+
 2024-7-1  Mimi Zohar <zohar@linux.ibm.com>
 
 	version 1.6:
