@@ -1060,10 +1060,12 @@ static int ui_get_pin(UI *ui, UI_STRING *uis)
 {
 	return UI_set_result(ui, uis, UI_get0_user_data(ui));
 }
+#endif
 
 static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
 					 const char *keypass, uint32_t keyid)
 {
+#ifdef CONFIG_IMA_EVM_PROVIDER
 	UI_METHOD *ui_method = NULL;
 	OSSL_STORE_INFO *info;
 	OSSL_STORE_CTX *store;
@@ -1110,8 +1112,11 @@ static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
 err_provider:
 	output_openssl_errors();
 	return NULL;
-}
+#else
+	log_err("OpenSSL \"provider\" support is disabled\n");
+	return NULL;
 #endif
+}
 
 static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 				const struct imaevm_ossl_access *access_info,
@@ -1131,12 +1136,10 @@ static EVP_PKEY *read_priv_pkey(const char *keyfile, const char *keypass,
 			pkey = read_priv_pkey_engine(access_info->u.engine,
 						     keyfile, keypass, keyid);
 			break;
-#ifdef CONFIG_IMA_EVM_PROVIDER
 		case IMAEVM_OSSL_ACCESS_TYPE_PROVIDER:
 			pkey = read_priv_pkey_provider(access_info->u.provider,
 						       keyfile, keypass, keyid);
 			break;
-#endif
 		}
 	} else {
 		fp = fopen(keyfile, "r");
@@ -1385,16 +1388,16 @@ err:
 	return len;
 }
 
+/*
+ * Check whether access_info contains a valid type. Whether the type
+ * (engine or provider) is supported must be checked elsewhere.
+ */
 static int check_ossl_access(const struct imaevm_ossl_access *access_info)
 {
 	switch (access_info->type) {
 	case IMAEVM_OSSL_ACCESS_TYPE_NONE:
-#ifdef CONFIG_IMA_EVM_ENGINE
 	case IMAEVM_OSSL_ACCESS_TYPE_ENGINE:
-#endif
-#ifdef CONFIG_IMA_EVM_PROVIDER
 	case IMAEVM_OSSL_ACCESS_TYPE_PROVIDER:
-#endif
 		return 0;
 
 	default:
@@ -1444,12 +1447,16 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size,
 		.type = IMAEVM_OSSL_ACCESS_TYPE_ENGINE,
 		.u.engine = imaevm_params.eng,
 	};
+	struct imaevm_ossl_access const *paccess_info = NULL;
+	if (imaevm_params.eng)
+		paccess_info = &access_info;
+
 	int sigflags = imaevm_params.x509 ? 0 : IMAEVM_SIGFLAG_SIGNATURE_V1;
 	if (!keypass)	/* Avoid breaking existing libimaevm usage */
 		keypass = imaevm_params.keypass;
 
 	return imaevm_signhash(hashalgo, hash, size, keyfile, keypass, sig,
-			       sigflags, &access_info, imaevm_params.keyid);
+			       sigflags, paccess_info, imaevm_params.keyid);
 }
 
 static void libinit()
