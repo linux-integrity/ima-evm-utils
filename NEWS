@@ -1,3 +1,8 @@
+2024-8-30 Mimi Zohar <zohar@linux.ibm.com>
+	version 1.6.2:
+
+	* Fix sign_hash() failure when OpenSSL engine support is missing
+
 2024-8-28 Mimi Zohar <zohar@linux.ibm.com>
 	version 1.6.1:
 
