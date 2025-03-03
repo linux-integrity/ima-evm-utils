@@ -1782,7 +1782,7 @@ static void set_bank_info(struct tpm_bank_info *bank, const char *algo_name)
 static struct tpm_bank_info *init_tpm_banks(int *num_banks)
 {
 	struct tpm_bank_info *banks = NULL;
-	const char *default_algos[] = {"sha1", "sha256"};
+	const char *default_algos[] = {"sha1", "sha256", "sm3"};
 	int num_algos = sizeof(default_algos) / sizeof(default_algos[0]);
 	int i, j;
 
@@ -2858,7 +2858,7 @@ static void usage(void)
 
 	printf(
 		"\n"
-		"  -a, --hashalgo     sha1, sha224, sha256, sha384, sha512, streebog256, streebog512 (default: %s)\n"
+		"  -a, --hashalgo     sha1, sha224, sha256, sha384, sha512, sm3, streebog256, streebog512 (default: %s)\n"
 		"  -s, --imasig       make IMA signature\n"
 		"      --veritysig    sign an fs-verity file digest hash\n"
 		"  -d, --imahash      make IMA hash\n"
