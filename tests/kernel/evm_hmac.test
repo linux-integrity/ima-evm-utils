@@ -22,9 +22,9 @@ PATCHES=(
 (( EVM_INIT_HMAC=0x0001 ))
 
 cd "$(dirname "$0")" || exit 1
-export PATH=$PWD/../src:$PATH
+export PATH=$PWD/../../src:$PATH
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-. ./functions.sh
+. ../functions.sh
 _require evmctl
 
 cleanup() {

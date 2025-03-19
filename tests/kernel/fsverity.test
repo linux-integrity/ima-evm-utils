@@ -32,8 +32,8 @@
 # shellcheck disable=SC2317
 
 cd "$(dirname "$0")" || exit 1
-PATH=../src:../fsverity-utils:/usr/sbin:$PATH
-source ./functions.sh
+PATH=../../src:../../fsverity-utils:/usr/sbin:$PATH
+source ../functions.sh
 
 # Base VERBOSE on the environment variable, if set.
 VERBOSE="${VERBOSE:-0}"
@@ -47,7 +47,7 @@ LOOPBACK_MOUNTED=0
 FSVERITY="$(which fsverity)"
 
 _require dd mkfs blkid e2fsck tune2fs evmctl setfattr
-./gen-keys.sh >/dev/null 2>&1
+../gen-keys.sh >/dev/null 2>&1
 
 trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM EXIT
 

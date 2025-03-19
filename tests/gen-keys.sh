@@ -8,7 +8,6 @@
 
 # shellcheck disable=SC2043
 
-cd "$(dirname "$0")" || exit 1
 PATH=../src:$PATH
 type openssl
 
