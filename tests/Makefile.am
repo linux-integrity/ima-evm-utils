@@ -1,11 +1,10 @@
 check_SCRIPTS =
 TESTS = $(check_SCRIPTS)
 
-check_SCRIPTS += ima_hash.test sign_verify.test boot_aggregate.test \
-		 fsverity.test portable_signatures.test ima_policy_check.test \
-		 mmap_check.test evm_hmac.test
+SUBDIRS = . kernel
 
-check_PROGRAMS := test_mmap
+check_SCRIPTS += ima_hash.test sign_verify.test boot_aggregate.test \
+		 ima_policy_check.test
 
 .PHONY: check_logs
 check_logs:
@@ -19,11 +18,12 @@ check_logs:
 	       cat $$log ;; \
 	   esac ; \
 	done
+	make -C kernel $@
 
 clean-local:
 	-rm -f *.txt *.out *.sig *.sig2
 
-distclean: distclean-keys
+distclean-local: distclean-keys
 
 shellcheck:
 	shellcheck \
@@ -31,6 +31,7 @@ shellcheck:
 		install-mount-idmapped.sh install-openssl3.sh \
 		install-swtpm.sh install-tss.sh softhsm_setup \
 		$(check_SCRIPTS)
+	make -C kernel $@
 
 .PHONY: distclean-keys shellcheck
 distclean-keys:

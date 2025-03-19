@@ -101,8 +101,6 @@ if [ $ret -eq 0 ]; then
 	exit 0
 fi
 
-cat tests/test-suite.log
-
 if [ $ret -eq 77 ]; then
 	msg="WARN: some tests skipped"
 	ret=0
@@ -110,4 +108,4 @@ else
 	msg="FAIL: tests exited: $ret"
 fi
 
-log_exit tests/test-suite.log "$msg" $ret
+log_exit "tests/test-suite.log tests/kernel/test-suite.log" "$msg" $ret

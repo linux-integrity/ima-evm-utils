@@ -18,9 +18,9 @@ TST_EVM_CHANGE_MODE="${TST_EVM_CHANGE_MODE:-0}"
 (( EVM_SETUP_COMPLETE=0x80000000 ))
 
 cd "$(dirname "$0")" || exit "$FAIL"
-export PATH=$PWD/../src:$PWD/../mount-idmapped:$PATH
+export PATH=$PWD/../../src:$PWD/../../mount-idmapped:$PATH
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-. ./functions.sh
+. ../functions.sh
 _require evmctl
 
 cleanup() {
@@ -1008,8 +1008,8 @@ if [ -n "$TST_KEY_PATH" ]; then
 	fi
 
 	g_key_path="$TST_KEY_PATH"
-elif [ -f "$PWD/../signing_key.pem" ]; then
-	g_key_path="$PWD/../signing_key.pem"
+elif [ -f "$PWD/../../signing_key.pem" ]; then
+	g_key_path="$PWD/../../signing_key.pem"
 elif [ -f "/lib/modules/$(uname -r)/source/certs/signing_key.pem" ]; then
 	g_key_path="/lib/modules/$(uname -r)/source/certs/signing_key.pem"
 elif [ -f "/lib/modules/$(uname -r)/build/certs/signing_key.pem" ]; then
