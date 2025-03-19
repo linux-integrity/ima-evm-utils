@@ -46,8 +46,8 @@ cleanup() {
 		rm -Rf "$g_mountpoint"
 	fi
 
-	if [ -n "$g_key_path_der" ]; then
-		rm -f "$g_key_path_der"
+	if [ -n "$g_key_path" ]; then
+		rm -f "$g_key_path"
 	fi
 }
 
@@ -242,29 +242,6 @@ if ! cat /sys/kernel/security/ima/policy &> /dev/null; then
 	exit "$SKIP"
 fi
 
-if [ -n "$TST_KEY_PATH" ]; then
-	if [ "${TST_KEY_PATH:0:1}" != "/" ]; then
-		echo "${RED}Absolute path required for the signing key${NORM}"
-		exit "$FAIL"
-	fi
-
-	if [ ! -f "$TST_KEY_PATH" ]; then
-		echo "${RED}Kernel signing key not found in $TST_KEY_PATH${NORM}"
-		exit "$FAIL"
-	fi
-
-	g_key_path="$TST_KEY_PATH"
-elif [ -f "$PWD/../../signing_key.pem" ]; then
-	g_key_path="$PWD/../../signing_key.pem"
-elif [ -f "/lib/modules/$(uname -r)/source/certs/signing_key.pem" ]; then
-	g_key_path="/lib/modules/$(uname -r)/source/certs/signing_key.pem"
-elif [ -f "/lib/modules/$(uname -r)/build/certs/signing_key.pem" ]; then
-	g_key_path="/lib/modules/$(uname -r)/build/certs/signing_key.pem"
-else
-	echo "${CYAN}Kernel signing key not found${NORM}"
-	exit "$SKIP"
-fi
-
 evm_value=$(cat /sys/kernel/security/evm)
 if [ $((evm_value & EVM_INIT_X509)) -eq "$EVM_INIT_X509" ]; then
 	if [ $((evm_value & EVM_INIT_HMAC)) -ne "$EVM_INIT_HMAC" ]; then
@@ -273,12 +250,21 @@ if [ $((evm_value & EVM_INIT_X509)) -eq "$EVM_INIT_X509" ]; then
 	fi
 fi
 
-g_key_path_der=$(mktemp)
-
-openssl x509 -in "$g_key_path" -out "$g_key_path_der" -outform der
-if ! keyctl padd asymmetric pubkey %keyring:.ima < "$g_key_path_der" &> /dev/null; then
-	echo "${RED}Public key cannot be added to the IMA keyring${NORM}"
+if ! g_key_path=$(mktemp); then
+	echo "${RED}Failed to create temporary file for private key${NORM}"
 	exit "$FAIL"
+fi
+
+get_private_key "$g_key_path"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
+fi
+
+load_public_key "$g_key_path" ".ima"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
 fi
 
 g_mountpoint=$(mktemp -d)

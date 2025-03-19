@@ -41,8 +41,8 @@ cleanup() {
 		rm -f "$g_image"
 	fi
 
-	if [ -n "$g_key_path_der" ]; then
-		rm -f "$g_key_path_der"
+	if [ -n "$g_key_path" ]; then
+		rm -f "$g_key_path"
 	fi
 
 	if [ -n "$g_mountpoint" ]; then
@@ -965,31 +965,6 @@ if [ "$(whoami)" != "root" ]; then
 	exit "$SKIP"
 fi
 
-if [ -n "$TST_KEY_PATH" ]; then
-	if [ "${TST_KEY_PATH:0:1}" != "/" ]; then
-		echo "${RED}Absolute path required for the signing key${NORM}"
-		exit "$FAIL"
-	fi
-
-	if [ ! -f "$TST_KEY_PATH" ]; then
-		echo "${RED}Kernel signing key not found in $TST_KEY_PATH${NORM}"
-		exit "$FAIL"
-	fi
-
-	g_key_path="$TST_KEY_PATH"
-elif [ -f "$PWD/../../signing_key.pem" ]; then
-	g_key_path="$PWD/../../signing_key.pem"
-elif [ -f "/lib/modules/$(uname -r)/source/certs/signing_key.pem" ]; then
-	g_key_path="/lib/modules/$(uname -r)/source/certs/signing_key.pem"
-elif [ -f "/lib/modules/$(uname -r)/build/certs/signing_key.pem" ]; then
-	g_key_path="/lib/modules/$(uname -r)/build/certs/signing_key.pem"
-else
-	echo "${CYAN}Kernel signing key not found${NORM}"
-	exit "$SKIP"
-fi
-
-g_key_path_der=$(mktemp)
-
 if [ ! -f "/sys/kernel/security/evm" ]; then
 	echo "${CYAN}EVM support in the kernel disabled${NORM}"
 	exit "$SKIP"
@@ -1002,10 +977,21 @@ fi
 
 evm_value=$(cat /sys/kernel/security/evm)
 
-openssl x509 -in "$g_key_path" -out "$g_key_path_der" -outform der
-if ! keyctl padd asymmetric pubkey %keyring:.ima < "$g_key_path_der" &> /dev/null; then
-	echo "${RED}Public key cannot be added to the IMA keyring${NORM}"
+if ! g_key_path=$(mktemp); then
+	echo "${RED}Failed to create temporary file for private key${NORM}"
 	exit "$FAIL"
+fi
+
+get_private_key "$g_key_path"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
+fi
+
+load_public_key "$g_key_path" ".ima"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
 fi
 
 if ! dd if=/dev/zero of="$g_image" bs=1M count=20 &> /dev/null; then
@@ -1051,9 +1037,10 @@ if [ "$(echo -e "$(uname -r)\n5.12" | sort -V | head -n 1)" != "5.12" ]; then
 fi
 
 if [ $((evm_value & EVM_INIT_X509)) -ne "$EVM_INIT_X509" ] && [ "$TST_EVM_CHANGE_MODE" -eq 1 ]; then
-	if ! keyctl padd asymmetric pubkey %keyring:.evm < "$g_key_path_der" &> /dev/null; then
-		echo "${RED}Public key cannot be added to the EVM keyring${NORM}"
-		exit "$FAIL"
+	load_public_key "$g_key_path" ".evm"
+	result=$?
+	if [ $result -ne 0 ]; then
+		exit $result
 	fi
 
 	echo "$EVM_INIT_X509" > /sys/kernel/security/evm 2> /dev/null
