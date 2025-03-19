@@ -22,9 +22,7 @@ PATCHES=(
 (( EVM_INIT_HMAC=0x0001 ))
 
 cd "$(dirname "$0")" || exit 1
-export PATH=$PWD/../../src:$PATH
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-. ../functions.sh
+. ./functions_kernel.sh
 _require evmctl
 
 cleanup() {
@@ -44,16 +42,6 @@ cleanup() {
 	if [ -n "$g_mountpoint" ]; then
 		rm -Rf "$g_mountpoint"
 	fi
-}
-
-get_xattr() {
-	local format="hex"
-
-	if [ "$1" = "security.selinux" ]; then
-		format="text"
-	fi
-
-	getfattr -n "$1" -e "$format" -d "$2" 2> /dev/null | awk -F "=" '$1 == "'"$1"'" {if ("'"$format"'" == "hex") v=substr($2, 3); else { split($2, temp, "\""); v=temp[2] }; print v}'
 }
 
 # Compare HMAC calculated by the kernel with that calculated by evmctl.

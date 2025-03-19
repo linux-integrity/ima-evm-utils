@@ -14,10 +14,6 @@ PATCHES=(
 'ima: Introduce MMAP_CHECK_REQPROT hook'
 )
 
-RET_INVALID_RULE=$((0x0001))
-RET_RULE_OVERLAP=$((0x0002))
-RET_SAME_RULE_EXISTS=$((0x0004))
-
 EVM_INIT_HMAC=$((0x0001))
 EVM_INIT_X509=$((0x0002))
 
@@ -29,9 +25,7 @@ ERR_SETUP=1
 ERR_TEST=2
 
 cd "$(dirname "$0")" || exit 1
-export PATH=$PWD/../../src:$PWD/..:$PWD:$PATH
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-. ../functions.sh
+. ./functions_kernel.sh
 _require evmctl
 
 cleanup() {
@@ -70,45 +64,6 @@ APPRAISE_MMAP_CHECK_REQPROT_FOWNER=2003
 APPRAISE_MMAP_CHECK_RULE="appraise func=MMAP_CHECK fsmagic=0xef53 fsuuid=$IMA_UUID fowner=$APPRAISE_MMAP_CHECK_FOWNER"
 APPRAISE_MMAP_CHECK_REQPROT_RULE="appraise func=MMAP_CHECK_REQPROT fsmagic=0xef53 fsuuid=$IMA_UUID fowner=$APPRAISE_MMAP_CHECK_REQPROT_FOWNER"
 
-check_load_ima_rule() {
-	local result new_policy color
-
-	echo -e "$1\n$(cat /sys/kernel/security/ima/policy)" | ima_policy_check.awk
-	result=$?
-
-	if [ $((result & RET_INVALID_RULE)) -eq $RET_INVALID_RULE ]; then
-		echo "${RED}Invalid rule${NORM}"
-		return "$HARDFAIL"
-	fi
-
-	if [ $((result & RET_RULE_OVERLAP)) -eq $RET_RULE_OVERLAP ]; then
-		color=${YELLOW}
-		if [ -n "$TST_ENV" ]; then
-			color=${RED}
-		fi
-
-		echo "${color}Possible interference with existing IMA policy rule${NORM}"
-		if [ -n "$TST_ENV" ]; then
-			return "$HARDFAIL"
-		fi
-	fi
-
-	if [ $((result & RET_SAME_RULE_EXISTS)) -eq $RET_SAME_RULE_EXISTS ]; then
-		return "$OK"
-	fi
-
-	new_policy=$(mktemp -p "$g_mountpoint")
-	echo "$1" > "$new_policy"
-	if ! echo "$new_policy" > /sys/kernel/security/ima/policy; then
-		rm -f "$new_policy"
-		echo "${RED}Failed to set IMA policy${NORM}"
-		return "$HARDFAIL"
-	fi
-	rm -f "$new_policy"
-
-	return "$OK"
-}
-
 check_mmap() {
 	local hook="$1"
 	local arg="$2"
@@ -139,7 +94,7 @@ check_mmap() {
 		return "$HARDFAIL"
 	fi
 
-	check_load_ima_rule "$rule"
+	check_load_ima_rule "$rule" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ $result -ne "$OK" ]; then
 		return $result
@@ -217,7 +172,7 @@ check_deny() {
 		return "$HARDFAIL"
 	fi
 
-	check_load_ima_rule "$rule"
+	check_load_ima_rule "$rule" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ $result -ne "$OK" ]; then
 		return $result

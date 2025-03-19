@@ -18,9 +18,8 @@ TST_EVM_CHANGE_MODE="${TST_EVM_CHANGE_MODE:-0}"
 (( EVM_SETUP_COMPLETE=0x80000000 ))
 
 cd "$(dirname "$0")" || exit "$FAIL"
-export PATH=$PWD/../../src:$PWD/../../mount-idmapped:$PATH
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-. ../functions.sh
+export PATH=$PWD/../../mount-idmapped:$PATH
+. ./functions_kernel.sh
 _require evmctl
 
 cleanup() {
@@ -55,16 +54,6 @@ cleanup() {
 	fi
 }
 
-get_xattr() {
-	local format="hex"
-
-	if [ "$1" = "security.selinux" ]; then
-		format="text"
-	fi
-
-	getfattr -n "$1" -e $format -d "$2" 2> /dev/null | awk -F "=" '$1 == "'"$1"'" {if ("'$format'" == "hex") v=substr($2, 3); else { split($2, temp, "\""); v=temp[2] }; print v}'
-}
-
 # Use the fsuuid= IMA policy keyword to select only files created/used by the
 # tests below. Also use fowner= to differentiate between files created/used by
 # individual tests.
@@ -77,26 +66,6 @@ APPRAISE_FOWNER=2002
 APPRAISE_RULE="appraise fsuuid=$IMA_UUID fowner=$APPRAISE_FOWNER"
 METADATA_CHANGE_FOWNER=3001
 METADATA_CHANGE_FOWNER_2=3002
-
-check_load_ima_rule() {
-	local rule_loaded
-	local new_policy
-
-	rule_loaded=$(grep "$1" /sys/kernel/security/ima/policy)
-	if [ -z "$rule_loaded" ]; then
-		new_policy=$(mktemp -p "$g_mountpoint")
-		echo "$1" > "$new_policy"
-		evmctl sign -o -a sha256 --imasig --key "$g_key_path" "$new_policy" &> /dev/null
-		if ! echo "$new_policy" > /sys/kernel/security/ima/policy; then
-			rm -f "$new_policy"
-			echo "${RED}Failed to set IMA policy${NORM}"
-			return "$FAIL"
-		fi
-		rm -f "${new_policy}"
-	fi
-
-	return "$OK"
-}
 
 # The purpose of this test is to verify that the patch 'ima: Allow imasig
 # requirement to be satisfied by EVM portable signatures' didn't break the
@@ -126,7 +95,7 @@ check_ima_sig_appraisal() {
 		return "$FAIL"
 	fi
 
-	check_load_ima_rule "$APPRAISE_DIGSIG_RULE"
+	check_load_ima_rule "$APPRAISE_DIGSIG_RULE" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ $result -ne "$OK" ]; then
 		return $result
@@ -179,7 +148,7 @@ check_ima_sig_ima_measurement_list() {
 		return "$FAIL"
 	fi
 
-	check_load_ima_rule "$MEASURE_RULE"
+	check_load_ima_rule "$MEASURE_RULE" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ $result -ne "$OK" ]; then
 		return $result
@@ -622,7 +591,7 @@ check_evm_revalidate() {
 		return "$FAIL"
 	fi
 
-	check_load_ima_rule "$APPRAISE_RULE"
+	check_load_ima_rule "$APPRAISE_RULE" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ $result -ne "$OK" ]; then
 		return $result
@@ -829,7 +798,7 @@ check_evm_portable_sig_ima_appraisal() {
 		return "$FAIL"
 	fi
 
-	check_load_ima_rule "$APPRAISE_DIGSIG_RULE"
+	check_load_ima_rule "$APPRAISE_DIGSIG_RULE" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ "$result" -ne "$OK" ]; then
 		return "$result"
@@ -936,7 +905,7 @@ check_evm_portable_sig_ima_measurement_list() {
 		return "$FAIL"
 	fi
 
-	check_load_ima_rule "$MEASURE_RULE"
+	check_load_ima_rule "$MEASURE_RULE" "$g_key_path" "$g_mountpoint"
 	result=$?
 	if [ "$result" -ne "$OK" ]; then
 		return "$result"
