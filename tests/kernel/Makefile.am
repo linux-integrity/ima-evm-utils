@@ -2,7 +2,7 @@ check_SCRIPTS =
 TESTS = $(check_SCRIPTS)
 
 check_SCRIPTS += fsverity.test portable_signatures.test mmap_check.test \
-		 evm_hmac.test
+		 evm_hmac.test non_action_rule_flags.test
 
 check_PROGRAMS := test_mmap
 

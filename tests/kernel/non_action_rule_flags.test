@@ -1,0 +1,175 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2025 Roberto Sassu <roberto.sassu@huawei.com>
+#
+# Check if access to a created file succeeds after setattr()
+
+trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+
+cd "$(dirname "$0")" || exit "$FAIL"
+. ./functions_kernel.sh
+_require evmctl
+
+cleanup() {
+	if [ "$g_loop_mounted" = "1" ]; then
+		popd > /dev/null || exit "$FAIL"
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: unmounting $g_mountpoint"
+		umount "$g_mountpoint"
+	fi
+
+	if [ -n "$g_dev" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: unassigning $g_dev"
+		losetup -d "$g_dev"
+	fi
+
+	if [ -n "$g_image" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting image $g_image"
+		rm -f "$g_image"
+	fi
+
+	if [ -n "$g_key_path" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting private/key $g_key_path"
+		rm -f "$g_key_path"
+	fi
+
+	if [ -n "$g_mountpoint" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting mountpoint $g_mountpoint"
+		rm -Rf "$g_mountpoint"
+	fi
+}
+
+# Use the fsuuid= IMA policy keyword to select only files created/used by the
+# tests below.
+IMA_UUID="28b23254-9467-44c0-b6ba-34b12e85a270"
+APPRAISE_RULE="appraise fsuuid=$IMA_UUID"
+
+# The purpose of this test is to verify that IMA-Appraise retains the non-action
+# rule flags (e.g. IMA_NEW_FILE) and still allows access to a created file
+# before the last file close, and before security.ima is written to the disk.
+check_ima_access_after_setattr() {
+	local result
+	local fd
+
+	echo "Test: ${FUNCNAME[0]}"
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: loading IMA policy: $APPRAISE_RULE"
+	check_load_ima_rule "$APPRAISE_RULE" "$g_key_path" "$g_mountpoint"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: creating and opening test-file"
+	if ! exec {fd}>test-file; then
+		echo "${RED}Cannot open test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: changing test-file mode to u+w"
+	if ! chmod u+w test-file; then
+		echo "${RED}Cannot change mode of test-file${NORM}"
+		return "$FAIL"
+	fi
+
+	# Ensure that test-file is still accessible.
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: attempting to read test-file"
+	if ! cat test-file 2> /dev/null; then
+		echo "${RED}Cannot read test-file${NORM}"
+		exec {fd}>&-
+		return "$FAIL"
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: closing test-file"
+	exec {fd}>&-
+
+	return "$OK"
+}
+
+cleanup_ima_access_after_setattr() {
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting test-file"
+	rm -f test-file
+}
+
+# Run in the new environment if TST_ENV is set.
+_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE TST_KEY_PATH=$TST_KEY_PATH"
+
+# Exit from the creator of the new environment.
+_exit_env "$TST_KERNEL"
+
+# Mount filesystems in the new environment.
+_init_env
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: creating mountpoint directory"
+g_mountpoint=$(mktemp -d)
+g_image=$(mktemp)
+
+[ "$VERBOSE" -ge 2 ] && echo "INFO: mountpoint directory is $g_mountpoint"
+[ "$VERBOSE" -ge 2 ] && echo "INFO: loop image is $g_image"
+
+if [ -z "$g_mountpoint" ]; then
+	echo "${RED}Mountpoint directory not created${NORM}"
+	exit "$FAIL"
+fi
+
+if [ "$(whoami)" != "root" ]; then
+	echo "${CYAN}This script must be executed as root${NORM}"
+	exit "$SKIP"
+fi
+
+if ! g_key_path=$(mktemp); then
+	echo "${RED}Failed to create temporary file for private key${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 2 ] && echo "INFO: copied private key is $g_key_path"
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: getting private key"
+get_private_key "$g_key_path"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: loading public key"
+load_public_key "$g_key_path" ".ima"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: zeroing image at $g_image"
+if ! dd if=/dev/zero of="$g_image" bs=1M count=20 &> /dev/null; then
+	echo "${RED}Cannot create test image${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: assigning loop device to $g_image"
+g_dev=$(losetup -f "$g_image" --show)
+if [ -z "$g_dev" ]; then
+	echo "${RED}Cannot create loop device${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 2 ] && echo "INFO: loop device for $g_image is $g_dev"
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: formatting $g_dev with ext4 and UUID $IMA_UUID"
+if ! mkfs.ext4 -U "$IMA_UUID" -b 4096 "$g_dev" &> /dev/null; then
+	echo "${RED}Cannot format $g_dev${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: mounting $g_dev to $g_mountpoint"
+if ! mount -o i_version "$g_dev" "$g_mountpoint"; then
+	echo "${RED}Cannot mount loop device${NORM}"
+	exit "$FAIL"
+fi
+
+g_loop_mounted=1
+pushd "$g_mountpoint" > /dev/null || exit "$FAIL"
+
+expect_pass check_ima_access_after_setattr
+cleanup_ima_access_after_setattr
