@@ -19,7 +19,7 @@ clean-local:
 distclean-local: distclean-keys
 
 shellcheck:
-	shellcheck $(check_SCRIPTS)
+	shellcheck -x $(check_SCRIPTS)
 
 .PHONY: distclean-keys shellcheck
 distclean-keys:

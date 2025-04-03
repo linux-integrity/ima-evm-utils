@@ -343,7 +343,7 @@ if [ -z "$FSVERITY" ]; then
 fi
 
 if ! evmctl --help | grep -q veritysig ; then
-	echo -e "${CYAN}SKIP: evmctl "--veritysig" option not supported${NORM}"
+	echo -e "${CYAN}SKIP: evmctl \"--veritysig\" option not supported${NORM}"
 	exit "$SKIP"
 fi
 

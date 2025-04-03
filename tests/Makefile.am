@@ -26,7 +26,7 @@ clean-local:
 distclean-local: distclean-keys
 
 shellcheck:
-	shellcheck \
+	shellcheck -x \
 		functions.sh gen-keys.sh install-fsverity.sh \
 		install-mount-idmapped.sh install-openssl3.sh \
 		install-swtpm.sh install-tss.sh softhsm_setup \

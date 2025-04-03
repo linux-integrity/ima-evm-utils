@@ -5,6 +5,8 @@
 #
 # Check if the kernel and evmctl provide the same result for HMAC calculation.
 
+# shellcheck disable=SC2034
+
 trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
 
 # Base VERBOSE on the environment variable, if set.
