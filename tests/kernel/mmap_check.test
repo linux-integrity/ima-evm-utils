@@ -5,10 +5,10 @@
 #
 # Check the behavior of MMAP_CHECK and MMAP_CHECK_REQPROT
 
-# shellcheck disable=SC2034
-
 trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
 
+# PATCHES is used in functions.sh
+# shellcheck disable=SC2034
 PATCHES=(
 'ima: Align ima_file_mmap() parameters with mmap_file LSM hook'
 'ima: Introduce MMAP_CHECK_REQPROT hook'
@@ -21,6 +21,8 @@ EVM_INIT_X509=$((0x0002))
 VERBOSE="${VERBOSE:-0}"
 
 # Errors defined in test_mmap
+# ERR_SETUP is currently not used
+# shellcheck disable=SC2034
 ERR_SETUP=1
 ERR_TEST=2
 

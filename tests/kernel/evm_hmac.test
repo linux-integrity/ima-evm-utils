@@ -12,6 +12,8 @@ VERBOSE="${VERBOSE:-0}"
 TST_EVM_CHANGE_MODE="${TST_EVM_CHANGE_MODE:-0}"
 IMA_UUID="28b23254-9467-44c0-b6ba-34b12e85a26f"
 
+# PATCHES is used in functions.sh
+# shellcheck disable=SC2034
 PATCHES=(
 'KEYS: encrypted: fix key instantiation with user-provided data'
 'KEYS: encrypted: Instantiate key with user-provided decrypted data'
