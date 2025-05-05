@@ -2878,7 +2878,7 @@ static void usage(void)
 		"  -t, --type         file types to fix 'fxm' (f: file)\n"
 		"                     x - skip fixing if both ima and evm xattrs exist (use with caution)\n"
 		"                     m - stay on the same filesystem (like 'find -xdev')\n"
-		"  -n                 print result to stdout instead of setting xattr\n"
+		"  -n  --noxattr      print result to stdout instead of setting xattr\n"
 		"  -u, --uuid         use custom FS UUID for EVM (unspecified: from FS, empty: do not use)\n"
 		"      --smack        use extra SMACK xattrs for EVM\n"
 		"      --m32          force EVM hmac/signature for 32 bit target system\n"
@@ -2951,6 +2951,7 @@ static struct option opts[] = {
 	{"m32", 0, 0, '3'},
 	{"m64", 0, 0, '6'},
 	{"portable", 0, 0, 'o'},
+	{"noxattr", 0, 0, 'n'},
 	{"smack", 0, 0, 128},
 	{"version", 0, 0, 129},
 	{"inode", 1, 0, 130},
