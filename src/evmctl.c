@@ -186,7 +186,7 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 	return err;
 }
 
-static unsigned char *file2bin(const char *file, const char *ext, int *size)
+static unsigned char *file2bin(const char *file, const char *ext, size_t *size)
 {
 	FILE *fp;
 	size_t len;
@@ -227,7 +227,7 @@ static unsigned char *file2bin(const char *file, const char *ext, int *size)
 	}
 	fclose(fp);
 
-	*size = (int)len;
+	*size = len;
 	return data;
 }
 
@@ -1100,7 +1100,8 @@ static int cmd_import(struct command *cmd __attribute__((unused)))
 {
 	char *inkey, *ring = NULL;
 	unsigned char _pub[1024], *pub = _pub;
-	int id, len, err = 0;
+	int id, err = 0;
+	size_t len;
 	char name[20];
 	uint8_t keyid[8];
 
@@ -1182,7 +1183,8 @@ static int cmd_import(struct command *cmd __attribute__((unused)))
 static int setxattr_ima(const char *file, char *sig_file)
 {
 	unsigned char *sig;
-	int len, err;
+	size_t len;
+	int err;
 
 	if (sig_file)
 		sig = file2bin(sig_file, NULL, &len);
@@ -1229,7 +1231,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 	char **xattrname;
 	unsigned char xattr_value[1024];
 	unsigned char *key;
-	int keylen;
+	size_t keylen;
 	unsigned char evmkey[MAX_KEY_SIZE];
 	char list[1024];
 	char uuid[16];
@@ -1248,7 +1250,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 	}
 
 	if (keylen > sizeof(evmkey)) {
-		log_err("key is too long: %d\n", keylen);
+		log_err("key is too long: %zu\n", keylen);
 		goto out;
 	}
 
