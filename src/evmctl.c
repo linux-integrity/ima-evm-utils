@@ -350,6 +350,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 	EVP_MD_CTX ctx;
 	pctx = &ctx;
 #endif
+	size_t len;
 
 	if (lstat(file, &st)) {
 		log_errno_reset(LOG_ERR, "Failed to stat: %s", file);
@@ -416,19 +417,19 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 		int use_xattr_ima = 0;
 
 		if (!strcmp(*xattrname, XATTR_NAME_SELINUX) && selinux_str) {
-			err = strlen(selinux_str) + 1;
-			if (err > sizeof(xattr_value)) {
-				log_err("selinux[%u] value is too long to fit into xattr[%zu]\n",
-					err, sizeof(xattr_value));
+			len = strlen(selinux_str) + 1;
+			if (len > sizeof(xattr_value)) {
+				log_err("selinux[%zu] value is too long to fit into xattr[%zu]\n",
+					len, sizeof(xattr_value));
 				err = -1;
 				goto out;
 			}
 			strcpy(xattr_value, selinux_str);
 		} else if (!strcmp(*xattrname, XATTR_NAME_IMA) && ima_str) {
-			err = strlen(ima_str) / 2;
-			if (err > sizeof(xattr_value)) {
-				log_err("ima[%u] value is too long to fit into xattr[%zu]\n",
-					err, sizeof(xattr_value));
+			len = strlen(ima_str) / 2;
+			if (len > sizeof(xattr_value)) {
+				log_err("ima[%zu] value is too long to fit into xattr[%zu]\n",
+					len, sizeof(xattr_value));
 				err = -1;
 				goto out;
 			}
@@ -445,10 +446,10 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 		} else if (!strcmp(*xattrname, XATTR_NAME_CAPS) && (hmac_flags & HMAC_FLAG_CAPS_SET)) {
 			if (!caps_str)
 				continue;
-			err = strlen(caps_str);
-			if (err >= sizeof(xattr_value)) {
-				log_err("caps[%u] value is too long to fit into xattr[%zu]\n",
-					err + 1, sizeof(xattr_value));
+			len = strlen(caps_str);
+			if (len >= sizeof(xattr_value)) {
+				log_err("caps[%zu] value is too long to fit into xattr[%zu]\n",
+					len + 1, sizeof(xattr_value));
 				err = -1;
 				goto out;
 			}
@@ -777,7 +778,8 @@ static int cmd_sign_hash(struct command *cmd)
 	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	unsigned char hash[MAX_DIGEST_SIZE];
-	int siglen, algolen = 0, hashlen = 0;
+	int siglen, algolen = 0;
+	size_t hashlen = 0;
 	char *line = NULL, *token, *hashp;
 	size_t line_len = 0;
 	const char *key;
@@ -847,7 +849,7 @@ static int cmd_sign_hash(struct command *cmd)
 		} else {
 			/* Parse the shaXsum output */
 			token = strpbrk(line, " \t");
-			hashlen = token ? token - line : strlen(line);
+			hashlen = token ? (size_t)(token - line) : strlen(line);
 			assert(hashlen / 2 <= sizeof(hash));
 			hex2bin(hash, line, hashlen / 2);
 
@@ -3229,7 +3231,7 @@ int main(int argc, char *argv[])
 			 * UINT_MAX is `imaevm_params.keyid' maximum value,
 			 * 0 is reserved for keyid being unset.
 			 */
-			if (errno || eptr - optarg != strlen(optarg) ||
+			if (errno || (size_t)(eptr - optarg) != strlen(optarg) ||
 			    keyid == ULONG_MAX || keyid > UINT_MAX ||
 			    keyid == 0) {
 				log_err("Invalid keyid value.\n");
