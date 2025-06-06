@@ -2922,8 +2922,8 @@ static void usage(void)
 }
 
 struct command cmds[] = {
-	{"--version", NULL, 0, ""},
-	{"help", cmd_help, 0, "<command>"},
+	{"--version", NULL, 0, "", ""},
+	{"help", cmd_help, 0, "<command>", ""},
 #if CONFIG_SIGV1
 	{"import", cmd_import, 0, "[--rsa (deprecated)] pubkey keyring", "Import public key into the keyring.\n"},
 	{"convert", cmd_convert, 0, "key", "convert public key into the keyring. (deprecated)\n"},
@@ -2944,7 +2944,7 @@ struct command cmds[] = {
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig] [--hmackey key] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
-	{0, 0, 0, NULL}
+	{0, 0, 0, NULL, ""}
 };
 
 static struct option opts[] = {
