@@ -1085,7 +1085,7 @@ static int cmd_convert(struct command *cmd)
 }
 #endif
 
-static int cmd_import(struct command *cmd)
+static int cmd_import(struct command *cmd __attribute__((unused)))
 {
 	char *inkey, *ring = NULL;
 	unsigned char _pub[1024], *pub = _pub;
@@ -2717,7 +2717,7 @@ static int append_bootaggr(char *bootaggr, struct tpm_bank_info *tpm_banks)
  * 0 - 9 to validate against the IMA boot_aggregate record. If the digest
  * algorithm is SHA1, only PCRs 0 - 7 are considered to avoid ambiguity.
  */
-static int cmd_ima_bootaggr(struct command *cmd)
+static int cmd_ima_bootaggr(struct command *cmd __attribute__((unused)))
 {
 	struct tpm_bank_info *tpm_banks;
 	int bootaggr_len = 0;
