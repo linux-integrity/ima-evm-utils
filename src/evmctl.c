@@ -787,8 +787,9 @@ static int cmd_sign_hash(struct command *cmd)
 	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	unsigned char hash[MAX_DIGEST_SIZE];
-	int siglen, algolen = 0;
+	size_t algolen = 0;
 	size_t hashlen = 0;
+	int siglen;
 	char *line = NULL, *token, *hashp;
 	size_t line_len = 0;
 	const char *key;
@@ -817,7 +818,7 @@ static int cmd_sign_hash(struct command *cmd)
 			if (hashp)	/* pointer to the delimiter */
 				algolen = hashp - line;
 
-			if (!hashp || algolen <= 0 ||
+			if (!hashp || algolen == 0 ||
 			    algolen >= sizeof(algo)) {
 				log_err("Missing/invalid fsverity hash algorithm\n");
 				continue;
@@ -871,7 +872,7 @@ static int cmd_sign_hash(struct command *cmd)
 
 		if (siglen <= 1)
 			return siglen;
-		assert(siglen < sizeof(sig));
+		assert(siglen < (int)sizeof(sig));
 
 		fwrite(line, len, 1, stdout);
 		fprintf(stdout, " ");
@@ -953,7 +954,7 @@ static int verify_evm(struct public_key_entry *public_keys, const char *file)
 	mdlen = calc_evm_hash(file, hash_algo, hash);
 	if (mdlen <= 1)
 		return mdlen;
-	assert(mdlen <= sizeof(hash));
+	assert(mdlen <= (int)sizeof(hash));
 
 	return imaevm_verify_hash(public_keys, file, hash_algo, hash,
 				  mdlen, sig, len);
