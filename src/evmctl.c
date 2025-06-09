@@ -2115,13 +2115,14 @@ static int read_sysfs_tpm2_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 }
 
 /* Read PCRs from per-bank file(s) specified via --pcrs */
-static int read_file_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
+static int read_file_pcrs(unsigned int num_banks, struct tpm_bank_info *tpm_banks)
 {
 	struct stat s;
 	FILE *fp;
 	char *p;
 	const char *alg, *path;
-	int i, j, bank, result;
+	unsigned int i, j;
+	int bank, result;
 
 	for (i = 0; i < num_banks; i++)
 		tpm_banks[i].supported = 0;
