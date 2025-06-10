@@ -7,8 +7,11 @@
 #
 
 KERNEL_HEADERS=$1
+HASH_INFO_PKG_H=hash_info.h
 HASH_INFO_H=uapi/linux/hash_info.h
 HASH_INFO=$KERNEL_HEADERS/include/$HASH_INFO_H
+HASH_INFO2=$KERNEL_HEADERS/$HASH_INFO_H
+HASH_INFO3=$KERNEL_HEADERS/$HASH_INFO_PKG_H
 
 TMPHASHINFO="./tmp_hash_info.h"
 gen_hashinfo() {
@@ -52,9 +55,10 @@ __EOF__
 
 # Allow to specify kernel-headers past include/
 if [ ! -e $HASH_INFO ]; then
-  HASH_INFO2=$KERNEL_HEADERS/$HASH_INFO_H
-  if [ -e $HASH_INFO2 ]; then
-    HASH_INFO=$HASH_INFO2
+   if [ -e $HASH_INFO2 ]; then
+     HASH_INFO=$HASH_INFO2
+   elif [ -e $HASH_INFO3 ]; then
+     HASH_INFO=$HASH_INFO3
   else
     gen_hashinfo
     HASH_INFO="$TMPHASHINFO"
