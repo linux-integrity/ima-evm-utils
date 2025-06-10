@@ -1466,7 +1466,7 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size,
 			       sigflags, paccess_info, imaevm_params.keyid);
 }
 
-static void libinit()
+static void libinit(void)
 {
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000
