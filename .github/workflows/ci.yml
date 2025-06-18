@@ -101,6 +101,20 @@ jobs:
           cp certs/signing_key.pem ..
           popd
 
+      - name: Upload UML kernel
+        if: steps.cache-linux.outputs.cache-hit != 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-kernel
+          path: ./linux
+
+      - name: Upload signing key
+        if: steps.cache-key.outputs.cache-hit != 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-key
+          path: ./signing_key.pem
+
   job:
     needs: build
     runs-on: ubuntu-latest
@@ -241,7 +255,8 @@ jobs:
         fi
 
     - name: Retrieve UML kernel
-      if: ${{ matrix.env.TST_ENV }}
+      id: retrieve-linux
+      if: matrix.env.TST_ENV != ''
       uses: actions/cache@v4
       continue-on-error: false
       with:
@@ -249,12 +264,34 @@ jobs:
         key: linux-${{ needs.build.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
 
     - name: Retrieve signing key
-      if: ${{ matrix.env.TST_ENV }}
+      id: retrieve-key
+      if: matrix.env.TST_ENV != ''
       continue-on-error: false
       uses: actions/cache@v4
       with:
         path: signing_key.pem
         key: signing_key.pem-${{ needs.build.outputs.LINUX_SHA }}-${{ hashFiles('**/kernel-configs/*') }}
+
+    - uses: actions/checkout@v4
+      if: (steps.retrieve-linux.outputs.cache-hit != 'true' || steps.retrieve-key.outputs.cache-hit != 'true') && matrix.env.TST_ENV != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+
+    - name: Download UML kernel
+      if: steps.retrieve-linux.outputs.cache-hit != 'true' && matrix.env.TST_ENV != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-kernel
+        path: ./
+
+    - name: Make UML kernel executable
+      if: steps.retrieve-linux.outputs.cache-hit != 'true' && matrix.env.TST_ENV != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+      run: chmod +x linux
+
+    - name: Download signing key
+      if: steps.retrieve-key.outputs.cache-hit != 'true' && matrix.env.TST_ENV != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+      uses: actions/download-artifact@v4
+      with:
+        name: signing-key
+        path: ./
 
     - name: Compiler version
       run: $CC --version
