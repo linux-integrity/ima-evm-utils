@@ -74,8 +74,11 @@ typedef struct ossl_provider_st OSSL_PROVIDER;
 #define	DATA_SIZE	4096
 #define SHA1_HASH_LEN   20
 
+#define ML_DSA_87_SIGNATURE_SIZE	4627
+
 #define MAX_DIGEST_SIZE		64
-#define MAX_SIGNATURE_SIZE	1024
+#define MAX_SIGNATURE_SIZE	(1 + sizeof(struct signature_v2_hdr) + \
+				 ML_DSA_87_SIGNATURE_SIZE)
 
 /*
  * The maximum template data size is dependent on the template format. For
