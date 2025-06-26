@@ -148,6 +148,28 @@ if [ -x /opt/openssl3/bin/openssl ]; then
   done)
 fi
 
+# If creating mldsa44 key works, create all ML-DSA sizes
+if openssl genpkey -algorithm mldsa44 &>/dev/null; then
+  for mldsa in mldsa44 mldsa65; do
+    if [ "$1" = clean ] || [ "$1" = force ]; then
+      rm -f test-$mldsa.cer test-$mldsa.key test-$mldsa.pub
+    fi
+    if [ "$1" = clean ]; then
+      continue
+    fi
+    if [ ! -e test-$mldsa.key ]; then
+      log openssl req -verbose -new -nodes -utf8 -days 10000 -batch -x509 \
+        -config test-ca.conf \
+        -newkey "$mldsa" \
+        -out test-$mldsa.cer -outform DER \
+        -keyout test-$mldsa.key
+      if [ -s test-$mldsa.key ]; then
+        log openssl pkey -in test-$mldsa.key -out test-$mldsa.pub -pubout
+      fi
+    fi
+  done
+fi
+
 # This script leaves test-ca.conf, *.cer, *.pub, *.key files for sing/verify tests.
 # They are never deleted except by `make distclean'.
 
