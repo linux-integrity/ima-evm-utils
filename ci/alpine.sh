@@ -41,6 +41,7 @@ apk add \
 	openssl-dev \
 	pkgconfig \
 	procps \
+	sed \
 	sudo \
 	util-linux \
 	wget \

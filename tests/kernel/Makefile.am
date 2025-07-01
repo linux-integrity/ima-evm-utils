@@ -1,5 +1,7 @@
 check_SCRIPTS =
+if KERNEL_TESTS
 TESTS = $(check_SCRIPTS)
+endif
 
 check_SCRIPTS += fsverity.test portable_signatures.test mmap_check.test \
 		 evm_hmac.test non_action_rule_flags.test

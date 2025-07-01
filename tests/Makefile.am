@@ -1,7 +1,11 @@
 check_SCRIPTS =
 TESTS = $(check_SCRIPTS)
 
-SUBDIRS = . kernel
+SUBDIRS = .
+
+if KERNEL_TESTS
+SUBDIRS += kernel
+endif
 
 check_SCRIPTS += ima_hash.test sign_verify.test boot_aggregate.test \
 		 ima_policy_check.test

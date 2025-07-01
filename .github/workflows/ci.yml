@@ -184,6 +184,7 @@ jobs:
               TST_ENV: um
               TST_KERNEL: ../../linux
               TST_EVM_CHANGE_MODE: 1
+              TESTGROUP: kernel
 
           - container: "quay.io/centos/centos:stream9"
             env:
@@ -260,4 +261,4 @@ jobs:
       run: $CC --version
 
     - name: Compile
-      run: CC="$CC" VARIANT="$VARIANT" COMPILE_SSL="$COMPILE_SSL" TST_ENV="$TST_ENV" TST_KERNEL="$TST_KERNEL" ./build.sh
+      run: CC="$CC" VARIANT="$VARIANT" COMPILE_SSL="$COMPILE_SSL" TST_ENV="$TST_ENV" TST_KERNEL="$TST_KERNEL" TESTGROUP="$TESTGROUP" ./build.sh

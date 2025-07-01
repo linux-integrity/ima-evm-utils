@@ -77,10 +77,16 @@ $CC --version
 echo "CFLAGS: '$CFLAGS'"
 echo "LDFLAGS: '$LDFLAGS'"
 echo "PREFIX: '$PREFIX'"
+echo "TESTGROUP: '$TESTGROUP'"
+
+disable_kernel_tests=""
+if [ "$TESTGROUP" != "kernel" ]; then
+	disable_kernel_tests="--disable-kerneltests"
+fi
 
 title "configure"
 ./autogen.sh
-./configure --prefix=$PREFIX $host || log_exit config.log "configure failed"
+./configure --prefix=$PREFIX $disable_kernel_tests $host || log_exit config.log "configure failed"
 
 title "make"
 make -j$(nproc)
