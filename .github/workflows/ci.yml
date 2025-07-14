@@ -25,7 +25,7 @@ jobs:
               git format-patch -1 $commit -o patches/
           done
         fi
-        scripts/checkpatch.pl patches/*  --strict --terse  --no-tree --ignore CONST_STRUCT,VOLATILE,SPLIT_STRING,FILE_PATH_CHANGES,EXECUTE_PERMISSIONS,UNKNOWN_COMMIT_ID,BAD_SIGN_OFF,PREFER_DEFINED_ATTRIBUTE_MACRO
+        scripts/checkpatch.pl patches/*  --strict --terse  --no-tree --ignore CONST_STRUCT,VOLATILE,SPLIT_STRING,FILE_PATH_CHANGES,EXECUTE_PERMISSIONS,UNKNOWN_COMMIT_ID,BAD_SIGN_OFF,PREFER_DEFINED_ATTRIBUTE_MACRO,PREFER_KERNEL_TYPES
 
   build:
     needs: review

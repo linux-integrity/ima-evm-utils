@@ -1650,7 +1650,8 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 {
 	uint8_t *fieldp = entry->template;
 	uint32_t field_len;
-	int total_len = entry->template_len, digest_len, len, fbuf_len;
+	uint32_t total_len = entry->template_len;
+	int digest_len, len, fbuf_len = 0;
 	uint8_t *digest, *sig = NULL, *fbuf = NULL;
 	int sig_len = 0;
 	char *algo, *path;
@@ -1658,14 +1659,25 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 	int err;
 
 	/* get binary digest */
-	field_len = *(uint32_t *)fieldp;
-	fieldp += sizeof(field_len);
-	total_len -= sizeof(field_len);
-	if (total_len < 0) {
+	if (total_len < sizeof(field_len)) {
 		log_err("Template \"%s\" invalid template data\n", entry->name);
 		return;
 	}
 
+	/*
+	 * A cast to a uint32_t pointer is endian safe when the endian-ness
+	 * of the platform is the same as the endian-ness of the event log.
+	 */
+	field_len = *(uint32_t *)fieldp;
+	fieldp += sizeof(field_len);
+	total_len -= sizeof(field_len);
+
+	if (total_len < field_len) {
+		log_err("Template \"%s\" invalid template data\n", entry->name);
+		return;
+	}
+
+	/* parse the binary digest field: <hash algo>:<digest> */
 	algo = (char *)fieldp;
 	len = strnlen(algo, field_len - 1) + 1;
 	digest_len = field_len - len;
@@ -1679,43 +1691,43 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 	/* move to next field */
 	fieldp += field_len;
 	total_len -= field_len;
-	if (total_len < 0) {
-		log_err("Template \"%s\" invalid template data\n", entry->name);
-		return;
-	}
 
 	/* get path */
+	if (total_len < sizeof(field_len)) {
+		log_err("Template \"%s\" invalid file pathname\n", entry->name);
+		return;
+	}
 	field_len = *(uint32_t *)fieldp;
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
+
 	if (field_len == 0 || field_len > PATH_MAX || total_len < field_len) {
 		log_err("Template \"%s\" invalid file pathname\n", entry->name);
 		return;
 	}
-
 	path = (char *)fieldp;
 
 	/* move to next field */
 	fieldp += field_len;
 	total_len -= field_len;
-	if (total_len < 0) {
-		log_err("Template \"%s\" invalid template data\n", entry->name);
-		return;
-	}
 
 	if (!strcmp(entry->name, "ima-sig") ||
 	    !strcmp(entry->name, "ima-sigv2")) {
 		/* get signature, if it exists */
+		if (total_len < sizeof(field_len))
+			return;
+
 		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
+		total_len -= sizeof(field_len);
+
 		if (field_len > MAX_SIGNATURE_SIZE) {
 			log_err("Template \"%s\" invalid file signature size\n",
 				entry->name);
 			return;
 		}
 
-		total_len -= sizeof(field_len);
-		if (total_len < 0) {
+		if (total_len < field_len) {
 			log_err("Template \"%s\" invalid template data\n",
 				entry->name);
 			return;
@@ -1730,9 +1742,19 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 			total_len -= field_len;
 		}
 	} else if (!strcmp(entry->name, "ima-buf")) {
+		if (total_len < sizeof(field_len))
+			return;
+
 		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
 		total_len -= sizeof(field_len);
+
+		if (total_len < field_len) {
+			log_err("Template \"%s\" invalid template data\n",
+				entry->name);
+			return;
+		}
+
 		if (field_len) {
 			fbuf = fieldp;
 			fbuf_len = field_len;
@@ -1743,7 +1765,7 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 		}
 	}
 
-	if (total_len < 0) {
+	if (total_len != 0) {
 		log_err("Template \"%s\" invalid template data\n", entry->name);
 		return;
 	}
