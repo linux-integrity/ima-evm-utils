@@ -1029,8 +1029,10 @@ uint32_t imaevm_read_keyid(const char *certfile)
 	return ntohl(keyid_be);
 }
 
-static EVP_PKEY *read_priv_pkey_engine(ENGINE *e, const char *keyfile,
-				       const char *keypass, uint32_t keyid)
+static EVP_PKEY *read_priv_pkey_engine(ENGINE * e __attribute__((unused)),
+				       const char *keyfile __attribute__((unused)),
+				       const char *keypass __attribute__((unused)),
+				       uint32_t keyid __attribute__((unused)))
 {
 #ifdef CONFIG_IMA_EVM_ENGINE
 	EVP_PKEY *pkey;
@@ -1069,8 +1071,10 @@ static int ui_get_pin(UI *ui, UI_STRING *uis)
 }
 #endif
 
-static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
-					 const char *keypass, uint32_t keyid)
+static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER * p __attribute__((unused)),
+					 const char *keyfile __attribute__((unused)),
+					 const char *keypass __attribute__((unused)),
+					 uint32_t keyid __attribute__((unused)))
 {
 #ifdef CONFIG_IMA_EVM_PROVIDER
 	UI_METHOD *ui_method = NULL;
