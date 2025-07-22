@@ -9,8 +9,8 @@ else
 	SUDO=sudo
 fi
 
-git clone https://git.code.sf.net/p/ibmswtpm2/tpm2
-pushd tpm2/src 1>/dev/null || exit 1
+git clone https://github.com/kgoldman/ibmswtpm2
+pushd ibmswtpm2/src 1>/dev/null || exit 1
 make -j"$(nproc)"
 $SUDO cp tpm_server /usr/local/bin/
 popd 1>/dev/null
