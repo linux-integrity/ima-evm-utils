@@ -72,7 +72,7 @@ AC_ARG_ENABLE(kerneltests,
 	AM_CONDITIONAL([KERNEL_TESTS], [test "x$enable_kerneltests" = "xyes"])
 
 #debug support - yes for a while
-PKG_ARG_ENABLE(debug, "yes", DEBUG, [Enable Debug support])
+PKG_ARG_ENABLE(debug, yes, DEBUG, [Use 'make' options "CFLAGS='-g -O0' CXXFLAGS='-g -O0 clean'" to remove the optimization.])
 if test $pkg_cv_enable_debug = yes; then
 	CFLAGS="$CFLAGS -g -O1 -Wall -Wstrict-prototypes -pipe"
 else

@@ -23,11 +23,14 @@ endif
 
 include_HEADERS = imaevm.h
 
-nodist_libimaevm_la_SOURCES = hash_info.h
-BUILT_SOURCES = hash_info.h
-EXTRA_DIST = hash_info.gen
+nodist_libimaevm_la_SOURCES = hash_info.h hash_info.c
+BUILT_SOURCES = hash_info.h hash_info.h
+EXTRA_DIST = hash_info.gen hash_info.genc
 hash_info.h: Makefile
 	$(srcdir)/hash_info.gen $(KERNEL_HEADERS) >$@
+
+hash_info.c: Makefile
+	$(srcdir)/hash_info.genc $(KERNEL_HEADERS) >$@
 
 bin_PROGRAMS = evmctl
 
@@ -72,5 +75,5 @@ endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -include config.h
 
-CLEANFILES = hash_info.h tmp_hash_info.h
+CLEANFILES = hash_info.h tmp_hash_info.h hash_info.c
 DISTCLEANFILES = @DISTCLEANFILES@
