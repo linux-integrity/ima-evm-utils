@@ -805,7 +805,7 @@ int ima_verify_signature2(struct public_key_entry *public_keys, const char *file
 	hashlen = ima_calc_hash2(file, hash_algo, hash);
 	if (hashlen <= 1)
 		return hashlen;
-	assert(hashlen <= sizeof(hash));
+	assert((unsigned int)hashlen <= sizeof(hash));
 
 	return imaevm_verify_hash(public_keys, file, hash_algo, hash, hashlen,
 				  sig, siglen);
@@ -912,8 +912,10 @@ void calc_keyid_v2(uint32_t *keyid, char *str, EVP_PKEY *pkey)
 /*
  * Extract SKID from x509 in openssl portable way.
  */
-static const unsigned char *x509_get_skid(X509 *x, int *len)
+static const unsigned char *x509_get_skid(X509 *x, unsigned int *skid_len)
 {
+int len;
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000
 	ASN1_STRING *skid;
 
@@ -927,8 +929,13 @@ static const unsigned char *x509_get_skid(X509 *x, int *len)
 #else
 	const ASN1_OCTET_STRING *skid = X509_get0_subject_key_id(x);
 #endif
-	if (len)
-		*len = ASN1_STRING_length(skid);
+	if (skid_len) {
+		len = ASN1_STRING_length(skid);
+		if (len < 0)
+			*skid_len = 0;
+		else
+			*skid_len = len;
+	}
 #if OPENSSL_VERSION_NUMBER < 0x10100000
 	return ASN1_STRING_data(x->skid);
 #else
@@ -952,7 +959,7 @@ static int read_keyid_from_cert(uint32_t *keyid_be, const char *certfile, int tr
 	X509 *x = NULL;
 	FILE *fp;
 	const unsigned char *skid;
-	int skid_len;
+	unsigned int skid_len;
 
 	if (!(fp = fopen(certfile, "r"))) {
 		log_err("Cannot open %s: %s\n", certfile, strerror(errno));
@@ -1022,8 +1029,10 @@ uint32_t imaevm_read_keyid(const char *certfile)
 	return ntohl(keyid_be);
 }
 
-static EVP_PKEY *read_priv_pkey_engine(ENGINE *e, const char *keyfile,
-				       const char *keypass, uint32_t keyid)
+static EVP_PKEY *read_priv_pkey_engine(ENGINE * e __attribute__((unused)),
+				       const char *keyfile __attribute__((unused)),
+				       const char *keypass __attribute__((unused)),
+				       uint32_t keyid __attribute__((unused)))
 {
 #ifdef CONFIG_IMA_EVM_ENGINE
 	EVP_PKEY *pkey;
@@ -1062,8 +1071,10 @@ static int ui_get_pin(UI *ui, UI_STRING *uis)
 }
 #endif
 
-static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER *p, const char *keyfile,
-					 const char *keypass, uint32_t keyid)
+static EVP_PKEY *read_priv_pkey_provider(OSSL_PROVIDER * p __attribute__((unused)),
+					 const char *keyfile __attribute__((unused)),
+					 const char *keypass __attribute__((unused)),
+					 uint32_t keyid __attribute__((unused)))
 {
 #ifdef CONFIG_IMA_EVM_PROVIDER
 	UI_METHOD *ui_method = NULL;
@@ -1459,7 +1470,7 @@ int sign_hash(const char *hashalgo, const unsigned char *hash, int size,
 			       sigflags, paccess_info, imaevm_params.keyid);
 }
 
-static void libinit()
+static void libinit(void)
 {
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000

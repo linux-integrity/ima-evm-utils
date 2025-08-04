@@ -186,7 +186,7 @@ static int bin2file(const char *file, const char *ext, const unsigned char *data
 	return err;
 }
 
-static unsigned char *file2bin(const char *file, const char *ext, int *size)
+static unsigned char *file2bin(const char *file, const char *ext, size_t *size)
 {
 	FILE *fp;
 	size_t len;
@@ -227,7 +227,7 @@ static unsigned char *file2bin(const char *file, const char *ext, int *size)
 	}
 	fclose(fp);
 
-	*size = (int)len;
+	*size = len;
 	return data;
 }
 
@@ -350,6 +350,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 	EVP_MD_CTX ctx;
 	pctx = &ctx;
 #endif
+	size_t len;
 
 	if (lstat(file, &st)) {
 		log_errno_reset(LOG_ERR, "Failed to stat: %s", file);
@@ -416,19 +417,19 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 		int use_xattr_ima = 0;
 
 		if (!strcmp(*xattrname, XATTR_NAME_SELINUX) && selinux_str) {
-			err = strlen(selinux_str) + 1;
-			if (err > sizeof(xattr_value)) {
-				log_err("selinux[%u] value is too long to fit into xattr[%zu]\n",
-					err, sizeof(xattr_value));
+			len = strlen(selinux_str) + 1;
+			if (len > sizeof(xattr_value)) {
+				log_err("selinux[%zu] value is too long to fit into xattr[%zu]\n",
+					len, sizeof(xattr_value));
 				err = -1;
 				goto out;
 			}
 			strcpy(xattr_value, selinux_str);
 		} else if (!strcmp(*xattrname, XATTR_NAME_IMA) && ima_str) {
-			err = strlen(ima_str) / 2;
-			if (err > sizeof(xattr_value)) {
-				log_err("ima[%u] value is too long to fit into xattr[%zu]\n",
-					err, sizeof(xattr_value));
+			len = strlen(ima_str) / 2;
+			if (len > sizeof(xattr_value)) {
+				log_err("ima[%zu] value is too long to fit into xattr[%zu]\n",
+					len, sizeof(xattr_value));
 				err = -1;
 				goto out;
 			}
@@ -445,10 +446,10 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 		} else if (!strcmp(*xattrname, XATTR_NAME_CAPS) && (hmac_flags & HMAC_FLAG_CAPS_SET)) {
 			if (!caps_str)
 				continue;
-			err = strlen(caps_str);
-			if (err >= sizeof(xattr_value)) {
-				log_err("caps[%u] value is too long to fit into xattr[%zu]\n",
-					err + 1, sizeof(xattr_value));
+			len = strlen(caps_str);
+			if (len >= sizeof(xattr_value)) {
+				log_err("caps[%zu] value is too long to fit into xattr[%zu]\n",
+					len + 1, sizeof(xattr_value));
 				err = -1;
 				goto out;
 			}
@@ -558,18 +559,21 @@ static int sign_evm(const char *file, char *hash_algo, const char *key)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
-	int len, err;
+	size_t len;
+	int err;
 
-	len = calc_evm_hash(file, hash_algo, hash);
-	if (len <= 1)
-		return len;
+	err = calc_evm_hash(file, hash_algo, hash);
+	if (err <= 1)
+		return err;
+	len = (size_t)err;
 	assert(len <= sizeof(hash));
 
-	len = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
+	err = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
 			      sig + 1, sigflags, &access_info, imaevm_keyid);
-	if (len <= 1)
-		return len;
-	assert(len < sizeof(sig));
+	if (err <= 1)
+		return err;
+	len = (size_t)err;
+	assert(len <= sizeof(sig));
 
 	/* add header */
 	len++;
@@ -599,7 +603,8 @@ static int sign_evm(const char *file, char *hash_algo, const char *key)
 static int hash_ima(const char *file)
 {
 	unsigned char hash[MAX_DIGEST_SIZE + 2]; /* +2 byte xattr header */
-	int len, err, offset;
+	int err, offset;
+	size_t len;
 	int algo = imaevm_get_hash_algo(g_hash_algo);
 
 	if (algo < 0) {
@@ -615,9 +620,11 @@ static int hash_ima(const char *file)
 		offset = 1;
 	}
 
-	len = ima_calc_hash2(file, g_hash_algo, hash + offset);
-	if (len <= 1)
-		return len;
+	err = ima_calc_hash2(file, g_hash_algo, hash + offset);
+	if (err <= 1)
+		return err;
+
+	len = (size_t)err;
 	assert(len + offset <= sizeof(hash));
 
 	len += offset;
@@ -645,17 +652,20 @@ static int sign_ima(const char *file, char *hash_algo, const char *key)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
-	int len, err;
+	size_t len;
+	int err;
 
-	len = ima_calc_hash2(file, hash_algo, hash);
-	if (len <= 1)
-		return len;
+	err = ima_calc_hash2(file, hash_algo, hash);
+	if (err <= 1)
+		return err;
+	len = (size_t)err;
 	assert(len <= sizeof(hash));
 
-	len = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
+	err = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
 			      sig + 1, sigflags, &access_info, imaevm_keyid);
-	if (len <= 1)
-		return len;
+	if (err <= 1)
+		return err;
+	len = (size_t)err;
 	assert(len < sizeof(sig));
 
 	/* add header */
@@ -777,7 +787,9 @@ static int cmd_sign_hash(struct command *cmd)
 	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	unsigned char hash[MAX_DIGEST_SIZE];
-	int siglen, algolen = 0, hashlen = 0;
+	size_t algolen = 0;
+	size_t hashlen = 0;
+	int siglen;
 	char *line = NULL, *token, *hashp;
 	size_t line_len = 0;
 	const char *key;
@@ -806,7 +818,7 @@ static int cmd_sign_hash(struct command *cmd)
 			if (hashp)	/* pointer to the delimiter */
 				algolen = hashp - line;
 
-			if (!hashp || algolen <= 0 ||
+			if (!hashp || algolen == 0 ||
 			    algolen >= sizeof(algo)) {
 				log_err("Missing/invalid fsverity hash algorithm\n");
 				continue;
@@ -847,7 +859,7 @@ static int cmd_sign_hash(struct command *cmd)
 		} else {
 			/* Parse the shaXsum output */
 			token = strpbrk(line, " \t");
-			hashlen = token ? token - line : strlen(line);
+			hashlen = token ? (size_t)(token - line) : strlen(line);
 			assert(hashlen / 2 <= sizeof(hash));
 			hex2bin(hash, line, hashlen / 2);
 
@@ -860,7 +872,7 @@ static int cmd_sign_hash(struct command *cmd)
 
 		if (siglen <= 1)
 			return siglen;
-		assert(siglen < sizeof(sig));
+		assert(siglen < (int)sizeof(sig));
 
 		fwrite(line, len, 1, stdout);
 		fprintf(stdout, " ");
@@ -942,7 +954,7 @@ static int verify_evm(struct public_key_entry *public_keys, const char *file)
 	mdlen = calc_evm_hash(file, hash_algo, hash);
 	if (mdlen <= 1)
 		return mdlen;
-	assert(mdlen <= sizeof(hash));
+	assert(mdlen <= (int)sizeof(hash));
 
 	return imaevm_verify_hash(public_keys, file, hash_algo, hash,
 				  mdlen, sig, len);
@@ -989,7 +1001,8 @@ static int cmd_verify_evm(struct command *cmd)
 static int verify_ima(struct public_key_entry *public_keys, const char *file)
 {
 	unsigned char sig[MAX_SIGNATURE_SIZE];
-	int len;
+	size_t len;
+	int err;
 
 	if (sigfile) {
 		void *tmp = file2bin(file, "sig", &len);
@@ -1006,11 +1019,12 @@ static int verify_ima(struct public_key_entry *public_keys, const char *file)
 		memcpy(sig, tmp, len);
 		free(tmp);
 	} else {
-		len = lgetxattr(file, xattr_ima, sig, sizeof(sig));
-		if (len < 0) {
+		err = lgetxattr(file, xattr_ima, sig, sizeof(sig));
+		if (err < 0) {
 			log_err("getxattr failed: %s\n", file);
-			return len;
+			return err;
 		}
+		len = (size_t)err;
 	}
 
 	return ima_verify_signature2(public_keys, file, sig, len, NULL, 0);
@@ -1083,11 +1097,12 @@ static int cmd_convert(struct command *cmd)
 }
 #endif
 
-static int cmd_import(struct command *cmd)
+static int cmd_import(struct command *cmd __attribute__((unused)))
 {
 	char *inkey, *ring = NULL;
 	unsigned char _pub[1024], *pub = _pub;
-	int id, len, err = 0;
+	int id, err = 0;
+	size_t len;
 	char name[20];
 	uint8_t keyid[8];
 
@@ -1169,7 +1184,8 @@ static int cmd_import(struct command *cmd)
 static int setxattr_ima(const char *file, char *sig_file)
 {
 	unsigned char *sig;
-	int len, err;
+	size_t len;
+	int err;
 
 	if (sig_file)
 		sig = file2bin(sig_file, NULL, &len);
@@ -1216,7 +1232,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 	char **xattrname;
 	unsigned char xattr_value[1024];
 	unsigned char *key;
-	int keylen;
+	size_t keylen;
 	unsigned char evmkey[MAX_KEY_SIZE];
 	char list[1024];
 	char uuid[16];
@@ -1235,7 +1251,7 @@ static int calc_evm_hmac(const char *file, const char *keyfile, unsigned char *s
 	}
 
 	if (keylen > sizeof(evmkey)) {
-		log_err("key is too long: %d\n", keylen);
+		log_err("key is too long: %zu\n", keylen);
 		goto out;
 	}
 
@@ -1386,11 +1402,14 @@ static int hmac_evm(const char *file, const char *key)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
-	int len, err;
+	size_t len;
+	int err;
 
-	len = calc_evm_hmac(file, key, hash);
-	if (len <= 1)
-		return len;
+	err = calc_evm_hmac(file, key, hash);
+	if (err <= 1)
+		return err;
+
+	len = (size_t)err;
 	assert(len <= sizeof(hash));
 
 	log_info("hmac: ");
@@ -1631,7 +1650,8 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 {
 	uint8_t *fieldp = entry->template;
 	uint32_t field_len;
-	int total_len = entry->template_len, digest_len, len, fbuf_len;
+	uint32_t total_len = entry->template_len;
+	int digest_len, len, fbuf_len = 0;
 	uint8_t *digest, *sig = NULL, *fbuf = NULL;
 	int sig_len = 0;
 	char *algo, *path;
@@ -1639,14 +1659,25 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 	int err;
 
 	/* get binary digest */
-	field_len = *(uint32_t *)fieldp;
-	fieldp += sizeof(field_len);
-	total_len -= sizeof(field_len);
-	if (total_len < 0) {
+	if (total_len < sizeof(field_len)) {
 		log_err("Template \"%s\" invalid template data\n", entry->name);
 		return;
 	}
 
+	/*
+	 * A cast to a uint32_t pointer is endian safe when the endian-ness
+	 * of the platform is the same as the endian-ness of the event log.
+	 */
+	field_len = *(uint32_t *)fieldp;
+	fieldp += sizeof(field_len);
+	total_len -= sizeof(field_len);
+
+	if (total_len < field_len) {
+		log_err("Template \"%s\" invalid template data\n", entry->name);
+		return;
+	}
+
+	/* parse the binary digest field: <hash algo>:<digest> */
 	algo = (char *)fieldp;
 	len = strnlen(algo, field_len - 1) + 1;
 	digest_len = field_len - len;
@@ -1660,43 +1691,43 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 	/* move to next field */
 	fieldp += field_len;
 	total_len -= field_len;
-	if (total_len < 0) {
-		log_err("Template \"%s\" invalid template data\n", entry->name);
-		return;
-	}
 
 	/* get path */
+	if (total_len < sizeof(field_len)) {
+		log_err("Template \"%s\" invalid file pathname\n", entry->name);
+		return;
+	}
 	field_len = *(uint32_t *)fieldp;
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
+
 	if (field_len == 0 || field_len > PATH_MAX || total_len < field_len) {
 		log_err("Template \"%s\" invalid file pathname\n", entry->name);
 		return;
 	}
-
 	path = (char *)fieldp;
 
 	/* move to next field */
 	fieldp += field_len;
 	total_len -= field_len;
-	if (total_len < 0) {
-		log_err("Template \"%s\" invalid template data\n", entry->name);
-		return;
-	}
 
 	if (!strcmp(entry->name, "ima-sig") ||
 	    !strcmp(entry->name, "ima-sigv2")) {
 		/* get signature, if it exists */
+		if (total_len < sizeof(field_len))
+			return;
+
 		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
+		total_len -= sizeof(field_len);
+
 		if (field_len > MAX_SIGNATURE_SIZE) {
 			log_err("Template \"%s\" invalid file signature size\n",
 				entry->name);
 			return;
 		}
 
-		total_len -= sizeof(field_len);
-		if (total_len < 0) {
+		if (total_len < field_len) {
 			log_err("Template \"%s\" invalid template data\n",
 				entry->name);
 			return;
@@ -1711,9 +1742,19 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 			total_len -= field_len;
 		}
 	} else if (!strcmp(entry->name, "ima-buf")) {
+		if (total_len < sizeof(field_len))
+			return;
+
 		field_len = *(uint32_t *)fieldp;
 		fieldp += sizeof(field_len);
 		total_len -= sizeof(field_len);
+
+		if (total_len < field_len) {
+			log_err("Template \"%s\" invalid template data\n",
+				entry->name);
+			return;
+		}
+
 		if (field_len) {
 			fbuf = fieldp;
 			fbuf_len = field_len;
@@ -1724,7 +1765,7 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 		}
 	}
 
-	if (total_len < 0) {
+	if (total_len != 0) {
 		log_err("Template \"%s\" invalid template data\n", entry->name);
 		return;
 	}
@@ -2113,13 +2154,14 @@ static int read_sysfs_tpm2_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
 }
 
 /* Read PCRs from per-bank file(s) specified via --pcrs */
-static int read_file_pcrs(int num_banks, struct tpm_bank_info *tpm_banks)
+static int read_file_pcrs(unsigned int num_banks, struct tpm_bank_info *tpm_banks)
 {
 	struct stat s;
 	FILE *fp;
 	char *p;
 	const char *alg, *path;
-	int i, j, bank, result;
+	unsigned int i, j;
+	int bank, result;
 
 	for (i = 0; i < num_banks; i++)
 		tpm_banks[i].supported = 0;
@@ -2715,7 +2757,7 @@ static int append_bootaggr(char *bootaggr, struct tpm_bank_info *tpm_banks)
  * 0 - 9 to validate against the IMA boot_aggregate record. If the digest
  * algorithm is SHA1, only PCRs 0 - 7 are considered to avoid ambiguity.
  */
-static int cmd_ima_bootaggr(struct command *cmd)
+static int cmd_ima_bootaggr(struct command *cmd __attribute__((unused)))
 {
 	struct tpm_bank_info *tpm_banks;
 	int bootaggr_len = 0;
@@ -2920,8 +2962,8 @@ static void usage(void)
 }
 
 struct command cmds[] = {
-	{"--version", NULL, 0, ""},
-	{"help", cmd_help, 0, "<command>"},
+	{"--version", NULL, 0, "", ""},
+	{"help", cmd_help, 0, "<command>", ""},
 #if CONFIG_SIGV1
 	{"import", cmd_import, 0, "[--rsa (deprecated)] pubkey keyring", "Import public key into the keyring.\n"},
 	{"convert", cmd_convert, 0, "key", "convert public key into the keyring. (deprecated)\n"},
@@ -2942,7 +2984,7 @@ struct command cmds[] = {
 #ifdef DEBUG
 	{"hmac", cmd_hmac_evm, 0, "[--imahash | --imasig] [--hmackey key] file", "Sign file metadata with HMAC using symmetric key (for testing purpose).\n"},
 #endif
-	{0, 0, 0, NULL}
+	{0, 0, 0, NULL, ""}
 };
 
 static struct option opts[] = {
@@ -3229,7 +3271,7 @@ int main(int argc, char *argv[])
 			 * UINT_MAX is `imaevm_params.keyid' maximum value,
 			 * 0 is reserved for keyid being unset.
 			 */
-			if (errno || eptr - optarg != strlen(optarg) ||
+			if (errno || (size_t)(eptr - optarg) != strlen(optarg) ||
 			    keyid == ULONG_MAX || keyid > UINT_MAX ||
 			    keyid == 0) {
 				log_err("Invalid keyid value.\n");
