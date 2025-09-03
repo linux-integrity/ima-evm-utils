@@ -232,6 +232,16 @@ jobs:
           COMPILE_SSL="$COMPILE_SSL" VARIANT="$VARIANT" ./tests/install-openssl3.sh; \
         fi
 
+    - name: Build ibmtss
+      run: |
+        if [ ! "$VARIANT" ]; then
+          if [ "$TSS" = "ibmtss" ]; then
+            if ! which tssstartup; then
+              ./tests/install-tss.sh;
+            fi
+          fi
+        fi
+
     - name: Build swtpm
       run: |
         if [ ! "$VARIANT" ]; then

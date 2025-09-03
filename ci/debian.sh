@@ -31,7 +31,7 @@ esac
 apt="apt install -y --no-install-recommends"
 
 $apt \
-	$CC $TSS \
+	$CC \
 	asciidoc \
 	attr \
 	autoconf \
@@ -51,6 +51,7 @@ $apt \
 	pkg-config \
 	procps \
 	sudo \
+	swtpm \
 	util-linux \
 	wget \
 	xsltproc \
@@ -60,3 +61,9 @@ $apt xxd || $apt vim-common
 # $apt libengine-gost-openssl || true
 # $apt softhsm2 gnutls-bin libengine-pkcs11-openssl || true
 $apt softhsm2 gnutls-bin pkcs11-provider || true
+
+if [ "$TSS" != "libtss-dev" ]; then
+	$apt $TSS
+else
+	$apt git ca-certificates
+fi

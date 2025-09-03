@@ -36,11 +36,13 @@ $apt \
 	attr \
 	autoconf \
 	automake \
+	ca-certificates \
 	diffutils \
 	debianutils \
 	docbook-xml \
 	docbook-xsl \
 	e2fsprogs \
+	git \
 	gzip \
 	libattr1-dev$ARCH \
 	libkeyutils-dev$ARCH \
@@ -56,6 +58,7 @@ $apt \
 	xsltproc \
 	gawk
 
+$apt swtpm || true
 $apt xxd || $apt vim-common
 # $apt libengine-gost-openssl || true
 # $apt softhsm2 gnutls-bin libengine-pkcs11-openssl || true
