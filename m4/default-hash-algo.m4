@@ -5,6 +5,7 @@ dnl $1 - $KERNEL_HEADERS
 
 AC_DEFUN([AX_DEFAULT_HASH_ALGO], [
 	HASH_INFO_HEADER="$1/include/uapi/linux/hash_info.h"
+	HASH_INFO_PKG_HEADER="$1/hash_info.h"
 
 	AC_ARG_WITH([default_hash],
 		AS_HELP_STRING([--with-default-hash=ALGORITHM], [specifies the default hash algorithm to be used]),
@@ -15,8 +16,11 @@ AC_DEFUN([AX_DEFAULT_HASH_ALGO], [
 	HASH_ALGO="$(echo $HASH_ALGO | $SED 's/\(.*\)/\L\1\E/')"
 
 	AC_CHECK_HEADER([$HASH_INFO_HEADER],
-		[HAVE_HASH_INFO_HEADER=yes],
-		[AC_MSG_WARN([$HASH_INFO_HEADER not found.])])
+		[HAVE_HASH_INFO_HEADER=yes], [
+		AC_CHECK_HEADER([$HASH_INFO_PKG_HEADER], [
+			HAVE_HASH_INFO_HEADER=yes
+			HASH_INFO_HEADER=$HASH_INFO_PKG_HEADER], [])
+		])
 
 	if test "x$HAVE_HASH_INFO_HEADER" = "x"; then
 		AC_MSG_RESULT([using $HASH_ALGO algorithm as default hash algorith])
