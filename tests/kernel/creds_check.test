@@ -1,0 +1,191 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# Copyright (C) 2025 Roberto Sassu <roberto.sassu@huawei.com>
+#
+# Check if CREDS_CHECK sees the correct credentials of the final binary.
+
+trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM SIGSEGV EXIT
+
+# Base VERBOSE on the environment variable, if set.
+VERBOSE="${VERBOSE:-0}"
+
+# PATCHES is used in functions.sh
+# shellcheck disable=SC2034
+PATCHES=(
+'ima: Attach CREDS_CHECK IMA hook to bprm_creds_from_file LSM hook'
+)
+
+cd "$(dirname "$0")" || exit "$FAIL"
+. ./functions_kernel.sh
+_require evmctl
+
+cleanup() {
+	if [ "$g_loop_mounted" = "1" ]; then
+		popd > /dev/null || exit "$FAIL"
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: unmounting $g_mountpoint"
+		umount "$g_mountpoint"
+	fi
+
+	if [ -n "$g_dev" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: unassigning $g_dev"
+		losetup -d "$g_dev"
+	fi
+
+	if [ -n "$g_image" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting image $g_image"
+		rm -f "$g_image"
+	fi
+
+	if [ -n "$g_key_path" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting private/key $g_key_path"
+		rm -f "$g_key_path"
+	fi
+
+	if [ -n "$g_mountpoint" ]; then
+		[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting mountpoint $g_mountpoint"
+		rm -Rf "$g_mountpoint"
+	fi
+}
+
+# Use the fsuuid= IMA policy keyword to select only files created/used by the
+# tests below.
+IMA_UUID="28b23254-9467-44c0-b6ba-34b12e85a271"
+MEASURE_RULE="measure func=CREDS_CHECK euid=2001 fsuuid=$IMA_UUID"
+
+# The purpose of this test is to verify that the CREDS_CHECK hook sees the
+# final credentials to be applied to the process after execution. In particular,
+# it checks whether or not the effective UID is set to the owner for a setuid
+# program.
+check_creds_check_exec() {
+	local result
+
+	echo "Test: ${FUNCNAME[0]}"
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: loading IMA policy: $MEASURE_RULE"
+	check_load_ima_rule "$MEASURE_RULE" "$g_key_path" "$g_mountpoint"
+	result=$?
+	if [ $result -ne "$OK" ]; then
+		return $result
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: creating setuid program from cat"
+	if ! cp -a /bin/cat test-suid; then
+		echo "${RED}Cannot copy cat to test-suid${NORM}"
+		return "$FAIL"
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: changing test-suid owner to 2001"
+	if ! chown 2001 test-suid; then
+		echo "${RED}Cannot change test-suid owner to 2001{NORM}"
+		return "$FAIL"
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: making test-suid as a setuid program"
+	if ! chmod u+s test-suid; then
+		echo "${RED}Cannot make test-suid as a setuid program${NORM}"
+		return "$FAIL"
+	fi
+
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: executing test-suid"
+	if ! ./test-suid /dev/null; then
+		echo "${RED}Cannot execute test-suid${NORM}"
+		return "$FAIL"
+	fi
+
+	echo -n "Checking if test-suid is in the measurement list (expect: found): "
+	test_file_entry=$(awk '$5 == "'"$PWD/test-suid"'"' < /sys/kernel/security/ima/ascii_runtime_measurements)
+	if [ -z "$test_file_entry" ]; then
+		echo "${RED}not found${NORM}"
+		return "$FAIL"
+	fi
+
+	echo "${GREEN}found${NORM}"
+
+	return "$OK"
+}
+
+cleanup_check_creds_check_exec() {
+	[ "$VERBOSE" -ge 1 ] && echo "INFO: deleting test-suid"
+	rm -f test-suid
+}
+
+# Run in the new environment if TST_ENV is set.
+_run_env "$TST_KERNEL" "$PWD/$(basename "$0")" "TST_ENV=$TST_ENV TST_KERNEL=$TST_KERNEL PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH VERBOSE=$VERBOSE TST_KEY_PATH=$TST_KEY_PATH"
+
+# Exit from the creator of the new environment.
+_exit_env "$TST_KERNEL"
+
+# Mount filesystems in the new environment.
+_init_env
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: creating mountpoint directory"
+g_mountpoint=$(mktemp -d)
+g_image=$(mktemp)
+
+[ "$VERBOSE" -ge 2 ] && echo "INFO: mountpoint directory is $g_mountpoint"
+[ "$VERBOSE" -ge 2 ] && echo "INFO: loop image is $g_image"
+
+if [ -z "$g_mountpoint" ]; then
+	echo "${RED}Mountpoint directory not created${NORM}"
+	exit "$FAIL"
+fi
+
+if [ "$(whoami)" != "root" ]; then
+	echo "${CYAN}This script must be executed as root${NORM}"
+	exit "$SKIP"
+fi
+
+if ! g_key_path=$(mktemp); then
+	echo "${RED}Failed to create temporary file for private key${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 2 ] && echo "INFO: copied private key is $g_key_path"
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: getting private key"
+get_private_key "$g_key_path"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: loading public key"
+load_public_key "$g_key_path" ".ima"
+result=$?
+if [ $result -ne 0 ]; then
+	exit $result
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: zeroing image at $g_image"
+if ! dd if=/dev/zero of="$g_image" bs=1M count=20 &> /dev/null; then
+	echo "${RED}Cannot create test image${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: assigning loop device to $g_image"
+g_dev=$(losetup -f "$g_image" --show)
+if [ -z "$g_dev" ]; then
+	echo "${RED}Cannot create loop device${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 2 ] && echo "INFO: loop device for $g_image is $g_dev"
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: formatting $g_dev with ext4 and UUID $IMA_UUID"
+if ! mkfs.ext4 -U "$IMA_UUID" -b 4096 "$g_dev" &> /dev/null; then
+	echo "${RED}Cannot format $g_dev${NORM}"
+	exit "$FAIL"
+fi
+
+[ "$VERBOSE" -ge 1 ] && echo "INFO: mounting $g_dev to $g_mountpoint"
+if ! mount -o i_version "$g_dev" "$g_mountpoint"; then
+	echo "${RED}Cannot mount loop device${NORM}"
+	exit "$FAIL"
+fi
+
+g_loop_mounted=1
+pushd "$g_mountpoint" > /dev/null || exit "$FAIL"
+
+expect_pass_if '0' check_creds_check_exec
+cleanup_check_creds_check_exec
