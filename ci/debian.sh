@@ -31,7 +31,7 @@ esac
 apt="apt install -y --no-install-recommends"
 
 $apt \
-	$CC $TSS \
+	$CC \
 	asciidoc \
 	attr \
 	autoconf \
@@ -60,3 +60,8 @@ $apt xxd || $apt vim-common
 $apt libengine-gost-openssl || true
 $apt softhsm2 gnutls-bin libengine-pkcs11-openssl || true
 # $apt softhsm2 gnutls-bin pkcs11-provider || true
+
+if ! $apt $TSS; then
+	$apt git ca-certificates
+	./tests/install-tss.sh
+fi
