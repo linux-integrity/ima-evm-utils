@@ -51,5 +51,5 @@ apk add \
 
 if [ ! "$TSS" ]; then
 	apk add git
-	../tests/install-tss.sh
+	./tests/install-tss.sh
 fi
