@@ -63,9 +63,12 @@ jobs:
           fi
           echo "url : $LINUX_URL"
           echo "branch: $LINUX_BRANCH"
+          echo "ref: $GITHUB_REF_NAME"
           git remote add origin $LINUX_URL
           LINUX_SHA=$(git ls-remote origin $GITHUB_REF_NAME | awk '{print $1}')
+          echo "sha (ref): $LINUX_SHA"
           [ -z "$LINUX_SHA" ] && LINUX_SHA=$(git ls-remote origin $LINUX_BRANCH | awk '{print $1}')
+          echo "sha (branch): $LINUX_SHA"
           echo "LINUX_SHA=$LINUX_SHA" >> $GITHUB_OUTPUT
           popd
 
