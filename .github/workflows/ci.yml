@@ -15,6 +15,7 @@ jobs:
     - name: run checkpatch
       id: run_checkpatch
       run: |
+        count=0
         if [ ${{ github.event_name }} == 'pull_request' ]; then
           count=$(git rev-list --count ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} )
           echo "checkpatch event: ${{ github.event_name }} count: $count"
@@ -23,7 +24,12 @@ jobs:
           echo "checkpatch event: ${{ github.event_name }} forced: ${{ github.event.forced }}"
           for commit in ${{ join(github.event.commits.*.id, ' ') }}; do
               git format-patch -1 $commit -o patches/
+              count=$((count + 1))
           done
+        fi
+
+        if [ "$count" -eq 0 ]; then
+          exit 0
         fi
         scripts/checkpatch.pl patches/*  --strict --terse  --no-tree --ignore CONST_STRUCT,VOLATILE,SPLIT_STRING,FILE_PATH_CHANGES,EXECUTE_PERMISSIONS,UNKNOWN_COMMIT_ID,BAD_SIGN_OFF,PREFER_DEFINED_ATTRIBUTE_MACRO,PREFER_KERNEL_TYPES
 
