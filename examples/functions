@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 # For help screens to display supported algorithms
-SUPPORTED_ALGORITHMS="rsa:2048, rsa:3072, rsa:4096, prime256v1, secp384r1, and secp521r1"
+SUPPORTED_ALGORITHMS="rsa:2048, rsa:3072, rsa:4096, prime256v1, secp384r1, secp521r1, mldsa44, mldsa65, and mldsa87"
 
 # Get the OpenSSL keyalgo parameter
 # @param1: The key algorithm; must be a name that OpenSSL command line tool
@@ -16,6 +16,15 @@ get_ossl_keyalgo()
 	prime256v1|secp384r1|secp521r1)
 		echo "ec"
 		;;
+	mldsa44|mldsa65|mldsa87)
+		# ML-DSA requires OpenSSL 3.5.0 or later
+		maj=$(openssl version | awk '{print $2}' | cut -d. -f1)
+		min=$(openssl version | awk '{print $2}' | cut -d. -f2)
+		if [ "${maj}" -lt 3 ] || { [ "${maj}" -eq 3 ] && [ "${min}" -lt 5 ]; }; then
+			echo "The openssl tool is too old (v${maj}.${min}) to support ML-DSA. Need at least v3.5.0." >&2
+			return 1
+		fi
+		echo "$1"
 	esac
 }
 
@@ -30,6 +39,9 @@ get_ossl_keyalgo_detail()
 		;;
 	prime256v1|secp384r1|secp521r1)
 		echo "-pkeyopt ec_paramgen_curve:${keyalgo}"
+		;;
+	mldsa44|mldsa65|mldsa87)
+		echo ""
 		;;
 	esac
 }
@@ -172,6 +184,9 @@ __EOF__
 		;;
 	primve256v1|secp384r1|secp521r1)
 		openssl ec -pubout -in privkey_evm.pem -out pubkey_evm.pem
+		;;
+	mldsa44|mldsa65|mldsa87)
+		openssl pkey -pubout -in privkey_evm.pem -out pubkey_evm.pem
 		;;
 	esac
 
