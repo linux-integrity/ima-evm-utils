@@ -605,7 +605,7 @@ struct ima_file_id {
 int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo,
 		    const unsigned char *in_hash, unsigned char *out_hash)
 {
-	struct ima_file_id file_id = { .hash_type = IMA_VERITY_DIGSIG };
+	struct ima_file_id file_id = { .hash_type = type };
 	uint8_t *data = (uint8_t *) &file_id;
 
 	const EVP_MD *md;
@@ -622,8 +622,9 @@ int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo,
 	int hash_size;
 	unsigned int unused;
 
-	if (type != IMA_VERITY_DIGSIG) {
-		log_err("Only fsverity supports signature format v3 (sigv3)\n");
+	if (type != IMA_VERITY_DIGSIG &&
+	    type != EVM_IMA_XATTR_DIGSIG) {
+		log_err("Only fsverity and IMA/EVM support signature format v3 (sigv3)\n");
 		return -EINVAL;
 	}
 
@@ -1449,6 +1450,67 @@ int imaevm_signhash(const char *hashalgo, const unsigned char *hash, int size,
 			    access_info, keyid);
 }
 
+/*
+ * Create a v3 signature given a file hash
+ *
+ * @hash_algo: The hash algorithm to use for hashing
+ * @hash: The file hash
+ * @size: The size of the file hash
+ * @sig: A pointer to signature buffer pointer; if pointing to NULL, then
+ *       this function will allocate a buffer large enough for the signature
+ * @siglen: Size of the given signature buffer; if it is too small then
+ *          an error will be returned
+ * @sigflag: Flags related to the signature
+ * @xattr_type: Type of xattr that will be written; needed for creating
+ *              ima_file_id structure
+ * @access_info: Needed in case an engine or provider is used
+ * @keyid: The key id to use
+ *
+ * Note: This function behaves slightly different than older signature creation
+ *       functions because it already writes the xattr type to offset 0 in the
+ *       signature buffer.
+ */
+int imaevm_create_sigv3(const char *hash_algo, const unsigned char *hash, int size,
+			const char *keyfile, const char *keypass,
+			unsigned char **sig, size_t siglen, long sigflags,
+			enum evm_ima_xattr_type xattr_type,
+			const struct imaevm_ossl_access *access_info,
+			uint32_t keyid)
+{
+	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
+	/* buffer capable of holding (more than) RSA-4096 signature; */
+	unsigned char sigbuf[1024];
+	int len, slen, err;
+
+	len = calc_hash_sigv3(xattr_type, hash_algo, hash, sigv3_hash);
+	if (len < 0 || len == 1) {
+		log_err("Failure to calculate v3 file hash\n");
+		return len;
+	}
+	assert(len <= sizeof(sigv3_hash));
+
+	err = imaevm_signhash(hash_algo, sigv3_hash, len, keyfile, keypass,
+			      &sigbuf[1], sigflags, access_info, keyid);
+	/* err holds error or signature length */
+	if (err < 0)
+		return err;
+	slen = 1 + err; /* will prepend xattr type */
+
+	if (!*sig) {
+		*sig = malloc(slen);
+		if (!*sig)
+			return -1;
+	} else if (siglen < slen) {
+		/* provided buffer is too small */
+		return -1;
+	}
+
+	sigbuf[0] = xattr_type;
+	sigbuf[1] = DIGSIG_VERSION_3;
+	memcpy(*sig, sigbuf, slen);
+
+	return slen;
+}
 
 int sign_hash(const char *hashalgo, const unsigned char *hash, int size,
 	      const char *keyfile, const char *keypass, unsigned char *sig)

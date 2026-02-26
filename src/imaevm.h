@@ -282,4 +282,11 @@ int imaevm_hash_algo_from_sig(unsigned char *sig);
 const char *imaevm_hash_algo_by_id(int algo);
 int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo, const unsigned char *in_hash, unsigned char *out_hash);
 
+int imaevm_create_sigv3(const char *hash_algo, const unsigned char *hash, int size,
+			const char *keyfile, const char *keypass,
+			unsigned char **sig, size_t siglen, long sigflags,
+			enum evm_ima_xattr_type xattr_type,
+			const struct imaevm_ossl_access *access_info,
+			uint32_t keyid);
+
 #endif
