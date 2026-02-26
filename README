@@ -84,6 +84,8 @@ OPTIONS
       --provider p   preload OpenSSL provider (such as: pkcs11)
       --ignore-violations ignore ToMToU measurement violations
       --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)
+      --v2           create V2 signatures; this is the default
+      --v3           create V3 signatures; this requires Linux 7.1 or later
   -v                 increase verbosity level
   -h, --help         display this help and exit
 
@@ -139,7 +141,7 @@ evmctl '--smack' options enables that.
 Key and signature formats
 -------------------------
 
-Linux integrity subsystem supports two type of signature and respectively two
+Linux integrity subsystem supports three types of signature and respectively two
 key formats.
 
 First key format (v1) is pure RSA key encoded in PEM a format and uses own signature
@@ -149,7 +151,7 @@ for signing and importing the key.
 Second key format uses X509 DER encoded public key certificates and uses asymmetric key support
 in the kernel (since kernel 3.9). CONFIG_INTEGRITY_ASYMMETRIC_KEYS must be enabled (default).
 
-For v2 signatures x509 certificate (containing the public key) could be appended to the
+For v2 and v3 signatures x509 certificate (containing the public key) could be appended to the
 private key (they both are in PEM format) to automatically extract keyid from its Subject
 Key Identifier (SKID).
 

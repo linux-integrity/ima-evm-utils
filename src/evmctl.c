@@ -3017,6 +3017,8 @@ static void usage(void)
 #ifdef DEBUG
 		"      --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)\n"
 #endif
+		"      --v2           create V2 signatures; this is the default\n"
+		"      --v3           create V3 signatures; this requires Linux 7.1 or later\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n"
@@ -3092,6 +3094,8 @@ static struct option opts[] = {
 #if CONFIG_IMA_EVM_PROVIDER
 	{"provider", 1, 0, 149},
 #endif
+	{"v2", 0, 0, 150},
+	{"v3", 0, 0, 151},
 	{}
 
 };
@@ -3370,6 +3374,12 @@ int main(int argc, char *argv[])
 			access_info.type = IMAEVM_OSSL_ACCESS_TYPE_PROVIDER;
 			break;
 #endif
+		case 150: /* --v2 */
+			g_signature_version = SIGNATURE_V2;
+			break;
+		case 151: /* --v3 */
+			g_signature_version = SIGNATURE_V3;
+			break;
 		case '?':
 			exit(1);
 			break;
