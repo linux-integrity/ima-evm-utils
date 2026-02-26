@@ -123,6 +123,13 @@ static bool hwtpm;
 static char *g_hash_algo = DEFAULT_HASH_ALGO;
 static char *g_keypass;
 
+enum signature_version {
+	SIGNATURE_V2 = 2,
+	SIGNATURE_V3,
+};
+
+static enum signature_version g_signature_version = SIGNATURE_V2;
+
 #define HMAC_FLAG_NO_UUID	0x0001
 #define HMAC_FLAG_CAPS_SET	0x0002
 
@@ -652,6 +659,7 @@ static int sign_ima(const char *file, char *hash_algo, const char *key)
 {
 	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
+	unsigned char *psig;
 	size_t len;
 	int err;
 
@@ -661,16 +669,35 @@ static int sign_ima(const char *file, char *hash_algo, const char *key)
 	len = (size_t)err;
 	assert(len <= sizeof(hash));
 
-	err = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
-			      sig + 1, sigflags, &access_info, imaevm_keyid);
-	if (err <= 1)
-		return err;
-	len = (size_t)err;
-	assert(len < sizeof(sig));
-
-	/* add header */
-	len++;
-	sig[0] = EVM_IMA_XATTR_DIGSIG;
+	switch (g_signature_version) {
+	case SIGNATURE_V3:
+		psig = sig;
+		err = imaevm_create_sigv3(hash_algo, hash, len, key, g_keypass,
+					  &psig, sizeof(sig), sigflags,
+					  EVM_IMA_XATTR_DIGSIG, &access_info,
+					  imaevm_keyid);
+		if (err <= 1)
+			return err;
+		len = (size_t)err;
+		assert(len <= sizeof(sig));
+		break;
+	case SIGNATURE_V2:
+		err = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
+				      sig + 1, sigflags, &access_info,
+				      imaevm_keyid);
+		if (err <= 1)
+			return err;
+		len = (size_t)err;
+		assert(len < sizeof(sig));
+		/* add header */
+		len++;
+		sig[0] = EVM_IMA_XATTR_DIGSIG;
+		break;
+	default:
+		log_err("Internal error: Unsupported signature version: %d\n",
+			g_signature_version);
+		return -1;
+	}
 
 	if (sigdump || imaevm_params.verbose >= LOG_INFO)
 		imaevm_hexdump(sig, len);
@@ -791,6 +818,7 @@ static int cmd_sign_hash(struct command *cmd)
 	size_t hashlen = 0;
 	int siglen;
 	char *line = NULL, *token, *hashp;
+	unsigned char *psig;
 	size_t line_len = 0;
 	const char *key;
 	char algo[7];	/* Current maximum fsverity hash algo name length */
@@ -863,20 +891,39 @@ static int cmd_sign_hash(struct command *cmd)
 			assert(hashlen / 2 <= sizeof(hash));
 			hex2bin(hash, line, hashlen / 2);
 
-			siglen = imaevm_signhash(g_hash_algo, hash,
-						 hashlen / 2, key, g_keypass,
-						 sig + 1, sigflags,
-						 &access_info, imaevm_keyid);
-			sig[0] = EVM_IMA_XATTR_DIGSIG;
+			switch (g_signature_version) {
+			case SIGNATURE_V3:
+				psig = sig;
+				siglen = imaevm_create_sigv3(g_hash_algo, hash,
+							     hashlen / 2, key, g_keypass,
+							     &psig, sizeof(sig), sigflags,
+							     EVM_IMA_XATTR_DIGSIG,
+							     &access_info, imaevm_keyid);
+				if (siglen <= 1)
+					return siglen;
+				assert(siglen <= (int)sizeof(sig));
+				break;
+			case SIGNATURE_V2:
+				siglen = imaevm_signhash(g_hash_algo, hash,
+							 hashlen / 2, key, g_keypass,
+							 sig + 1, sigflags,
+							 &access_info, imaevm_keyid);
+				if (siglen <= 1)
+					return siglen;
+				assert(siglen < (int)sizeof(sig));
+				siglen++;
+				sig[0] = EVM_IMA_XATTR_DIGSIG;
+				break;
+			default:
+				log_err("Internal error: Unsupported signature version: %d\n",
+					g_signature_version);
+				return -1;
+			}
 		}
-
-		if (siglen <= 1)
-			return siglen;
-		assert(siglen < (int)sizeof(sig));
 
 		fwrite(line, len, 1, stdout);
 		fprintf(stdout, " ");
-		bin2hex(sig, siglen + 1, stdout);
+		bin2hex(sig, siglen, stdout);
 		fprintf(stdout, "\n");
 	}
 
