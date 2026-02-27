@@ -128,7 +128,7 @@ check_sign() {
   # OPTS (additional options for evmctl),
   # FILE (working file to sign).
   local "$@"
-  local key verifykey
+  local key verifykey sigver
   local FILE=${FILE:-$ALG.txt}
 
   # Normalize key filename if it's not a pkcs11 URI
@@ -213,18 +213,30 @@ check_sign() {
       verifykey=${key}
   fi
 
-  cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
-	-signature $FILE.sig2 $FILE"
+  if [[ "$OPTS" =~ "--v3" ]]; then
+    # In case of v3 signatures we need to create ima_file_id now.
+    # All data for it can be found in PREFIX and by hashing $FILE.
+    echo -en "\x${PREFIX:2:2}\x${PREFIX:6:2}" > "$FILE.tmp"
+    # shellcheck disable=SC2086
+    openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -"$ALG" -binary "$FILE" >> "$FILE.tmp"
+    cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
+	  -signature $FILE.sig2 $FILE.tmp"
+    sigver=3
+  else
+    cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
+	  -signature $FILE.sig2 $FILE"
+    sigver=2
+  fi
   echo - "$cmd"
   if ! $cmd; then
     color_red_on_failure
-    echo "Signature v2 verification with openssl is failed."
+    echo "Signature v${sigver} verification with openssl is failed."
     color_restore
-    rm "$FILE.sig2"
+    rm "$FILE.sig2" "$FILE.tmp"
     return "$FAIL"
   fi
 
-  rm "$FILE.sig2"
+  rm "$FILE.sig2" "$FILE.tmp"
   return "$OK"
 }
 
@@ -390,6 +402,9 @@ sign_verify  rsa1024  sha384  0x030205:K:0080
 sign_verify  rsa1024  sha512  0x030206:K:0080
 sign_verify  rsa1024  rmd160  0x030203:K:0080
 
+sign_verify rsa1024  sha384  0x030305:K:0080 --v3
+sign_verify rsa1024  sha512  0x030306:K:0080 --v3
+
 # Test v2 signatures with ECDSA
 # Signature length is typically 0x34-0x38 bytes long, very rarely 0x33
 sign_verify  prime192v1 sha1   0x030202:K:003[345678]
@@ -404,6 +419,10 @@ sign_verify  prime256v1 sha224 0x030207:K:004[345678]
 sign_verify  prime256v1 sha256 0x030204:K:004[345678]
 sign_verify  prime256v1 sha384 0x030205:K:004[345678]
 sign_verify  prime256v1 sha512 0x030206:K:004[345678]
+
+sign_verify  prime256v1 sha256   0x030304:K:004[345678] --v3
+sign_verify  prime256v1 sha384   0x030305:K:004[345678] --v3
+sign_verify  prime256v1 sha512   0x030306:K:004[345678] --v3
 
 # If openssl 3.0 is installed, test the SM2/3 algorithm combination
 ssl_major_version=$(openssl version | sed -n 's/^OpenSSL \([^\.]\).*/\1/p')
