@@ -53,8 +53,8 @@ int tpm2_pcr_read(const char *algo_name, uint32_t pcr_handle, uint8_t *hwpcr,
 	char cmd[PATH_MAX + 50];
 	int ret;
 
-	sprintf(cmd, "%s -halg %s -ha %u -ns 2> /dev/null",
-		path, algo_name, pcr_handle);
+	snprintf(cmd, sizeof(cmd), "%s -halg %s -ha %u -ns 2> /dev/null",
+		 path, algo_name, pcr_handle);
 	fp = popen(cmd, "r");
 	if (!fp) {
 		ret = asprintf(errmsg, "popen failed: %s", strerror(errno));
