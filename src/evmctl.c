@@ -564,8 +564,10 @@ out:
 
 static int sign_evm(const char *file, char *hash_algo, const char *key)
 {
-	unsigned char hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
+	unsigned char hash[MAX_DIGEST_SIZE];
+	enum evm_ima_xattr_type xattr_type;
+	unsigned char *psig;
 	size_t len;
 	int err;
 
@@ -575,22 +577,37 @@ static int sign_evm(const char *file, char *hash_algo, const char *key)
 	len = (size_t)err;
 	assert(len <= sizeof(hash));
 
-	err = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
-			      sig + 1, sigflags, &access_info, imaevm_keyid);
-	if (err <= 1)
-		return err;
-	len = (size_t)err;
-	assert(len <= sizeof(sig));
-
-	/* add header */
-	len++;
 	if (evm_portable)
-		sig[0] = EVM_XATTR_PORTABLE_DIGSIG;
+		xattr_type = EVM_XATTR_PORTABLE_DIGSIG;
 	else
-		sig[0] = EVM_IMA_XATTR_DIGSIG;
+		xattr_type = EVM_IMA_XATTR_DIGSIG;
 
-	if (evm_immutable)
-		sig[1] = 3; /* immutable signature version */
+	switch (g_signature_version) {
+	case SIGNATURE_V3:
+		psig = sig;
+		err = imaevm_create_sigv3(hash_algo, hash, len, key, g_keypass,
+					  &psig, sizeof(sig), sigflags,
+					  xattr_type, &access_info,
+					  imaevm_keyid);
+		if (err <= 1)
+			return err;
+		len = (size_t)err;
+		assert(len <= sizeof(sig));
+		break;
+	case SIGNATURE_V2:
+		err = imaevm_signhash(hash_algo, hash, len, key, g_keypass,
+				      sig + 1, sigflags, &access_info, imaevm_keyid);
+		if (err <= 1)
+			return err;
+		len = (size_t)err;
+		assert(len <= sizeof(sig));
+		/* add header */
+		len++;
+		sig[0] = xattr_type;
+		if (evm_immutable)
+			sig[1] = 3; /* immutable signature version */
+		break;
+	}
 
 	if (sigdump || imaevm_params.verbose >= LOG_INFO)
 		imaevm_hexdump(sig, len);
