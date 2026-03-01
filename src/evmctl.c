@@ -828,7 +828,6 @@ static int cmd_sign_ima(struct command *cmd)
  */
 static int cmd_sign_hash(struct command *cmd)
 {
-	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
 	unsigned char sig[MAX_SIGNATURE_SIZE];
 	unsigned char hash[MAX_DIGEST_SIZE];
 	size_t algolen = 0;
@@ -840,7 +839,6 @@ static int cmd_sign_hash(struct command *cmd)
 	const char *key;
 	char algo[7];	/* Current maximum fsverity hash algo name length */
 	ssize_t len;
-	int ret;
 
 	key = imaevm_params.keyfile ? : "/etc/keys/privkey_evm.pem";
 
@@ -888,19 +886,15 @@ static int cmd_sign_hash(struct command *cmd)
 			assert(hashlen / 2 <= sizeof(hash));
 			hex2bin(hash, hashp, hashlen / 2);
 
-			ret = calc_hash_sigv3(IMA_VERITY_DIGSIG, algo, hash,
-					      sigv3_hash);
-			if (ret < 0 || ret == 1) {
-				log_info("Failure to calculate fs-verity hash\n");
-				continue;
-			}
-
-			siglen = imaevm_signhash(algo, sigv3_hash, hashlen / 2,
-						 key, g_keypass, sig + 1, sigflags,
-						 &access_info, imaevm_keyid);
-
-			sig[0] = IMA_VERITY_DIGSIG;
-			sig[1] = DIGSIG_VERSION_3;	/* sigv3 */
+			psig = sig;
+			siglen = imaevm_create_sigv3(algo, hash,
+						     hashlen / 2, key, g_keypass,
+						     &psig, sizeof(sig), sigflags,
+						     IMA_VERITY_DIGSIG,
+						     &access_info, imaevm_keyid);
+			if (siglen <= 1)
+				return siglen;
+			assert(siglen <= (int)sizeof(sig));
 		} else {
 			/* Parse the shaXsum output */
 			token = strpbrk(line, " \t");
