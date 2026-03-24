@@ -995,7 +995,7 @@ static int verify_evm(struct public_key_entry *public_keys, const char *file)
 	}
 
 	if (sig[0] == EVM_XATTR_PORTABLE_DIGSIG) {
-		if (sig[1] != DIGSIG_VERSION_2) {
+		if (sig[1] != DIGSIG_VERSION_2 && sig[1] != DIGSIG_VERSION_3) {
 			log_err("Portable sig: invalid type\n");
 			return -1;
 		}
