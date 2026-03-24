@@ -52,6 +52,7 @@ _require dd mkfs blkid e2fsck tune2fs evmctl setfattr
 
 trap '_report_exit_and_cleanup _cleanup_env cleanup' SIGINT SIGTERM EXIT
 
+# shellcheck disable=SC2329
 cleanup() {
         if [ -e "$TST_MNT" ]; then
 		if [ "$LOOPBACK_MOUNTED" -eq 1 ]; then
@@ -220,6 +221,7 @@ load_policy_rule() {
 	return 0
 }
 
+# shellcheck disable=SC2329
 create_file() {
 	local test=$1
 	local type=$2
@@ -236,6 +238,7 @@ create_file() {
 	chmod a+x "$TST_FILE"
 }
 
+# shellcheck disable=SC2329
 measure-verity() {
 	local test=$1
 	local verity="${2:-disabled}"
@@ -297,6 +300,7 @@ measure-verity() {
 	return "$error"
 }
 
+# shellcheck disable=SC2329
 measure-ima() {
 	local test=$1
 	local digest_filename
@@ -375,7 +379,7 @@ if ! evmctl --help | grep -q veritysig ; then
 	exit "$SKIP"
 fi
 
-if [ "x$(id -u)" != "x0" ]; then
+if [ "$(id -u)" != "0" ]; then
 	echo "${CYAN}SKIP: Must be root to execute this test${NORM}"
 	exit "$SKIP"
 fi
@@ -403,6 +407,7 @@ create_loopback_file ext4
 
 # Commit 989dc72511f7 ("ima: define a new template field named 'd-ngv2' and
 # templates") introduced ima-ngv2 and ima-sigv2 in linux-5.19.
+# shellcheck disable=SC2329
 __skip() { return "$SKIP"; }
 
 # IMA policy rule using the ima-ngv2 template
