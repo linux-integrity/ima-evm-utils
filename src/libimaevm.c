@@ -400,7 +400,7 @@ void imaevm_free_public_keys(struct public_key_entry *public_keys)
 	while (entry) {
 		next = entry->next;
 		if (entry->key)
-			free(entry->key);
+			EVP_PKEY_free(entry->key);
 		free(entry);
 		entry = next;
 	}
