@@ -347,7 +347,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 	EVP_MD_CTX *pctx;
 	unsigned int mdlen;
 	char **xattrname;
-	char xattr_value[1024];
+	char xattr_value[MAX_SIGNATURE_SIZE];
 	char list[1024];
 	ssize_t list_size;
 	char uuid[16];
