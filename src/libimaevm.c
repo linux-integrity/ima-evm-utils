@@ -378,17 +378,16 @@ static EVP_PKEY *find_keyid(struct public_key_entry *public_keys,
 		tail = entry;
 	}
 
-	/* add unknown keys to list */
-	entry = calloc(1, sizeof(struct public_key_entry));
-	if (!entry) {
-		perror("calloc");
-		return 0;
-	}
-	entry->keyid = keyid;
-	if (tail)
+	/* add unknown keys to tail of list */
+	if (tail) {
+		entry = calloc(1, sizeof(struct public_key_entry));
+		if (!entry) {
+			perror("calloc");
+			return 0;
+		}
+		entry->keyid = keyid;
 		tail->next = entry;
-	else
-		public_keys = entry;
+	}
 	log_err("key %d: %x (unknown keyid)\n", i, __be32_to_cpup(&keyid));
 	return 0;
 }
