@@ -623,7 +623,8 @@ int calc_hash_sigv3(enum evm_ima_xattr_type type, const char *algo,
 	unsigned int unused;
 
 	if (type != IMA_VERITY_DIGSIG &&
-	    type != EVM_IMA_XATTR_DIGSIG) {
+	    type != EVM_IMA_XATTR_DIGSIG &&
+	    type != EVM_XATTR_PORTABLE_DIGSIG) {
 		log_err("Only fsverity and IMA/EVM support signature format v3 (sigv3)\n");
 		return -EINVAL;
 	}
