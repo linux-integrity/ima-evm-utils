@@ -1177,7 +1177,9 @@ err_engine:
 #ifdef CONFIG_IMA_EVM_PROVIDER
 static int ui_get_pin(UI *ui, UI_STRING *uis)
 {
-	return UI_set_result(ui, uis, UI_get0_user_data(ui));
+	if (UI_set_result(ui, uis, UI_get0_user_data(ui)) != 0)
+		return 0;
+	return 1;
 }
 #endif
 
