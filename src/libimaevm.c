@@ -1343,7 +1343,8 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	hdr->hash_algo = imaevm_get_hash_algo(algo);
 	if (hdr->hash_algo == (uint8_t)-1) {
 		log_err("sign_hash_v2: hash algo is unknown: %s\n", algo);
-		return -1;
+		len = -1;
+		goto err_nomsg;
 	}
 
 #if defined(EVP_PKEY_SM2) && OPENSSL_VERSION_NUMBER < 0x30000000
@@ -1395,6 +1396,7 @@ err:
 			ERR_reason_error_string(ERR_peek_error()), st);
 		output_openssl_errors();
 	}
+err_nomsg:
 	EVP_PKEY_CTX_free(ctx);
 	EVP_PKEY_free(pkey);
 	return len;
