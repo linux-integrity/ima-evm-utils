@@ -3012,7 +3012,7 @@ static void usage(void)
 		"      --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)\n"
 #endif
 		"      --v2           create V2 signatures; this is the default\n"
-		"      --v3           create V3 signatures; this requires Linux 7.1 or later\n"
+		"      --v3           create V3 signatures; this requires Linux 7.2 or later\n"
 		"  -v                 increase verbosity level\n"
 		"  -h, --help         display this help and exit\n"
 		"\n"
@@ -3176,6 +3176,7 @@ static ENGINE *setup_engine(const char *engine_id)
 
 int main(int argc, char *argv[])
 {
+	bool version_chosen = false;
 	int err = 0, c, lind;
 	unsigned long keyid;
 	char *eptr;
@@ -3369,9 +3370,19 @@ int main(int argc, char *argv[])
 			break;
 #endif
 		case 150: /* --v2 */
+			if (version_chosen &&
+			    g_signature_version != SIGNATURE_V2) {
+				log_info("Switching to use v2 signatures.\n");
+			}
+			version_chosen = true;
 			g_signature_version = SIGNATURE_V2;
 			break;
 		case 151: /* --v3 */
+			if (version_chosen &&
+			    g_signature_version != SIGNATURE_V3) {
+				log_info("Switching to use v3 signatures.\n");
+			}
+			version_chosen = true;
 			g_signature_version = SIGNATURE_V3;
 			break;
 		case '?':

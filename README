@@ -85,7 +85,7 @@ OPTIONS
       --ignore-violations ignore ToMToU measurement violations
       --hmackey      path to symmetric key (default: /etc/keys/evm-key-plain)
       --v2           create V2 signatures; this is the default
-      --v3           create V3 signatures; this requires Linux 7.1 or later
+      --v3           create V3 signatures; this requires Linux 7.2 or later
   -v                 increase verbosity level
   -h, --help         display this help and exit
 
