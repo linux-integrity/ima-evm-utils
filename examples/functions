@@ -1,16 +1,19 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+# For help screens to display supported algorithms
+SUPPORTED_ALGORITHMS="rsa:2048, rsa:3072, rsa:4096, prime256v1, secp384r1, and secp521r1"
+
 # Get the OpenSSL keyalgo parameter
 # @param1: The key algorithm; must be a name that OpenSSL command line tool
 #          accepts
 get_ossl_keyalgo()
 {
 	case "$1" in
-	rsa:2048)
+	rsa:2048|rsa:3072|rsa:4096)
 		echo "$1"
 		;;
-	prime256v1)
+	prime256v1|secp384r1|secp521r1)
 		echo "ec"
 		;;
 	esac
@@ -22,10 +25,10 @@ get_ossl_keyalgo()
 get_ossl_keyalgo_detail()
 {
 	case "$1" in
-	rsa:2048)
+	rsa:2048|rsa:3072|rsa:4096)
 		echo ""
 		;;
-	prime256v1)
+	prime256v1|secp384r1|secp521r1)
 		echo "-pkeyopt ec_paramgen_curve:${keyalgo}"
 		;;
 	esac
