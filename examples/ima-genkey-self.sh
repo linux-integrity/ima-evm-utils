@@ -1,29 +1,10 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
 
-GENKEY=x509_evm.genkey
+DIR=$(dirname "$0")
 
-cat << __EOF__ >$GENKEY
-[ req ]
-default_bits = 2048
-distinguished_name = req_distinguished_name
-prompt = no
-string_mask = utf8only
-x509_extensions = myexts
+cd "${DIR}" 1>/dev/null || exit 1
 
-[ req_distinguished_name ]
-O = `hostname`
-CN = `whoami` signing key
-emailAddress = `whoami`@`hostname`
-
-[ myexts ]
-basicConstraints=critical,CA:FALSE
-keyUsage=digitalSignature
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid
-__EOF__
-
-openssl req -x509 -new -nodes -utf8 -sha256 -days 3650 -batch -config $GENKEY \
-		-outform DER -out x509_evm.der -keyout privkey_evm.pem
-
-openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
-
+. ./functions
+ima_gen_signing_key_selfsigned rsa:2048
+exit $?
