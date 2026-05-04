@@ -6,5 +6,30 @@ DIR=$(dirname "$0")
 cd "${DIR}" 1>/dev/null || exit 1
 
 . ./functions
-ima_gen_signing_key_selfsigned rsa:2048
+
+#default key algorithm
+keyalgo=rsa:2048
+
+if [ "$1" = "-?" ] || [ "$1" = "--help" ]; then
+	cat <<_EOF_
+Create an EVM/IMA file signing key with a given key algorithm. The key is also
+used by a self-signed CA.
+
+Usage: $0 [options] keyalgo
+
+The following key algorithms are supported:
+  ${SUPPORTED_ALGORITHMS}
+
+The following options are supported:
+    -?, --help  : Display this help screen and exit
+
+_EOF_
+	exit 0
+fi
+
+if [ "$1" != "" ]; then
+	keyalgo="$1"
+fi
+
+ima_gen_signing_key_selfsigned "${keyalgo}"
 exit $?
