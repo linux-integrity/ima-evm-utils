@@ -229,7 +229,7 @@ _evmctl_run() {
       sed 's/^/  /' "$out"
     fi
     color_restore
-    rm "$out" "$ADD_DEL"
+    rm -f "$out" "$ADD_DEL"
     ADD_DEL=
     ADD_TEXT_FOR=
     return "$FAIL"
