@@ -216,11 +216,12 @@ check_sign() {
   if [[ "$OPTS" =~ "--v3" ]]; then
     # In case of v3 signatures we need to create ima_file_id now.
     # All data for it can be found in PREFIX and by hashing $FILE.
-    echo -en "\x${PREFIX:2:2}\x${PREFIX:6:2}" > "$FILE.tmp"
+    echo -en "\x${PREFIX:2:2}\x${PREFIX:6:2}" > "$FILE.ima_file_id"
     # shellcheck disable=SC2086
-    openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -"$ALG" -binary "$FILE" >> "$FILE.tmp"
+    openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -"$ALG" -binary "$FILE" >> \
+          "$FILE.ima_file_id"
     cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
-	  -signature $FILE.sig2 $FILE.tmp"
+	  -signature $FILE.sig2 $FILE.ima_file_id"
     sigver=3
   else
     cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
@@ -230,13 +231,13 @@ check_sign() {
   echo - "$cmd"
   if ! $cmd; then
     color_red_on_failure
-    echo "Signature v${sigver} verification with openssl is failed."
+    echo "Signature v${sigver} verification with openssl failed."
     color_restore
-    rm "$FILE.sig2" "$FILE.tmp"
+    rm -f "$FILE.sig2" "$FILE.ima_file_id"
     return "$FAIL"
   fi
 
-  rm "$FILE.sig2" "$FILE.tmp"
+  rm -f "$FILE.sig2" "$FILE.ima_file_id"
   return "$OK"
 }
 
