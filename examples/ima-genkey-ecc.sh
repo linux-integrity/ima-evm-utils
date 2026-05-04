@@ -1,33 +1,10 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
 
-GENKEY=ima.genkey
+DIR=$(dirname "$0")
 
-cat << __EOF__ >$GENKEY
-[ req ]
-distinguished_name = req_distinguished_name
-prompt = no
-string_mask = utf8only
-x509_extensions = v3_usr
+cd "${DIR}" 1>/dev/null || exit 1
 
-[ req_distinguished_name ]
-O = `hostname`
-CN = `whoami` signing key
-emailAddress = `whoami`@`hostname`
-
-[ v3_usr ]
-basicConstraints=critical,CA:FALSE
-#basicConstraints=CA:FALSE
-keyUsage=digitalSignature
-#keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-extendedKeyUsage=critical,codeSigning
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid
-#authorityKeyIdentifier=keyid,issuer
-__EOF__
-
-openssl req -new -nodes -utf8 -sha256 -days 365 -batch -config $GENKEY \
-		-out csr_ima.pem -keyout privkey_ima.pem \
-		-newkey ec -pkeyopt ec_paramgen_curve:prime256v1
-openssl x509 -req -in csr_ima.pem -days 365 -extfile $GENKEY -extensions v3_usr \
-		-CA ima-local-ca.pem -CAkey ima-local-ca.priv -CAcreateserial \
-		-outform DER -out x509_ima.der
+. ./functions
+ima_gen_signing_key prime256v1
+exit $?
