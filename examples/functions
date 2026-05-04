@@ -1,0 +1,179 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+# For help screens to display supported algorithms
+SUPPORTED_ALGORITHMS="rsa:2048, rsa:3072, rsa:4096, prime256v1, secp384r1, and secp521r1"
+
+# Get the OpenSSL keyalgo parameter
+# @param1: The key algorithm; must be a name that OpenSSL command line tool
+#          accepts
+get_ossl_keyalgo()
+{
+	case "$1" in
+	rsa:2048|rsa:3072|rsa:4096)
+		echo "$1"
+		;;
+	prime256v1|secp384r1|secp521r1)
+		echo "ec"
+		;;
+	esac
+}
+
+# Get the OpenSSL -pkeyopt that may be necessary for the given key algo
+# @param1: The key algorithm; must be a name that OpenSSL command line tool
+#          accepts
+get_ossl_keyalgo_detail()
+{
+	case "$1" in
+	rsa:2048|rsa:3072|rsa:4096)
+		echo ""
+		;;
+	prime256v1|secp384r1|secp521r1)
+		echo "-pkeyopt ec_paramgen_curve:${keyalgo}"
+		;;
+	esac
+}
+
+# Create an IMA file signing key
+# @param1: The key algorithm; must be a name that OpenSSL command line tool
+#          accepts: rsa:2048, rsa:3072, rsa:4096, prime256v1
+ima_gen_signing_key()
+{
+	keyalgo="$1"
+
+	GENKEY=ima.genkey
+
+	ossl_keyalgo=$(get_ossl_keyalgo "$keyalgo")
+	if [ -z "$ossl_keyalgo" ]; then
+		echo "Error: Unsupported key algorithm $keyalgo." >&2
+		return 1
+	fi
+	ossl_keyalgo_detail=$(get_ossl_keyalgo_detail "$keyalgo")
+
+	cat << __EOF__ >$GENKEY
+[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
+string_mask = utf8only
+x509_extensions = v3_usr
+
+[ req_distinguished_name ]
+O = $(hostname)
+CN = $(whoami) signing key
+emailAddress = $(whoami)@$(hostname)
+
+[ v3_usr ]
+basicConstraints=critical,CA:FALSE
+#basicConstraints=CA:FALSE
+keyUsage=digitalSignature
+#keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage=critical,codeSigning
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+#authorityKeyIdentifier=keyid,issuer
+__EOF__
+
+	openssl req -new -nodes -batch -config $GENKEY \
+		-out csr_ima.pem -keyout privkey_ima.pem \
+		-newkey "${ossl_keyalgo}" \
+		${ossl_keyalgo_detail:+${ossl_keyalgo_detail}} || return $?
+	openssl x509 -req -in csr_ima.pem -days 365 -extfile $GENKEY -extensions v3_usr \
+		-CA ima-local-ca.pem -CAkey ima-local-ca.priv -CAcreateserial \
+		-outform DER -out x509_ima.der
+	return $?
+}
+
+# Create a local CA
+# @param1: The key algorithm; must be a name that OpenSSL command line tool
+#          accepts: rsa:2048, rsa:3072, rsa:4096, prime256v1
+ima_gen_localca()
+{
+	keyalgo="$1"
+
+	GENKEY=ima-local-ca.genkey
+
+	ossl_keyalgo=$(get_ossl_keyalgo "$keyalgo")
+	if [ -z "$ossl_keyalgo" ]; then
+		echo "Error: Unsupported key algorithm $keyalgo." >&2
+		return 1
+	fi
+	ossl_keyalgo_detail=$(get_ossl_keyalgo_detail "$keyalgo")
+
+cat << __EOF__ >$GENKEY
+[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
+string_mask = utf8only
+x509_extensions = v3_ca
+
+[ req_distinguished_name ]
+O = IMA-CA
+CN = IMA/EVM certificate signing key
+emailAddress = ca@ima-ca
+
+[ v3_ca ]
+basicConstraints=CA:TRUE
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+keyUsage = cRLSign, keyCertSign
+__EOF__
+
+	openssl req -new -x509 -utf8 -sha256 -days 3650 -batch -config $GENKEY \
+		-outform DER -out ima-local-ca.x509 -keyout ima-local-ca.priv \
+		-newkey "${ossl_keyalgo}" \
+		${ossl_keyalgo_detail:+${ossl_keyalgo_detail}} || return $?
+
+	openssl x509 -inform DER -in ima-local-ca.x509 -out ima-local-ca.pem
+
+	return $?
+}
+
+# Create an EVM/IMA signing key that is also a key of a self-signed CA
+# @param1: The key algorithm; must be a name that OpenSSL command line tool
+#          accepts: rsa:2048, rsa:3072, rsa:4096, prime256v1
+ima_gen_signing_key_selfsigned()
+{
+	GENKEY=x509_evm.genkey
+
+	ossl_keyalgo=$(get_ossl_keyalgo "$keyalgo")
+	if [ -z "$ossl_keyalgo" ]; then
+		echo "Error: Unsupported key algorithm $keyalgo." >&2
+		return 1
+	fi
+	ossl_keyalgo_detail=$(get_ossl_keyalgo_detail "$keyalgo")
+
+	cat << __EOF__ >$GENKEY
+[ req ]
+distinguished_name = req_distinguished_name
+prompt = no
+string_mask = utf8only
+x509_extensions = myexts
+
+[ req_distinguished_name ]
+O = $(hostname)
+CN = $(whoami) signing key
+emailAddress = $(whoami)@$(hostname)
+
+[ myexts ]
+basicConstraints=critical,CA:FALSE
+keyUsage=digitalSignature
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+__EOF__
+
+	openssl req -x509 -new -nodes -utf8 -sha256 -days 3650 -batch -config $GENKEY \
+		-outform DER -out x509_evm.der -keyout privkey_evm.pem \
+		-newkey "${ossl_keyalgo}" \
+		${ossl_keyalgo_detail:+${ossl_keyalgo_detail}} || return $?
+
+	case "$keyalgo" in
+	rsa:*)
+		openssl rsa -pubout -in privkey_evm.pem -out pubkey_evm.pem
+		;;
+	primve256v1|secp384r1|secp521r1)
+		openssl ec -pubout -in privkey_evm.pem -out pubkey_evm.pem
+		;;
+	esac
+
+	return $?
+}

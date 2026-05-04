@@ -1,34 +1,34 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
 
-GENKEY=ima.genkey
+DIR=$(dirname "$0")
 
-cat << __EOF__ >$GENKEY
-[ req ]
-default_bits = 2048
-distinguished_name = req_distinguished_name
-prompt = no
-string_mask = utf8only
-x509_extensions = v3_usr
+cd "${DIR}" 1>/dev/null || exit 1
 
-[ req_distinguished_name ]
-O = `hostname`
-CN = `whoami` signing key
-emailAddress = `whoami`@`hostname`
+. ./functions
 
-[ v3_usr ]
-basicConstraints=critical,CA:FALSE
-#basicConstraints=CA:FALSE
-keyUsage=digitalSignature
-#keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-extendedKeyUsage=critical,codeSigning
-subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid
-#authorityKeyIdentifier=keyid,issuer
-__EOF__
+#default key algorithm
+keyalgo=rsa:2048
 
-openssl req -new -nodes -utf8 -sha256 -days 365 -batch -config $GENKEY \
-		-out csr_ima.pem -keyout privkey_ima.pem
-openssl x509 -req -in csr_ima.pem -days 365 -extfile $GENKEY -extensions v3_usr \
-		-CA ima-local-ca.pem -CAkey ima-local-ca.priv -CAcreateserial \
-		-outform DER -out x509_ima.der
+if [ "$1" = "-?" ] || [ "$1" = "--help" ]; then
+	cat <<_EOF_
+Create an EVM/IMA file signing key with a given algorithm.
 
+Usage: $0 [options] keyalgo
+
+The following key algorithms are supported:
+  ${SUPPORTED_ALGORITHMS}
+
+The following options are supported:
+    -?, --help  : Display this help screen and exit
+
+_EOF_
+	exit 0
+fi
+
+if [ "$1" != "" ]; then
+	keyalgo="$1"
+fi
+
+ima_gen_signing_key "${keyalgo}"
+exit $?
