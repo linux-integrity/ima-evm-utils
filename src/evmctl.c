@@ -116,7 +116,6 @@ static int verify_list_sig;
 static int recursive;
 static int msize;
 static dev_t fs_dev;
-static bool evm_immutable;
 static bool evm_portable;
 static bool veritysig;
 static bool hwtpm;
@@ -375,7 +374,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 	if (mode_str)
 		st.st_mode = strtoul(mode_str, NULL, 10);
 
-	if (!evm_immutable && !evm_portable) {
+	if (!evm_portable) {
 		if (S_ISREG(st.st_mode) && !generation_str) {
 			int fd = open(file, 0);
 
@@ -485,14 +484,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 
 	memset(&hmac_misc, 0, sizeof(hmac_misc));
 
-	if (evm_immutable) {
-		struct h_misc_digsig *hmac = (struct h_misc_digsig *)&hmac_misc;
-
-		hmac_size = sizeof(*hmac);
-		hmac->uid = st.st_uid;
-		hmac->gid = st.st_gid;
-		hmac->mode = st.st_mode;
-	} else if (msize == 0) {
+	if (msize == 0) {
 		struct h_misc *hmac = (struct h_misc *)&hmac_misc;
 
 		hmac_size = sizeof(*hmac);
@@ -536,7 +528,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 		goto out;
 	}
 
-	if (!evm_immutable && !evm_portable &&
+	if (!evm_portable &&
 	    !(hmac_flags & HMAC_FLAG_NO_UUID)) {
 		err = get_uuid(&st, uuid);
 		if (err)
@@ -604,8 +596,6 @@ static int sign_evm(const char *file, char *hash_algo, const char *key)
 		/* add header */
 		len++;
 		sig[0] = xattr_type;
-		if (evm_immutable)
-			sig[1] = 3; /* immutable signature version */
 		break;
 	}
 
@@ -3198,7 +3188,7 @@ int main(int argc, char *argv[])
 	g_argc = argc;
 
 	while (1) {
-		c = getopt_long(argc, argv, "hvnsda:op::fu::k:t:ri", opts, &lind);
+		c = getopt_long(argc, argv, "hvnsda:op::fu::k:t:r", opts, &lind);
 		if (c == -1)
 			break;
 
@@ -3244,17 +3234,8 @@ int main(int argc, char *argv[])
 		case 'k':
 			imaevm_params.keyfile = optarg;
 			break;
-		case 'i':
-			if (evm_portable)
-				log_err("Portable and immutable options are exclusive, ignoring immutable option.");
-			else
-				evm_immutable = true;
-			break;
 		case 'o':
-			if (evm_immutable)
-				log_err("Portable and immutable options are exclusive, ignoring portable option.");
-			else
-				evm_portable = true;
+			evm_portable = true;
 			break;
 		case 't':
 			search_type = optarg;

@@ -376,10 +376,6 @@ try_different_sigs() {
         expect_pass check_verify
      fi
   fi
-
-  # Test -i (immutable)
-  expect_pass check_sign OPTS="$OPTS -i" PREFIX=0x0303
-  # Cannot be verified for now
 }
 
 # Single test args: type key hash signature-prefix "evmctl-options"
