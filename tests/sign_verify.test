@@ -166,8 +166,15 @@ check_sign() {
     fi
 
     # Can openssl sign with this digest and key?
-    cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -sign $key -hex $FILE"
-    echo - "$cmd"
+    case "${KEY:0:10}" in
+    "test-mldsa")
+      cmd="openssl pkeyutl -sign -inkey $key -in $FILE"
+      echo >> "$FILE" # need at least 1 byte in the file for signing to work
+      ;;
+    *)
+      cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -sign $key -hex $FILE"
+      ;;
+    esac
     if ! $cmd >/dev/null; then
       echo "${CYAN}$ALG ($key) test is skipped (openssl is unable to sign)$NORM"
       return "$SKIP"
@@ -220,8 +227,17 @@ check_sign() {
     # shellcheck disable=SC2086
     openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -"$ALG" -binary "$FILE" >> \
           "$FILE.ima_file_id"
-    cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
-	  -signature $FILE.sig2 $FILE.ima_file_id"
+
+    case "${KEY:0:10}" in
+    "test-mldsa")
+      # ML-DSA does not accept a hash algorithm on command line
+      cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM       -verify ${verifykey} \
+	    -signature $FILE.sig2 $FILE.ima_file_id"
+      ;;
+    *)
+      cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
+	    -signature $FILE.sig2 $FILE.ima_file_id"
+    esac
     sigver=3
   else
     cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -verify ${verifykey} \
@@ -424,6 +440,13 @@ sign_verify  prime256v1 sha512 0x030206:K:004[345678]
 sign_verify  prime256v1 sha256   0x030304:K:004[345678] --v3
 sign_verify  prime256v1 sha384   0x030305:K:004[345678] --v3
 sign_verify  prime256v1 sha512   0x030306:K:004[345678] --v3
+
+sign_verify  mldsa44    sha256   0x030304:K:0974 --v3
+sign_verify  mldsa44    sha384   0x030305:K:0974 --v3
+sign_verify  mldsa44    sha512   0x030306:K:0974 --v3
+sign_verify  mldsa65    sha256   0x030304:K:0ced --v3
+sign_verify  mldsa65    sha384   0x030305:K:0ced --v3
+sign_verify  mldsa65    sha512   0x030306:K:0ced --v3
 
 # If openssl 3.0 is installed, test the SM2/3 algorithm combination
 ssl_major_version=$(openssl version | sed -n 's/^OpenSSL \([^\.]\).*/\1/p')

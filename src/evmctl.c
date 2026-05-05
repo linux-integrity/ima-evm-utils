@@ -347,7 +347,7 @@ static int calc_evm_hash(const char *file, const char *hash_algo,
 	EVP_MD_CTX *pctx;
 	unsigned int mdlen;
 	char **xattrname;
-	char xattr_value[1024];
+	char xattr_value[MAX_SIGNATURE_SIZE];
 	char list[1024];
 	ssize_t list_size;
 	char uuid[16];
@@ -617,6 +617,10 @@ static int sign_evm(const char *file, char *hash_algo, const char *key)
 		if (err < 0) {
 			log_errno_reset(LOG_ERR, "Setting EVM xattr failed: %s",
 					file);
+			if (len >= 4096)
+				log_err("The signature with %zu bytes is likely too large for the file "
+					"extended attribute. Consider using a different key type.\n",
+					len);
 			return err;
 		}
 	}

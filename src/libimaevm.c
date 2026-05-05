@@ -37,6 +37,9 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#include <openssl/core_names.h>
+#endif
 
 #if CONFIG_IMA_EVM_ENGINE
 #include <openssl/engine.h>
@@ -81,7 +84,24 @@ struct libimaevm_params imaevm_params = {
 	.hash_algo = DEFAULT_HASH_ALGO,
 };
 
+#define HASH_MAX_DIGESTSIZE 64	/* kernel HASH_MAX_DIGESTSIZE is 64 bytes */
+
+struct ima_file_id {
+	__u8 hash_type;		/* xattr type [enum evm_ima_xattr_type] */
+	__u8 hash_algorithm;	/* Digest algorithm [enum hash_algo] */
+	__u8 hash[HASH_MAX_DIGESTSIZE];
+} __packed;
+
 static void __attribute__ ((constructor)) libinit(void);
+
+/* RSA, ECDSA, ECRDSA, and SM2 all use hashes for signing */
+static inline bool keytype_uses_hash_for_signing(const char *keytype)
+{
+	return strcmp("RSA", keytype) == 0 ||
+		strcmp("EC", keytype) == 0 ||
+		strncmp("GOST2012_", keytype, 9) == 0 ||
+		strcmp("SM2", keytype) == 0;
+}
 
 void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool newline)
 {
@@ -460,6 +480,81 @@ void init_public_keys(const char *keyfiles)
 	imaevm_init_public_keys(keyfiles, &g_public_keys);
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30500000
+static int verify_mldsa(EVP_PKEY *pkey,
+			const char *algo,
+			const unsigned char *hash, int hash_size,
+			unsigned char *sig, int siglen,
+			enum evm_ima_xattr_type type,
+			const char *file)
+{
+	struct signature_v2_hdr *hdr = (struct signature_v2_hdr *)sig;
+	struct ima_file_id file_id = { .hash_type = type, };
+	const char *keytype = EVP_PKEY_get0_type_name(pkey);
+	uint8_t *data = (uint8_t *)&file_id;
+	EVP_SIGNATURE *sig_alg = NULL;
+	unsigned int unused;
+	EVP_PKEY_CTX *ctx;
+	int hash_algo;
+	const char *st;
+	int ret = -1;
+
+	if (!algo) {
+		log_err("Hash algorithm unspecified\n");
+		return -EINVAL;
+	}
+	if (hash_size > HASH_MAX_DIGESTSIZE) {
+		log_err("hash_size is too large\n");
+		return -EINVAL;
+	}
+
+	hash_algo = imaevm_get_hash_algo(algo);
+	if (hash_algo < 0) {
+		log_err("Hash algorithm %s not supported\n", algo);
+		return -EINVAL;
+	}
+	file_id.hash_algorithm = hash_algo;
+
+	memcpy(file_id.hash, hash, hash_size);
+	unused = HASH_MAX_DIGESTSIZE - hash_size;
+
+	st = "EVP_PKEY_CTX_new";
+	ctx = EVP_PKEY_CTX_new(pkey, NULL);
+	if (!ctx)
+		goto err;
+	st = "EVP_SIGNATURE_fetch";
+	sig_alg = EVP_SIGNATURE_fetch(NULL, keytype, NULL);
+	if (!sig_alg)
+		goto err;
+	st = "EVP_PKEY_verify_message_init";
+	if (!EVP_PKEY_verify_message_init(ctx, sig_alg, NULL))
+		goto err;
+	st = "EVP_PKEY_verify";
+	ret = EVP_PKEY_verify(ctx, sig + sizeof(*hdr),
+			      siglen - sizeof(*hdr),
+			      data, sizeof(file_id) - unused);
+	if (ret == 1) {
+		ret = 0;
+	} else if (ret == 0) {
+		log_err("%s: verification failed: %d (%s)\n",
+			file, ret, ERR_reason_error_string(ERR_get_error()));
+		output_openssl_errors();
+		ret = 1;
+	}
+err:
+	if (ret < 0 || ret > 1) {
+		log_err("%s: verification failed: %d (%s) in %s\n",
+			file, ret, ERR_reason_error_string(ERR_peek_error()),
+			st);
+		output_openssl_errors();
+		ret = -1;
+	}
+	EVP_SIGNATURE_free(sig_alg);
+	EVP_PKEY_CTX_free(ctx);
+	return ret;
+}
+#endif
+
 /*
  * Verify a signature, prefixed with the signature_v2_hdr, either based
  * directly or indirectly on the file data hash.
@@ -577,6 +672,28 @@ static int verify_hash_v3(struct public_key_entry *public_keys,
 {
 	unsigned char sigv3_hash[MAX_DIGEST_SIZE];
 	int ret;
+#if OPENSSL_VERSION_NUMBER >= 0x30500000
+	struct signature_v2_hdr *hdr = (struct signature_v2_hdr *)(sig + 1);
+	const char *keytype;
+	EVP_PKEY *pkey; // do not free here
+
+	pkey = find_keyid(public_keys, hdr->keyid);
+	if (!pkey) {
+		uint32_t keyid = hdr->keyid;
+
+		if (imaevm_params.verbose > LOG_INFO)
+			log_info("%s: verification failed: unknown keyid %x\n",
+				 file, __be32_to_cpup(&keyid));
+		return -1;
+	}
+
+	keytype = EVP_PKEY_get0_type_name(pkey);
+
+	if (keytype && !keytype_uses_hash_for_signing(keytype))
+		return verify_mldsa(pkey, hash_algo,
+				    hash, size, sig + 1, siglen - 1,
+				    sig[0], file);
+#endif
 
 	ret = calc_hash_sigv3(sig[0], hash_algo, hash, sigv3_hash);
 	if (ret < 0)
@@ -586,14 +703,6 @@ static int verify_hash_v3(struct public_key_entry *public_keys,
 	return verify_hash_common(public_keys, file, hash_algo, sigv3_hash,
 				  size, sig + 1, siglen - 1);
 }
-
-#define HASH_MAX_DIGESTSIZE 64	/* kernel HASH_MAX_DIGESTSIZE is 64 bytes */
-
-struct ima_file_id {
-	__u8 hash_type;		/* xattr type [enum evm_ima_xattr_type] */
-	__u8 hash_algorithm;	/* Digest algorithm [enum hash_algo] */
-	__u8 hash[HASH_MAX_DIGESTSIZE];
-} __packed;
 
 /*
  * Calculate the signature format version 3 hash based on the portion
@@ -1292,7 +1401,7 @@ out:
 #endif /* CONFIG_SIGV1 */
 
 /*
- * @sig is assumed to be of (MAX_SIGNATURE_SIZE - 1) size
+ * @sig is assumed to be of at least (1024 - 1) size
  * Return: -1 signing error, >0 length of signature
  */
 static int sign_hash_v2(const char *algo, const unsigned char *hash,
@@ -1306,6 +1415,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	EVP_PKEY *pkey;
 	char name[20];
 	EVP_PKEY_CTX *ctx = NULL;
+	const char *keytype;
 	const EVP_MD *md;
 	size_t sigsize;
 	const char *st;
@@ -1337,13 +1447,24 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	if (!pkey)
 		return -1;
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+	keytype = EVP_PKEY_get0_type_name(pkey);
+	/* if it's neither an RSA, EC(R)DSA, nor SM2 key then it cannot be used here */
+	if (keytype && !keytype_uses_hash_for_signing(keytype)) {
+		log_err("sign_hash_v2: Cannot use '%s' type of key\n", keytype);
+		len = -1;
+		goto err_nomsg;
+	}
+#endif
+
 	hdr = (struct signature_v2_hdr *)sig;
 	hdr->version = (uint8_t) DIGSIG_VERSION_2;
 
 	hdr->hash_algo = imaevm_get_hash_algo(algo);
 	if (hdr->hash_algo == (uint8_t)-1) {
 		log_err("sign_hash_v2: hash algo is unknown: %s\n", algo);
-		return -1;
+		len = -1;
+		goto err_nomsg;
 	}
 
 #if defined(EVP_PKEY_SM2) && OPENSSL_VERSION_NUMBER < 0x30000000
@@ -1379,7 +1500,7 @@ static int sign_hash_v2(const char *algo, const unsigned char *hash,
 	if (!EVP_PKEY_CTX_set_signature_md(ctx, md))
 		goto err;
 	st = "EVP_PKEY_sign";
-	sigsize = MAX_SIGNATURE_SIZE - sizeof(struct signature_v2_hdr) - 1;
+	sigsize = 1024 - sizeof(struct signature_v2_hdr) - 1;
 	if (!EVP_PKEY_sign(ctx, hdr->sig, &sigsize, hash, size))
 		goto err;
 	len = (int)sigsize;
@@ -1395,6 +1516,7 @@ err:
 			ERR_reason_error_string(ERR_peek_error()), st);
 		output_openssl_errors();
 	}
+err_nomsg:
 	EVP_PKEY_CTX_free(ctx);
 	EVP_PKEY_free(pkey);
 	return len;
@@ -1451,6 +1573,113 @@ int imaevm_signhash(const char *hashalgo, const unsigned char *hash, int size,
 			    access_info, keyid);
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30500000
+static int create_sigv3_mldsa(EVP_PKEY *pkey, const char *algo,
+			      const unsigned char *hash, int hash_size,
+			      unsigned char **sig, size_t siglen,
+			      enum evm_ima_xattr_type type,
+			      const struct imaevm_ossl_access *access_info,
+			      uint32_t keyid)
+{
+	const char *keytype = EVP_PKEY_get0_type_name(pkey);
+	struct ima_file_id file_id = { .hash_type = type, };
+	uint8_t *data = (uint8_t *)&file_id;
+	EVP_SIGNATURE *sig_alg = NULL;
+	struct signature_v2_hdr *hdr;
+	EVP_PKEY_CTX *ctx = NULL;
+	bool allocated = false;
+	unsigned int unused;
+	ssize_t slen = -1;
+	size_t needlen;
+	const char *st;
+	int hash_algo;
+	char name[20];
+	int ret = -1;
+
+	hash_algo = imaevm_get_hash_algo(algo);
+	if (hash_algo < 0) {
+		log_err("Hash algorithm %s not supported\n", algo);
+		return -EINVAL;
+	}
+	if (hash_size > HASH_MAX_DIGESTSIZE) {
+		log_err("hash_size is too large\n");
+		return -EINVAL;
+	}
+	file_id.hash_algorithm = hash_algo;
+	memcpy(file_id.hash, hash, hash_size);
+	unused = HASH_MAX_DIGESTSIZE - hash_size;
+
+	st = "EVP_PKEY_CTX_new";
+	ctx = EVP_PKEY_CTX_new(pkey, NULL);
+	if (!ctx)
+		goto err;
+	st = "EVP_SIGNATURE_fetch";
+	sig_alg = EVP_SIGNATURE_fetch(NULL, keytype, NULL);
+	if (!sig_alg)
+		goto err;
+	st = "EVP_PKEY_sign_init";
+	if (!EVP_PKEY_sign_message_init(ctx, sig_alg, NULL))
+		goto err;
+	st = "EVP_PKEY_sign";
+	/* query for size of signature */
+	if (!EVP_PKEY_sign(ctx, NULL, (size_t *)&slen,
+			   data, sizeof(file_id) - unused)) {
+		slen = -1;
+		goto err;
+	}
+
+	needlen = 1 + sizeof(*hdr) + slen;
+	if (*sig) {
+		if (siglen < needlen) {
+			log_err("Buffer of size %zu is too small for signature "
+				"of size %zu\n", siglen, needlen);
+			goto err;
+		}
+	} else {
+		*sig = malloc(needlen);
+		if (!*sig) {
+			perror("malloc");
+			goto err;
+		}
+		allocated = true;
+	}
+	hdr = (struct signature_v2_hdr *)(*sig + 1);
+
+	if (!EVP_PKEY_sign(ctx, hdr->sig, (size_t *)&slen,
+			   data, sizeof(file_id) - unused)) {
+		slen = -1;
+		goto err;
+	}
+
+	(*sig)[0] = type;
+	hdr->version = DIGSIG_VERSION_3;
+	hdr->hash_algo = hash_algo;
+	if (keyid)
+		keyid = htonl(keyid);
+	else
+		calc_keyid_v2(&keyid, name, pkey);
+	hdr->keyid = keyid;
+	hdr->sig_size = __cpu_to_be16(slen);
+
+	ret = needlen;
+	log_info("evm/ima signature: %d bytes\n", ret);
+
+err:
+	EVP_SIGNATURE_free(sig_alg);
+	EVP_PKEY_CTX_free(ctx);
+	if (slen == -1) {
+		log_err("create_sigv3_mldsa signing failed: (%s) in %s\n",
+			ERR_reason_error_string(ERR_peek_error()), st);
+		output_openssl_errors();
+	}
+	if (ret < 0 && allocated) {
+		free(*sig);
+		*sig = NULL;
+	}
+	return ret;
+}
+#endif
+
 /*
  * Create a v3 signature given a file hash
  *
@@ -1482,6 +1711,29 @@ int imaevm_create_sigv3(const char *hash_algo, const unsigned char *hash, int si
 	/* buffer capable of holding (more than) RSA-4096 signature; */
 	unsigned char sigbuf[1024];
 	int len, slen, err;
+#if OPENSSL_VERSION_NUMBER >= 0x30500000
+	const char *keytype;
+	EVP_PKEY *pkey;
+
+	if (access_info) {
+		err = check_ossl_access(access_info);
+		if (err)
+			return err;
+	}
+	pkey = read_priv_pkey(keyfile, keypass, access_info, keyid);
+	if (!pkey)
+		return -1;
+
+	keytype = EVP_PKEY_get0_type_name(pkey);
+	if (keytype && strncmp("ML-DSA-", keytype, 7) == 0) {
+		slen = create_sigv3_mldsa(pkey, hash_algo, hash, size,
+					  sig, siglen,
+					  xattr_type, access_info, keyid);
+		EVP_PKEY_free(pkey);
+		return slen;
+	}
+	EVP_PKEY_free(pkey);
+#endif
 
 	len = calc_hash_sigv3(xattr_type, hash_algo, hash, sigv3_hash);
 	if (len < 0 || len == 1) {
