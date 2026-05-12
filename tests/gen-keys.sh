@@ -77,7 +77,7 @@ for m in 1024 1024_skid 2048; do
   fi
 done
 
-for curve in prime192v1 prime256v1; do
+for curve in prime256v1 secp384r1; do
   if [ "$1" = clean ] || [ "$1" = force ]; then
     rm -f test-$curve.cer test-$curve.key test-$curve.pub
   fi
