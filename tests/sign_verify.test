@@ -172,9 +172,11 @@ check_sign() {
       echo >> "$FILE" # need at least 1 byte in the file for signing to work
       ;;
     *)
-      cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -sign $key -hex $FILE"
+      # pkcs11: If 'PIN' was passed, append it to the key URI to avoid a prompt for the PIN
+      cmd="openssl dgst $OPENSSL_ENGINE $OPENSSL_KEYFORM -$ALG -sign $key${PIN:+?pin-value=${PIN}} -hex $FILE"
       ;;
     esac
+    echo - "$cmd"
     if ! $cmd >/dev/null; then
       echo "${CYAN}$ALG ($key) test is skipped (openssl is unable to sign)$NORM"
       return "$SKIP"
@@ -470,8 +472,16 @@ expect_fail \
 _softhsm_setup "${WORKDIR}"
 if [ -n "${PKCS11_KEYURI}" ]; then
   if evmctl --help 2>/dev/null | grep -q engine; then
-    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_KEYURI}" ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS="--keyid=aabbccdd" EVMCTL_ENGINE="--engine pkcs11"
-    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_KEYURI}" ALG=sha1   PREFIX=0x030202aabbccdd0100 OPTS="--keyid=aabbccdd" EVMCTL_ENGINE="--engine pkcs11"
+    # strip PIN from URI and get PIN
+    pkcs11_keyuri_nopin=${PKCS11_KEYURI%\?*}
+    pin=${PKCS11_KEYURI#*pin-value=}
+
+    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${pkcs11_keyuri_nopin}" \
+       ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS="--keyid=aabbccdd --pass=${pin}" \
+       EVMCTL_ENGINE="--engine pkcs11" PIN="${PIN}"
+    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_KEYURI}" \
+       ALG=sha384 PREFIX=0x030205aabbccdd0100 OPTS="--keyid=aabbccdd" \
+       EVMCTL_ENGINE="--engine pkcs11"
   else
     __skip() { echo "pkcs11 test with engine is skipped since there is no engine support"; return "$SKIP"; }
     expect_pass __skip
@@ -482,9 +492,16 @@ if [ -n "${PKCS11_KEYURI}" ]; then
   if evmctl --help 2>/dev/null | grep -q provider && \
      openssl list -providers -provider pkcs11 2>/dev/null; then
     PKCS11_PRIVKEYURI=${PKCS11_KEYURI//type=public/type=private}
+    # strip PIN from URI and get PIN
+    pkcs11_keyuri_nopin=${PKCS11_PRIVKEYURI%\?*}
+    pin=${PKCS11_PRIVKEYURI#*pin-value=}
 
-    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_PRIVKEYURI}" ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS="--keyid=aabbccdd" EVMCTL_ENGINE="--provider pkcs11"
-    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_PRIVKEYURI}" ALG=sha1   PREFIX=0x030202aabbccdd0100 OPTS="--keyid=aabbccdd" EVMCTL_ENGINE="--provider pkcs11"
+    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${pkcs11_keyuri_nopin}" \
+       ALG=sha256 PREFIX=0x030204aabbccdd0100 OPTS="--keyid=aabbccdd --pass=${pin}" \
+       EVMCTL_ENGINE="--provider pkcs11" PIN="${pin}"
+    expect_pass check_sign FILE=pkcs11test TYPE=ima KEY="${PKCS11_PRIVKEYURI}" \
+       ALG=sha384 PREFIX=0x030205aabbccdd0100 OPTS="--keyid=aabbccdd" \
+       EVMCTL_ENGINE="--provider pkcs11"
   else
     __skip() { echo "pkcs11 test with provider is skipped since no provider support or pkcs11 not installed"; return "$SKIP"; }
     expect_pass __skip
