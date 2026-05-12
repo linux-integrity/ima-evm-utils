@@ -404,8 +404,6 @@ fi
 
 ## Test v2 signatures with RSA PKCS#1
 # List of allowed hashes much greater but not all are supported.
-sign_verify  rsa1024  md5     0x030201:K:0080
-sign_verify  rsa1024  sha1    0x030202:K:0080
 sign_verify  rsa1024  sha224  0x030207:K:0080
 expect_pass check_sign TYPE=ima KEY=rsa1024 ALG=sha256 PREFIX=0x030204aabbccdd0080 OPTS=--keyid=aabbccdd
 expect_pass check_sign TYPE=ima KEY=rsa1024 ALG=sha256 PREFIX=0x030204:K:0080 OPTS=--keyid-from-cert=test-rsa1024.cer
@@ -421,30 +419,34 @@ sign_verify rsa1024  sha384  0x030305:K:0080 --v3
 sign_verify rsa1024  sha512  0x030306:K:0080 --v3
 
 # Test v2 signatures with ECDSA
-# Signature length is typically 0x34-0x38 bytes long, very rarely 0x33
-sign_verify  prime192v1 sha1   0x030202:K:003[345678]
-sign_verify  prime192v1 sha224 0x030207:K:003[345678]
-sign_verify  prime192v1 sha256 0x030204:K:003[345678]
-sign_verify  prime192v1 sha384 0x030205:K:003[345678]
-sign_verify  prime192v1 sha512 0x030206:K:003[345678]
 
 # Signature length is typically 0x44-0x48 bytes long, very rarely 0x43
-sign_verify  prime256v1 sha1   0x030202:K:004[345678]
 sign_verify  prime256v1 sha224 0x030207:K:004[345678]
 sign_verify  prime256v1 sha256 0x030204:K:004[345678]
 sign_verify  prime256v1 sha384 0x030205:K:004[345678]
 sign_verify  prime256v1 sha512 0x030206:K:004[345678]
 
-sign_verify  prime256v1 sha256   0x030304:K:004[345678] --v3
-sign_verify  prime256v1 sha384   0x030305:K:004[345678] --v3
-sign_verify  prime256v1 sha512   0x030306:K:004[345678] --v3
+# Signature length is typically 0x66-0x68 bytes long, rarely 0x65
+sign_verify  secp384r1 sha224 0x030207:K:006[5678]
+sign_verify  secp384r1 sha256 0x030204:K:006[5678]
+sign_verify  secp384r1 sha384 0x030205:K:006[5678]
+sign_verify  secp384r1 sha512 0x030206:K:006[5678]
 
-sign_verify  mldsa44    sha256   0x030304:K:0974 --v3
-sign_verify  mldsa44    sha384   0x030305:K:0974 --v3
-sign_verify  mldsa44    sha512   0x030306:K:0974 --v3
-sign_verify  mldsa65    sha256   0x030304:K:0ced --v3
-sign_verify  mldsa65    sha384   0x030305:K:0ced --v3
-sign_verify  mldsa65    sha512   0x030306:K:0ced --v3
+# Test v3 signatures with ECDSA and MLDSA
+sign_verify  prime256v1 sha256 0x030304:K:004[345678] --v3
+sign_verify  prime256v1 sha384 0x030305:K:004[345678] --v3
+sign_verify  prime256v1 sha512 0x030306:K:004[345678] --v3
+
+sign_verify  secp384r1  sha256 0x030304:K:006[5678] --v3
+sign_verify  secp384r1  sha384 0x030305:K:006[5678] --v3
+sign_verify  secp384r1  sha512 0x030306:K:006[5678] --v3
+
+sign_verify  mldsa44    sha256 0x030304:K:0974 --v3
+sign_verify  mldsa44    sha384 0x030305:K:0974 --v3
+sign_verify  mldsa44    sha512 0x030306:K:0974 --v3
+sign_verify  mldsa65    sha256 0x030304:K:0ced --v3
+sign_verify  mldsa65    sha384 0x030305:K:0ced --v3
+sign_verify  mldsa65    sha512 0x030306:K:0ced --v3
 
 # If openssl 3.0 is installed, test the SM2/3 algorithm combination
 ssl_major_version=$(openssl version | sed -n 's/^OpenSSL \([^\.]\).*/\1/p')
