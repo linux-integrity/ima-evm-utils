@@ -47,7 +47,10 @@ apk add \
 	wget \
 	which \
 	xxd \
-	gawk
+	gawk \
+	libp11 \
+	gnutls-utils \
+	softhsm
 
 if [ ! "$TSS" ]; then
 	apk add git
