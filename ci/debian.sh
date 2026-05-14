@@ -59,7 +59,7 @@ $apt \
 
 $apt xxd || $apt vim-common
 # $apt libengine-gost-openssl || true
-# $apt softhsm2 gnutls-bin libengine-pkcs11-openssl || true
+$apt softhsm2 gnutls-bin libengine-pkcs11-openssl || true
 $apt softhsm2 gnutls-bin pkcs11-provider || true
 
 if [ "$TSS" != "libtss-dev" ]; then
