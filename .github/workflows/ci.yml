@@ -176,7 +176,7 @@ jobs:
               CC: gcc
               TSS: ibmtss
 
-          - container: "ubuntu:xenial"
+          - container: "ubuntu:resolute"
             env:
               CC: clang
               TSS: tpm2-tss
