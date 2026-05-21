@@ -2358,7 +2358,7 @@ static int ima_measurement(const char *file)
 	fp = fopen(file, "rb");
 	if (!fp) {
 		log_err("Failed to open measurement file: %s\n", file);
-		goto out;
+		goto out_free;
 	}
 
 	if (imaevm_params.keyfile)	/* Support multiple public keys */
