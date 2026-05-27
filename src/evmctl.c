@@ -1622,7 +1622,7 @@ static int cmd_ima_clear(struct command *cmd)
 struct template_entry {
 	struct {
 		uint32_t pcr;
-		uint8_t digest[SHA_DIGEST_LENGTH];
+		uint8_t digest[MAX_DIGEST_SIZE];
 		uint32_t name_len;
 	} header  __packed;
 	char name[TCG_EVENT_NAME_LEN_MAX + 1];
@@ -1657,13 +1657,13 @@ static int ima_verify_template_hash(struct template_entry *entry)
 	return 0;
 }
 
-void ima_show(struct template_entry *entry)
+void ima_show(struct template_entry *entry, size_t entry_digest_len)
 {
 	if (imaevm_params.verbose <= LOG_INFO)
 		return;
 
 	log_info("%d ", entry->header.pcr);
-	log_dump_n(entry->header.digest, sizeof(entry->header.digest));
+	log_dump_n(entry->header.digest, entry_digest_len);
 	log_info(" %s ", entry->name);
 	log_dump_n(entry->template, SHA_DIGEST_LENGTH);
 	log_info(" %s\n", entry->template + SHA_DIGEST_LENGTH);
@@ -1698,7 +1698,7 @@ static int lookup_template_name_entry(char *template_name)
 }
 
 static void ima_ng_show(struct public_key_entry *public_keys,
-			struct template_entry *entry)
+			struct template_entry *entry, size_t entry_digest_len)
 {
 	uint8_t *fieldp = entry->template;
 	uint32_t field_len;
@@ -1825,7 +1825,7 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 	/* ascii_runtime_measurements */
 	if (imaevm_params.verbose > LOG_INFO) {
 		log_info("%d ", entry->header.pcr);
-		log_dump_n(entry->header.digest, sizeof(entry->header.digest));
+		log_dump_n(entry->header.digest, entry_digest_len);
 		log_info(" %s %s", entry->name, algo);
 		log_dump_n(digest, digest_len);
 		log_info(" %s", path);
@@ -2336,6 +2336,7 @@ static int ima_measurement(const char *file)
 	int c;
 
 	struct template_entry entry = { .template = NULL };
+	size_t entry_digest_len = SHA_DIGEST_LENGTH;
 	FILE *fp;
 	int invalid_template_digest = 0;
 	int err_padded = -1;
@@ -2397,7 +2398,9 @@ static int ima_measurement(const char *file)
 		}
 	}
 
-	while (fread(&entry.header, sizeof(entry.header), 1, fp) == 1) {
+	while (fread(&entry.header.pcr, sizeof(entry.header.pcr), 1, fp) == 1 &&
+	       fread(&entry.header.digest, entry_digest_len, 1, fp) == 1 &&
+	       fread(&entry.header.name_len, sizeof(entry.header.name_len), 1, fp) == 1) {
 		entry_num++;
 		if (entry.header.pcr >= NUM_PCRS) {
 			log_err("Invalid PCR %d.\n", entry.header.pcr);
@@ -2519,9 +2522,9 @@ static int ima_measurement(const char *file)
 			invalid_template_digest = 1;
 
 		if (is_ima_template)
-			ima_show(&entry);
+			ima_show(&entry, entry_digest_len);
 		else
-			ima_ng_show(public_keys, &entry);
+			ima_ng_show(public_keys, &entry, entry_digest_len);
 
 		if (!tpmbanks)
 			continue;
