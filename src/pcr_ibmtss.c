@@ -37,9 +37,9 @@ typedef struct tdAlgorithm_Map {
 Algorithm_Map algorithm_map[] = {
 				 { "sha1", TPM_ALG_SHA1},
 				 { "sha256", TPM_ALG_SHA256},
+				 { "sha384", TPM_ALG_SHA384},
+				 { "sha512", TPM_ALG_SHA512},
 #if 0	/* uncomment as these digest algorithms are supported */
-				 { "", TPM_ALG_SHA384},
-				 { "", TPM_ALG_SHA512},
 				 { "", TPM_ALG_SM3_256},
 				 { "", TPM_ALG_SHA3_256},
 				 { "", TPM_ALG_SHA3_384},

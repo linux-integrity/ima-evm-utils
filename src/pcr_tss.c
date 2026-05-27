@@ -79,6 +79,10 @@ static TPM2_ALG_ID algo_to_tss2(const char *algo_name)
 		return TPM2_ALG_SHA1;
 	else if (!strcmp(algo_name, "sha256"))
 		return TPM2_ALG_SHA256;
+	else if (!strcmp(algo_name, "sha384"))
+		return TPM2_ALG_SHA384;
+	else if (!strcmp(algo_name, "sha512"))
+		return TPM2_ALG_SHA512;
 
 	return TPM2_ALG_ERROR;
 }

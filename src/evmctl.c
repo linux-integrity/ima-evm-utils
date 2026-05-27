@@ -161,7 +161,9 @@ struct tpm_bank_info {
 	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
 };
 
-static const char * const default_algos[] = {"sha1", "sha256"};
+static const char * const default_algos[] = {
+	"sha1", "sha256", "sha384", "sha512"
+};
 
 #define ARRAY_SIZE(ARR) (sizeof(ARR) / sizeof((ARR)[0]))
 

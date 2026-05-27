@@ -49,7 +49,7 @@ int tpm2_pcr_read(const char *algo_name, uint32_t pcr_handle, uint8_t *hwpcr,
 		 int len, char **errmsg)
 {
 	FILE *fp;
-	char pcr[100];	/* may contain an error */
+	char pcr[129];	/* may contain an error */
 	char cmd[PATH_MAX + 50];
 	int ret;
 
