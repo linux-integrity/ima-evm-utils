@@ -161,6 +161,10 @@ struct tpm_bank_info {
 	uint8_t pcr[NUM_PCRS][MAX_DIGEST_SIZE];
 };
 
+static const char * const default_algos[] = {"sha1", "sha256"};
+
+#define ARRAY_SIZE(ARR) (sizeof(ARR) / sizeof((ARR)[0]))
+
 /* One --pcrs file per hash-algorithm/bank */
 #define MAX_PCRFILE 2
 static char *pcrfile[MAX_PCRFILE];
@@ -1635,19 +1639,25 @@ static uint8_t zero[MAX_DIGEST_SIZE];
 
 static int ignore_violations = 0;
 
-static int ima_verify_template_hash(struct template_entry *entry)
+static int ima_verify_template_hash(struct template_entry *entry,
+				    const EVP_MD *md)
 {
-	uint8_t digest[SHA_DIGEST_LENGTH];
+	uint8_t digest[MAX_DIGEST_SIZE];
+	unsigned int digest_len;
 	static int line = 0;
 
 	line++;
 
-	if (!memcmp(zero, entry->header.digest, sizeof(digest)))
+	if (!memcmp(zero, entry->header.digest, EVP_MD_size(md)))
 		return 0;
 
-	SHA1(entry->template, entry->template_len, digest);
+	if (EVP_Digest(entry->template, entry->template_len, digest, &digest_len,
+		       md, NULL) != 1) {
+		log_err("EVP_Digest failed.\n");
+		return 1;
+	}
 
-	if (memcmp(digest, entry->header.digest, sizeof(digest))) {
+	if (memcmp(digest, entry->header.digest, digest_len)) {
 		if (imaevm_params.verbose > LOG_INFO)
 			log_info("Failed to verify template data digest(line %d).\n",
 				  line);
@@ -1665,8 +1675,8 @@ void ima_show(struct template_entry *entry, size_t entry_digest_len)
 	log_info("%d ", entry->header.pcr);
 	log_dump_n(entry->header.digest, entry_digest_len);
 	log_info(" %s ", entry->name);
-	log_dump_n(entry->template, SHA_DIGEST_LENGTH);
-	log_info(" %s\n", entry->template + SHA_DIGEST_LENGTH);
+	log_dump_n(entry->template, entry_digest_len);
+	log_info(" %s\n", entry->template + entry_digest_len);
 }
 
 /*
@@ -1884,8 +1894,7 @@ static void set_bank_info(struct tpm_bank_info *bank, const char *algo_name)
 static struct tpm_bank_info *init_tpm_banks(int *num_banks)
 {
 	struct tpm_bank_info *banks = NULL;
-	const char *default_algos[] = {"sha1", "sha256"};
-	int num_algos = sizeof(default_algos) / sizeof(default_algos[0]);
+	size_t num_algos = ARRAY_SIZE(default_algos);
 	int i, j;
 
 	banks = calloc(num_algos, sizeof(struct tpm_bank_info));
@@ -2024,7 +2033,9 @@ out:
 }
 
 /* Calculate and extend the template hash for multiple hash algorithms */
-static void extend_tpm_banks(struct template_entry *entry, int num_banks,
+static void extend_tpm_banks(struct template_entry *entry,
+			     size_t entry_digest_len,
+			     int num_banks,
 			     struct tpm_bank_info *bank,
 			     struct tpm_bank_info *padded_bank)
 {
@@ -2060,7 +2071,7 @@ static void extend_tpm_banks(struct template_entry *entry, int num_banks,
 		 * per TPM bank digest, violations are the full per bank digest
 		 * size.
 		 */
-		if (memcmp(entry->header.digest, zero, SHA_DIGEST_LENGTH) == 0) {
+		if (memcmp(entry->header.digest, zero, entry_digest_len) == 0) {
 			if (!ignore_violations) {
 				memset(bank[i].digest, 0x00, bank[i].digest_size);
 				memset(padded_bank[i].digest, 0x00, padded_bank[i].digest_size);
@@ -2321,6 +2332,45 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 	return tpm_enabled ? 0 : 1;
 }
 
+static const EVP_MD *get_digestbylogfile(const char *filename)
+{
+	size_t num_algos = ARRAY_SIZE(default_algos);
+	char buffer[PATH_MAX];
+	const char *start;
+	struct stat stbuf;
+	size_t i, len;
+
+	if (lstat(filename, &stbuf) < 0) {
+		log_err("Could not stat %s: %s\n",
+			filename, strerror(errno));
+		return NULL;
+	}
+	if ((stbuf.st_mode & S_IFMT) == S_IFLNK) {
+		if (readlink(filename, buffer, sizeof(buffer)) < 0) {
+			log_err("readlink on %s failed: %s\n",
+				filename, strerror(errno));
+			return NULL;
+		}
+	} else {
+		len = snprintf(buffer, sizeof(buffer), "%s", filename);
+		if (len >= sizeof(buffer)) {
+			log_err("buffer is to small to hold filename\n");
+			return NULL;
+		}
+	}
+
+	for (i = 0; i < num_algos; i++) {
+		start = strstr(buffer, default_algos[i]);
+		/* filename must end with the string */
+		if (start && strcmp(start, default_algos[i]) == 0)
+			return EVP_get_digestbyname(default_algos[i]);
+	}
+
+	log_err("Unsupported algorithm used in log file %s.\n", filename);
+
+	return NULL;
+}
+
 static int ima_measurement(const char *file)
 {
 	struct public_key_entry *public_keys = NULL;
@@ -2337,6 +2387,7 @@ static int ima_measurement(const char *file)
 
 	struct template_entry entry = { .template = NULL };
 	size_t entry_digest_len = SHA_DIGEST_LENGTH;
+	const EVP_MD *md;
 	FILE *fp;
 	int invalid_template_digest = 0;
 	int err_padded = -1;
@@ -2361,6 +2412,11 @@ static int ima_measurement(const char *file)
 		log_err("Failed to open measurement file: %s\n", file);
 		goto out_free;
 	}
+
+	md = get_digestbylogfile(file);
+	if (!md)
+		goto out_free;
+	entry_digest_len = EVP_MD_size(md);
 
 	if (imaevm_params.keyfile)	/* Support multiple public keys */
 		err = imaevm_init_public_keys(imaevm_params.keyfile,
@@ -2449,7 +2505,7 @@ static int ima_measurement(const char *file)
 				goto out;
 			}
 		} else {
-			entry.template_len = SHA_DIGEST_LENGTH +
+			entry.template_len = entry_digest_len +
 					     TCG_EVENT_NAME_LEN_MAX + 1;
 		}
 
@@ -2477,7 +2533,7 @@ static int ima_measurement(const char *file)
 			 * The "ima" template data format is digest,
 			 * filename length, filename.
 			 */
-			if (fread(entry.template, SHA_DIGEST_LENGTH,
+			if (fread(entry.template, entry_digest_len,
 				  1, fp) != 1) {
 				log_errno("Unable to read file data hash\n");
 				goto out;
@@ -2497,7 +2553,7 @@ static int ima_measurement(const char *file)
 				goto out;
 			}
 
-			len = fread(entry.template + SHA_DIGEST_LENGTH,
+			len = fread(entry.template + entry_digest_len,
 				    field_len, 1, fp);
 			if (len != 1) {
 				log_errno("Failed reading file name\n");
@@ -2508,16 +2564,17 @@ static int ima_measurement(const char *file)
 			 * The template data is fixed sized, zero out
 			 * the remaining memory.
 			 */
-			len = SHA_DIGEST_LENGTH + field_len;
+			len = entry_digest_len + field_len;
 			memset(entry.template + len, 0x00,
 			       entry.template_buf_len - len);
 		}
 
-		extend_tpm_banks(&entry, num_banks, pseudo_banks,
+		extend_tpm_banks(&entry, entry_digest_len,
+				 num_banks, pseudo_banks,
 				 pseudo_padded_banks);
 
 		/* Recalculate and verify template data digest */
-		err = ima_verify_template_hash(&entry);
+		err = ima_verify_template_hash(&entry, md);
 		if (err)
 			invalid_template_digest = 1;
 
