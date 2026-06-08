@@ -2621,7 +2621,7 @@ static int ima_measurement(const char *file)
 	if (tpmbanks == 0)
 		log_info("Failed to read any TPM PCRs\n");
 	else {
-		if (!err)
+		if (!err && entry_num)
 			log_info("Matched per TPM bank calculated digest(s).\n");
 		else if (!err_padded) {
 			log_info("Matched SHA1 padded TPM digest(s).\n");
