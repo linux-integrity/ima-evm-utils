@@ -68,7 +68,7 @@ check_load_ima_rule() {
 	fi
 
 	echo "$new_rule" > "$new_policy"
-	if ! evmctl sign -o -a sha256 --imasig --key "$key_path" "$new_policy" &> /dev/null; then
+	if ! err=$(evmctl sign -o -a sha256 --imasig --key "$key_path" "$new_policy" 2>&1); then
 		echo "${RED}Failed to sign IMA policy${NORM}"
 		return "$FAIL"
 	fi
