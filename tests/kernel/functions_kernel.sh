@@ -32,11 +32,21 @@ get_xattr() {
 				 print v}'
 }
 
+# Determine whether the given key requires --v3 to be passed to evmctl
+keyalgo_opt_v3() {
+	local key_path=$1
+
+	if openssl pkey -in "$key_path" -noout -text | grep -q ML-DSA; then
+		echo "--v3"
+	fi
+}
+
 check_load_ima_rule() {
 	local result new_policy color
 	local new_rule="$1"
 	local key_path="$2"
 	local mountpoint="$3"
+	local opt_v3 err
 
 	echo -e "$new_rule\n$(cat /sys/kernel/security/ima/policy)" | ima_policy_check.awk
 	result=$?
@@ -68,8 +78,11 @@ check_load_ima_rule() {
 	fi
 
 	echo "$new_rule" > "$new_policy"
-	if ! err=$(evmctl sign -o -a sha256 --imasig --key "$key_path" "$new_policy" 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imasig \
+			--key "$key_path" "$new_policy" ${opt_v3:+${opt_v3}} 2>&1); then
 		echo "${RED}Failed to sign IMA policy${NORM}"
+		echo "${RED}${err}${NORM}"
 		return "$FAIL"
 	fi
 

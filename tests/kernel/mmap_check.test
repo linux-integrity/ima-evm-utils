@@ -142,7 +142,7 @@ check_mmap() {
 check_deny() {
 	local hook="$1"
 	local arg="$2"
-	local test_file fowner rule result err
+	local test_file fowner rule result err opt_v3
 
 	echo -e "\nTest: ${FUNCNAME[0]} (hook=\"$hook\", test_mmap arg: \"$arg\")"
 
@@ -156,7 +156,9 @@ check_deny() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl ima_sign -a sha256 --key "$g_key_path" "$test_file" 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl ima_sign -a sha256 \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} "$test_file" 2>&1); then
 		echo "${RED}Cannot sign $test_file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$HARDFAIL"

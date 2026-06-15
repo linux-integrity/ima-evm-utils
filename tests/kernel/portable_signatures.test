@@ -71,8 +71,7 @@ METADATA_CHANGE_FOWNER_2=3002
 # requirement to be satisfied by EVM portable signatures' didn't break the
 # current behavior (IMA signatures still satisfy the imasig requirement).
 check_ima_sig_appraisal() {
-	local result
-	local err
+	local result err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -86,7 +85,9 @@ check_ima_sig_appraisal() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl ima_sign -a sha256 --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl ima_sign -a sha256 \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -129,10 +130,7 @@ cleanup_ima_sig_appraisal() {
 # field evmsig and write to field sig as fallback' still allows IMA signatures
 # to be displayed in the measurement list.
 check_ima_sig_ima_measurement_list() {
-	local result
-	local ima_sig_fs
-	local ima_sig_list
-	local err
+	local result ima_sig_fs ima_sig_list err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -141,7 +139,9 @@ check_ima_sig_ima_measurement_list() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl ima_sign -a sha256 --imasig --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl ima_sign -a sha256 --imasig \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -224,7 +224,7 @@ cleanup_create_file() {
 # metadata to copied one by one, even if the portable signature verification
 # temporarily fails until the copy is completed.
 check_cp_preserve_xattrs() {
-	local err
+	local err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -238,7 +238,9 @@ check_cp_preserve_xattrs() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl sign -o -a sha256 --imahash --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -269,7 +271,7 @@ cleanup_cp_preserve_xattrs() {
 # incrementally test the patches without 'evm: Allow setxattr() and setattr()
 # for unmodified metadata'.
 check_tar_extract_xattrs_different_owner() {
-	local err
+	local err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -298,7 +300,9 @@ check_tar_extract_xattrs_different_owner() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl sign -o -a sha256 --imahash --key "$g_key_path" in/test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} in/test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -340,7 +344,7 @@ cleanup_tar_extract_xattrs_different_owner() {
 # the same owner as the current one. Thus, this test requires 'evm: Allow
 # setxattr() and setattr() for unmodified metadata'.
 check_tar_extract_xattrs_same_owner() {
-	local err
+	local err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -359,7 +363,9 @@ check_tar_extract_xattrs_same_owner() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl sign -o -a sha256 --imahash --key "$g_key_path" in/test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} in/test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -402,11 +408,7 @@ cleanup_tar_extract_xattrs_same_owner() {
 # commands to set the same or different metadata. Setting the same metadata
 # should be allowed, setting different metadata should be denied.
 check_metadata_change() {
-	local ima_xattr
-	local label
-	local last_char
-	local msg
-	local err
+	local ima_xattr label last_char msg err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -435,7 +437,9 @@ check_metadata_change() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl sign -o -a sha256 --imahash --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -567,15 +571,7 @@ cleanup_metadata_change() {
 # verifies that IMA grants access again to the file after restoring the correct
 # metadata.
 check_evm_revalidate() {
-	local result
-	local ima_xattr
-	local ima_xattr_new
-	local evm_xattr
-	local evm_xattr_new
-	local label
-	local last_char
-	local msg
-	local err
+	local result ima_xattr ima_xattr_new evm_xattr evm_xattr_new label last_char msg err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -597,7 +593,9 @@ check_evm_revalidate() {
 	# We need to defer setting the correct owner, as there could be
 	# already an IMA policy rule preventing evmctl from reading the
 	# file to calculate the digest.
-	if ! err=$(evmctl sign -o -a sha256 --imahash --uid "$APPRAISE_FOWNER" --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash --uid "$APPRAISE_FOWNER" \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -779,12 +777,7 @@ cleanup_evm_revalidate() {
 # written to new files after adding the signature and files can be accessed
 # when the imasig requirement is specified in the IMA policy.
 check_evm_portable_sig_ima_appraisal() {
-	local result
-	local xattr_orig
-	local xattr
-	local mode
-	local owner
-	local err
+	local result xattr_orig xattr mode owner err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -806,7 +799,9 @@ check_evm_portable_sig_ima_appraisal() {
 	# We need to defer setting the correct owner, as there could be
 	# already an IMA policy rule preventing evmctl from reading the
 	# file to calculate the digest.
-	if ! err=$(evmctl sign -o -a sha256 --imahash --uid "$APPRAISE_DIGSIG_FOWNER" --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash --uid "$APPRAISE_DIGSIG_FOWNER" \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
@@ -903,10 +898,7 @@ cleanup_evm_portable_sig_ima_appraisal() {
 # The purpose of this test is to verify that the EVM portable signature is
 # displayed in the measurement list.
 check_evm_portable_sig_ima_measurement_list() {
-	local result
-	local evm_sig_fs
-	local evm_sig_list
-	local err
+	local result evm_sig_fs evm_sig_list err opt_v3
 
 	echo "Test: ${FUNCNAME[0]} (evm_value: $evm_value)"
 
@@ -920,7 +912,9 @@ check_evm_portable_sig_ima_measurement_list() {
 		return "$FAIL"
 	fi
 
-	if ! err=$(evmctl sign -o -a sha256 --imahash --key "$g_key_path" test-file 2>&1); then
+	opt_v3=$(keyalgo_opt_v3 "$g_key_path")
+	if ! err=$(evmctl sign -o -a sha256 --imahash \
+			--key "$g_key_path" ${opt_v3:+${opt_v3}} test-file 2>&1); then
 		echo "${RED}Cannot sign test-file${NORM}"
 		echo "${RED}${err}${NORM}"
 		return "$FAIL"
