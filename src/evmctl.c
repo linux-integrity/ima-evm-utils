@@ -2452,7 +2452,6 @@ static int ima_measurement(const char *file)
 		    && strcmp(pseudo_padded_banks[c].algo_name, verify_bank)) {
 			pseudo_banks_mask ^= (1 << c);
 			pseudo_padded_banks_mask ^= (1 << c);
-			break;
 		}
 	}
 
@@ -3135,7 +3134,7 @@ static struct option opts[] = {
 	{"xattr-user", 0, 0, 140},
 	{"ignore-violations", 0, 0, 141},
 	{"pcrs", 1, 0, 142},
-	{"verify-bank", 2, 0, 143},
+	{"verify-bank", 1, 0, 143},
 	{"keyid", 1, 0, 144},
 	{"keyid-from-cert", 1, 0, 145},
 	{"veritysig", 0, 0, 146},
