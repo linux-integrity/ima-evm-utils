@@ -291,8 +291,9 @@ if [ -z "$g_dev" ]; then
 	exit "$FAIL"
 fi
 
-if ! mkfs.ext4 -U "$IMA_UUID" -b 4096 -O ea_inode "$g_dev" &> /dev/null; then
+if ! err=$(echo n | mkfs.ext4 -U "$IMA_UUID" -b 4096 -O ea_inode "$g_dev" 2>&1); then
 	echo "${RED}Cannot format $g_dev${NORM}"
+	echo "${RED}${err}${NORM}"
 	exit "$FAIL"
 fi
 

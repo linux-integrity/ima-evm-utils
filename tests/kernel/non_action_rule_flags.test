@@ -157,8 +157,9 @@ fi
 [ "$VERBOSE" -ge 2 ] && echo "INFO: loop device for $g_image is $g_dev"
 
 [ "$VERBOSE" -ge 1 ] && echo "INFO: formatting $g_dev with ext4 and UUID $IMA_UUID"
-if ! mkfs.ext4 -U "$IMA_UUID" -b 4096 -O ea_inode "$g_dev" &> /dev/null; then
+if ! err=$(echo n | mkfs.ext4 -U "$IMA_UUID" -b 4096 -O ea_inode "$g_dev" 2>&1); then
 	echo "${RED}Cannot format $g_dev${NORM}"
+	echo "${RED}${err}${NORM}"
 	exit "$FAIL"
 fi
 
