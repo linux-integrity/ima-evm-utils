@@ -2337,7 +2337,7 @@ static int read_tpm_banks(int num_banks, struct tpm_bank_info *bank)
 static const EVP_MD *get_digestbylogfile(const char *filename)
 {
 	size_t num_algos = ARRAY_SIZE(default_algos);
-	char buffer[PATH_MAX];
+	char buffer[PATH_MAX] = {0};
 	const char *start;
 	struct stat stbuf;
 	size_t i, len;
@@ -2353,6 +2353,9 @@ static const EVP_MD *get_digestbylogfile(const char *filename)
 				filename, strerror(errno));
 			return NULL;
 		}
+
+		/* In case PATH_MAX bytes are actually read */
+		buffer[sizeof(buffer) - 1] = '\0';
 	} else {
 		len = snprintf(buffer, sizeof(buffer), "%s", filename);
 		if (len >= sizeof(buffer)) {
