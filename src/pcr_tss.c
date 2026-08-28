@@ -37,9 +37,20 @@
 
 int tpm2_pcr_supported(void)
 {
+	ESYS_CONTEXT *ctx = NULL;
+	int ret;
+
 	if (imaevm_params.verbose > LOG_INFO)
 		log_info("Using %s to read PCRs.\n", LIB);
 
+	/* Try to communicate with the TPM 2.0 */
+	setenv("TSS2_LOG", "tcti+none", 1);
+	ret = Esys_Initialize(&ctx, NULL, NULL);
+	unsetenv("TSS2_LOG");
+	if (ret != TPM2_RC_SUCCESS)
+		return 0;
+
+	Esys_Finalize(&ctx);
 	return 1;
 }
 
