@@ -2120,7 +2120,7 @@ static void extend_tpm_banks(struct template_entry *entry,
 static int read_one_bank(struct tpm_bank_info *tpm_bank, FILE *fp)
 {
 	char *p, pcr_str[8], buf[MAX_DIGEST_SIZE * 2 + 8];
-	int i = 0;
+	unsigned short i = 0;
 	int result = -1;
 	for (;;) {
 		p = fgets(buf, sizeof(buf), fp);
