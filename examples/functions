@@ -53,6 +53,15 @@ ima_gen_signing_key()
 {
 	keyalgo="$1"
 
+	if [ $# -eq 2 ]; then
+		keyname_prefix="$2 "
+		filename_suffix="_$2"
+		if [ -e x509_ima${filename_suffix}.der ]; then
+			echo "x509_ima${filename_suffix}.der exists, not overwriting"
+			exit 17;
+		fi
+	fi
+
 	GENKEY=ima.genkey
 
 	ossl_keyalgo=$(get_ossl_keyalgo "$keyalgo")
@@ -71,7 +80,7 @@ x509_extensions = v3_usr
 
 [ req_distinguished_name ]
 O = $(hostname)
-CN = $(whoami) signing key
+CN = $(whoami) ${keyname_prefix}signing key
 emailAddress = $(whoami)@$(hostname)
 
 [ v3_usr ]
@@ -86,12 +95,12 @@ authorityKeyIdentifier=keyid
 __EOF__
 
 	openssl req -new -nodes -batch -config $GENKEY \
-		-out csr_ima.pem -keyout privkey_ima.pem \
+		-out csr_ima${filename_suffix}.pem -keyout privkey_ima${filename_suffix}.pem \
 		-newkey "${ossl_keyalgo}" \
 		${ossl_keyalgo_detail:+${ossl_keyalgo_detail}} || return $?
-	openssl x509 -req -in csr_ima.pem -days 365 -extfile $GENKEY -extensions v3_usr \
+	openssl x509 -req -in csr_ima${filename_suffix}.pem -days 365 -extfile $GENKEY -extensions v3_usr \
 		-CA ima-local-ca.pem -CAkey ima-local-ca.priv -CAcreateserial \
-		-outform DER -out x509_ima.der
+		-outform DER -out x509_ima${filename_suffix}.der
 	return $?
 }
 
