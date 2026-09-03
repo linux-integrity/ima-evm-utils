@@ -64,6 +64,7 @@ typedef struct ossl_provider_st OSSL_PROVIDER;
 #define log_dump(p, len)		do_log_dump(LOG_INFO, p, len, true)
 #define log_dump_n(p, len)		do_log_dump(LOG_INFO, p, len, false)
 #define log_info(fmt, args...)		do_log(LOG_INFO, fmt, ##args)
+#define log_notice(fmt, args...)	do_log(LOG_NOTICE, fmt, ##args)
 #define log_err(fmt, args...)		do_log(LOG_ERR, fmt, ##args)
 #define log_errno(fmt, args...)		do_log(LOG_ERR, fmt ": errno: %s (%d)\n", ##args, strerror(errno), errno)
 

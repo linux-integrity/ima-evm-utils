@@ -1947,7 +1947,7 @@ static int compare_tpm_banks(int num_banks, struct tpm_bank_info *bank,
 				     bank[i].digest_size) != 0)
 				ret = 1;
 
-			if ((!ret && imaevm_params.verbose <= LOG_INFO) ||
+			if ((!ret && imaevm_params.verbose < LOG_INFO) ||
 			    (ret && imaevm_params.verbose <= LOG_DEBUG))
 				continue;
 
@@ -2624,12 +2624,12 @@ static int ima_measurement(const char *file)
 		log_info("Failed to read any TPM PCRs\n");
 	else {
 		if (!err && entry_num)
-			log_info("Matched per TPM bank calculated digest(s).\n");
+			log_notice("Matched per TPM bank calculated digest(s).\n");
 		else if (!err_padded) {
-			log_info("Matched SHA1 padded TPM digest(s).\n");
+			log_notice("Matched SHA1 padded TPM digest(s).\n");
 			err = 0;
 		} else
-			log_info("Failed to match per TPM bank or SHA1 padded TPM digest(s).\n");
+			log_notice("Failed to match per TPM bank or SHA1 padded TPM digest(s).\n");
 	}
 
 	if (invalid_template_digest) {
