@@ -3072,6 +3072,7 @@ static void usage(void)
 		"      --v2           create V2 signatures; this is the default\n"
 		"      --v3           create V3 signatures; this requires Linux 7.2 or later\n"
 		"  -v                 increase verbosity level\n"
+		"      --log-level l  set verbosity to level l: err, warning, notice, info, debug\n"
 		"  -h, --help         display this help and exit\n"
 		"\n"
 		"Environment variables:\n\n"
@@ -3148,6 +3149,7 @@ static struct option opts[] = {
 #endif
 	{"v2", 0, 0, 150},
 	{"v3", 0, 0, 151},
+	{"log-level", 1, 0, 152},
 	{}
 
 };
@@ -3232,11 +3234,42 @@ static ENGINE *setup_engine(const char *engine_id)
 }
 #endif
 
+static int parse_log_level(const char *arg)
+{
+	static const struct {
+		const char *name;
+		int level;
+	} levels[] = {
+		{ "err",     LOG_ERR },
+		{ "warning", LOG_WARNING },
+		{ "notice",  LOG_NOTICE },
+		{ "info",    LOG_INFO },
+		{ "debug",   LOG_DEBUG },
+	};
+	char *end;
+	long val;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(levels); i++) {
+		if (!ascii_strcasecmp(arg, levels[i].name))
+			return levels[i].level;
+	}
+
+	errno = 0;
+	val = strtol(arg, &end, 10);
+	if (errno || *end != '\0' || end == arg ||
+	    val < LOG_EMERG || val > LOG_DEBUG)
+		return -1;
+
+	return (int)val;
+}
+
 int main(int argc, char *argv[])
 {
 	bool version_chosen = false;
 	int err = 0, c, lind;
 	unsigned long keyid;
+	int level;
 	char *eptr;
 
 	errno = 0;	/* initialize global errno */
@@ -3263,6 +3296,14 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			imaevm_params.verbose++;
+			break;
+		case 152:
+			level = parse_log_level(optarg);
+			if (level < 0) {
+				log_err("Invalid --log-level: %s\n", optarg);
+				exit(1);
+			}
+			imaevm_params.verbose = level;
 			break;
 		case 'd':
 			digest = 1;
