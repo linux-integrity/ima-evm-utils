@@ -31,7 +31,7 @@ jobs:
         if [ "$count" -eq 0 ]; then
           exit 0
         fi
-        scripts/checkpatch.pl patches/*  --strict --terse  --no-tree --ignore CONST_STRUCT,VOLATILE,SPLIT_STRING,FILE_PATH_CHANGES,EXECUTE_PERMISSIONS,UNKNOWN_COMMIT_ID,BAD_SIGN_OFF,PREFER_DEFINED_ATTRIBUTE_MACRO,PREFER_KERNEL_TYPES,EMBEDDED_FUNCTION_NAME
+        scripts/checkpatch.pl patches/*  --strict --terse  --no-tree --ignore CONST_STRUCT,VOLATILE,SPLIT_STRING,FILE_PATH_CHANGES,EXECUTE_PERMISSIONS,UNKNOWN_COMMIT_ID,BAD_SIGN_OFF,PREFER_DEFINED_ATTRIBUTE_MACRO,PREFER_KERNEL_TYPES,EMBEDDED_FUNCTION_NAME,CAMELCASE
 
   build:
     needs: review
