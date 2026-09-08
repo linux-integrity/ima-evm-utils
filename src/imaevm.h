@@ -231,6 +231,7 @@ extern struct libimaevm_params imaevm_params;
 struct public_key_entry;
 
 void imaevm_do_hexdump(FILE *fp, const void *ptr, int len, bool cr);
+int ascii_strcasecmp(const char *s1, const char *s2);
 void imaevm_hexdump(const void *ptr, int len);
 int imaevm_get_hash_algo(const char *algo);
 RSA *read_pub_key(const char *keyfile, int x509);

@@ -3001,7 +3001,7 @@ static int call_command(struct command *cmds, char *command)
 	struct command *cmd;
 
 	for (cmd = cmds; cmd->name; cmd++) {
-		if (strcasecmp(cmd->name, command) == 0)
+		if (ascii_strcasecmp(cmd->name, command) == 0)
 			return cmd->func(cmd);
 	}
 	printf("Invalid command: %s\n", command);

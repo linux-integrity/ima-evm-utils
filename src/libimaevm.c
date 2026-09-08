@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <string.h>
+#include <locale.h>
 #include <stdio.h>
 #include <assert.h>
 #include <ctype.h>
@@ -53,6 +54,30 @@
 
 #include "imaevm.h"
 #include "hash_info.h"
+
+/* Locale pinned to "C", used by ascii_strcasecmp() below. */
+static locale_t c_locale;
+
+static void __attribute__((constructor)) init_c_locale(void)
+{
+	c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+}
+
+/*
+ * strcasecmp() folds case according to the process's current locale,
+ * which can behave unexpectedly for fixed identifiers such as command
+ * names and option values that are not natural-language text. In the
+ * Turkish locale, for example, it can fold 'I'/'i' differently than
+ * ASCII expects. This wrapper always folds case using plain ASCII
+ * rules instead, regardless of locale.
+ */
+int ascii_strcasecmp(const char *s1, const char *s2)
+{
+	if (!c_locale)
+		return strcasecmp(s1, s2); /* extremely unlikely fallback */
+
+	return strcasecmp_l(s1, s2, c_locale);
+}
 
 static int read_keyid_from_cert(uint32_t *keyid_be, const char *certfile,
 				int try_der);
