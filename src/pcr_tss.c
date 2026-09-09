@@ -135,11 +135,15 @@ int tpm2_pcr_read(const char *algo_name, uint32_t pcr_handle, uint8_t *hwpcr,
 	pcr_select_in.pcrSelections[0].pcrSelect[pcr_handle / 8] =
 	    (1 << (pcr_handle % 8));
 
+	/* An unsupported bank is expected; report it via errmsg below. */
+	setenv("TSS2_LOG", "all+none", 1);
+
 	ret = Esys_Initialize(&ctx, NULL, &abi_version);
 	if (ret != TPM2_RC_SUCCESS) {
 		ret = tpm2_set_errmsg(errmsg, "esys initialize failed", ret);
 		if (ret == -1)	/* the contents of errmsg are undefined */
 			*errmsg = NULL;
+		unsetenv("TSS2_LOG");
 		return -1;
 	}
 
@@ -152,6 +156,7 @@ int tpm2_pcr_read(const char *algo_name, uint32_t pcr_handle, uint8_t *hwpcr,
 			    &pcr_select_out,
 			    &pcr_digests);
 	Esys_Finalize(&ctx);
+	unsetenv("TSS2_LOG");
 	if (ret != TPM2_RC_SUCCESS) {
 		ret = tpm2_set_errmsg(errmsg, "esys PCR reading failed", ret);
 		if (ret == -1)	/* the contents of errmsg is undefined */
