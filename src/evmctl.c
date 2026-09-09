@@ -2933,6 +2933,10 @@ static int cmd_ima_bootaggr(struct command *cmd __attribute__((unused)))
 	}
 	/* Make room for the trailing null */
 	bootaggr = malloc(bootaggr_len + 1);
+	if (!bootaggr) {
+		log_err("errno: %s (%d)\n", strerror(errno), errno);
+		return -1;
+	}
 
 	/*
 	 * Calculate and convert the per TPM 2.0 PCR bank algorithm
