@@ -1736,7 +1736,7 @@ static void ima_ng_show(struct public_key_entry *public_keys,
 	fieldp += sizeof(field_len);
 	total_len -= sizeof(field_len);
 
-	if (total_len < field_len) {
+	if (field_len == 0 || total_len < field_len) {
 		log_err("Template \"%s\" invalid template data\n", entry->name);
 		return;
 	}
