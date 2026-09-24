@@ -467,6 +467,136 @@ Latest version of keyctl allows to import X509 public key certificates:
     cat /etc/keys/x509_ima.der | keyctl padd asymmetric '' $ima_id
 
 
+VERIFYING THE IMA MEASUREMENT LIST
+-----------------------------------
+
+The IMA measurement list is recorded by the kernel in binary format at:
+
+    <securityfs>/ima/binary_runtime_measurements
+
+where <securityfs> is the mount point of securityfs, conventionally
+/sys/kernel/security, determinable from /proc/mounts.
+
+This file is only accessible on a running Linux system with IMA enabled and
+securityfs mounted.  It is not available in all environments — for example,
+remote attestation servers receive the binary measurement log together with
+a TPM quote and must verify the log without direct access to the
+original files.
+
+`evmctl ima_measurement` operates on the binary measurement log file passed
+to it, whether that is the live kernel file or a copy received as part of a
+broader attestation workflow.
+
+`evmctl ima_measurement` walks the measurement list once, simultaneously
+extending the template digests into a running PCR calculation and, when
+`--verify-sig` is specified, verifying the IMA signature in each record
+against the file hash stored in that same record.  It is this PCR match
+that establishes the integrity of the log as a whole — confirming the log
+has not been tampered with — and gives the per-record `--verify-sig`
+signature verification its meaning.
+
+PCR values
+~~~~~~~~~~
+
+`evmctl ima_measurement` obtains TPM PCR values from the first available
+source in the following order:
+
+ - Per-bank files specified via --pcrs
+ - TPM 1.2 sysfs (/sys/class/tpm/tpm0/device/pcrs or
+   /sys/class/misc/tpm0/device/pcrs)
+ - TPM 2.0 sysfs (/sys/class/tpm/tpm0/pcr-<algo>/<n>), enabled via --hwtpm
+ - A TSS userspace application via tpm2_pcr_read()
+
+The PCR values are read before walking the binary measurement list.  After
+each extend, the re-calculated PCR values are compared against the TPM PCR
+values.  Once all banks match the walk stops, since any remaining entries
+were added after the PCR values were read.
+
+If no PCR values can be obtained from any source, PCR verification is
+skipped, but `--verify-sig` can still be used independently to verify the
+signatures within the log records. However, without PCR verification
+there is no integrity guarantee that the measurement list itself has
+not been tampered with.
+
+Verifying IMA signatures with --verify-sig
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For each `ima-sig` or `ima-sigv2` template record in the measurement list,
+`--verify-sig` verifies that the IMA signature stored in the template data
+was produced over the file hash also stored in that same template record,
+using a trusted key supplied via `--key`.  Both the signature and the hash
+being verified come from within the log record itself — no access to the
+original file on disk is required.
+
+`--verify-sig` requires verification keys to be explicitly supplied via
+`--key`.  If not provided, `evmctl ima_measurement` falls back to
+/etc/keys/x509_evm.der; if that file is absent or unreadable, signature
+verification will fail for all signed entries.
+
+Usage:
+
+    evmctl ima_measurement --verify-sig --key "key1.der,key2.der,..." \
+        <securityfs>/ima/binary_runtime_measurements
+
+Entries that carry no IMA signature (files measured using templates such as
+`ima-ng`) are silently skipped by `--verify-sig`.
+
+Fedora example — release signing keys from fedora-gpg-keys
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+On Fedora, the fedora-gpg-keys package installs release-specific IMA signing
+certificates under /etc/keys/ima/, for example:
+
+    /etc/keys/ima/fedora-45-ima.der
+
+These certificates are loaded onto the kernel's .ima keyring at early boot by
+dracut, provided the following dracut modules are enabled:
+
+ - 96securityfs  — mounts securityfs at /sys/kernel/security
+ - 97masterkey   — sets up the kernel master key infrastructure
+ - 98integrity   — loads IMA/EVM keys from /etc/keys/ima/ onto the .ima keyring
+
+To verify a Fedora binary measurement log against the current release IMA
+signing certificate:
+
+    evmctl ima_measurement --verify-sig --key /etc/keys/ima/fedora-45-ima.der \
+        <securityfs>/ima/binary_runtime_measurements
+
+Multiple keys can be supplied as a comma-separated list if files were
+signed across more than one release:
+
+    evmctl ima_measurement --verify-sig \
+        --key "/etc/keys/ima/fedora-43-ima.der,/etc/keys/ima/fedora-44-ima.der,/etc/keys/ima/fedora-45-ima.der" \
+        /path/to/saved/binary_runtime_measurements
+
+ToMToU and open_writers violations and --ignore-violations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The measurement list may contain two types of integrity violation entries.
+A `ToMToU` (Time-of-Measure/Time-of-Use) violation is recorded when a file
+that has already been measured is subsequently opened for write.  An
+`open_writers` violation is recorded when a file that must be measured is
+opened for read while already open for write.
+
+In both cases the entire template digest is zeroed out in the violation
+entry.  When extended into the TPM, the zeroed digest is extended as 0xff
+bytes rather than 0x00.  By default, `evmctl ima_measurement` treats these
+as errors and the PCR comparison will fail.
+
+The `--ignore-violations` flag allows the PCR comparison to succeed in the
+presence of violation entries by substituting 0xff for the PCR extension:
+
+    evmctl ima_measurement --verify-sig --ignore-violations \
+        --key /etc/keys/ima/fedora-45-ima.der \
+        <securityfs>/ima/binary_runtime_measurements
+
+Use `--ignore-violations` in development or test environments where
+concurrent file access is expected and violations are benign.  Do not use
+it in production security-critical contexts where a violation entry may
+indicate a genuine race condition or tampering attempt — in those cases the
+violation should be investigated rather than silently skipped.
+
+
 FILES
 -----
 
@@ -475,27 +605,69 @@ Examples of scripts to generate X509 public key certificates:
  /usr/share/doc/ima-evm-utils/ima-genkey-self.sh
  /usr/share/doc/ima-evm-utils/ima-genkey.sh
  /usr/share/doc/ima-evm-utils/ima-gen-local-ca.sh
- /usr/share/doc/ima-evm-utils/ima-genkey-self-ecc.sh
- /usr/share/doc/ima-evm-utils/ima-genkey-ecc.sh
- /usr/share/doc/ima-evm-utils/ima-gen-local-ca-ecc.sh
+
+All three scripts accept an optional keyalgo argument selecting the key
+algorithm and parameters.  The following algorithms are supported:
+
+  rsa:2048, rsa:3072, rsa:4096
+  prime256v1, secp384r1, secp521r1
+  mldsa44, mldsa65, mldsa87
+
+The default is rsa:2048 when no keyalgo argument is provided.
+
+ima-genkey-self.sh [keyalgo]
+    Generate an EVM/IMA file signing key and a self-signed CA certificate
+    using the same key.
+
+ima-gen-local-ca.sh [keyalgo]
+    Generate a local IMA certificate authority key and self-signed
+    certificate.  Used in conjunction with ima-genkey.sh to establish a
+    local trust chain.
+
+ima-genkey.sh [keyalgo] [filename suffix]
+    Generate an EVM/IMA file signing key signed by the local CA created
+    with ima-gen-local-ca.sh.  An optional filename suffix prevents the
+    generated certificate from being overwritten by subsequent invocations.
+
+The mldsa44, mldsa65, and mldsa87 algorithms are post-quantum ML-DSA
+signing algorithms (FIPS 204), supported from Linux 7.2 onwards.  ML-DSA
+support in IMA and EVM is limited to sigv3 signatures.
+
+Fedora release IMA signing certificates (fedora-gpg-keys package):
+
+ /etc/keys/ima/fedora-43-ima.der
+ /etc/keys/ima/fedora-44-ima.der
+ /etc/keys/ima/fedora-45-ima.der
 
 
 AUTHOR
 ------
 
-Written by Dmitry Kasatkin, <dmitry.kasatkin at gmail.com> and others.
+Written by Dmitry Kasatkin and contributors.  For a full list of contributors
+see the git commit history at:
+
+ https://github.com/linux-integrity/ima-evm-utils/commits/master
 
 
 RESOURCES
 ---------
 
- http://sourceforge.net/p/linux-ima/wiki/Home
- http://sourceforge.net/p/linux-ima/ima-evm-utils
+ https://github.com/linux-integrity/ima-evm-utils
+ https://ima-doc.readthedocs.io/en/latest/
 
 
 COPYING
 -------
 
-Copyright \(C) 2012 - 2014 Linux Integrity Project. Free use of this software is granted under
-the terms of the GNU Public License (GPL).
+Copyright (C) 2012 - 2026 Linux Integrity Project.
+
+ima-evm-utils is dual-licensed:
+
+ - libimaevm is provided under the terms of the GNU Lesser General Public
+   License (LGPL-2.0-or-later).  See COPYING.LGPL.
+
+ - evmctl is provided under the terms of the GNU General Public License
+   (GPL-2.0-or-later).  See COPYING.
+
+See LICENSES.txt for the full license breakdown.
 
