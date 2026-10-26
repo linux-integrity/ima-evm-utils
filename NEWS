@@ -1,3 +1,29 @@
+2026-09-25 Mimi Zohar <zohar@linux.ibm.com>
+	version 1.7:
+
+	* New features:
+	  * IMA and EVM signature v3 support (--v3)
+	  * ML-DSA post-quantum signing support (mldsa44, mldsa65, mldsa87);
+	    requires OpenSSL >= 3.5 and Linux 7.2; limited to sigv3
+	  * ima_measurement: add support for sha384 and sha512 banks
+	  * Add ability to handle a list of files for several commands
+	    (e.g. ima_sign, verify_evm)
+	  * Support building libimaevm as a static library
+	* Example scripts:
+	  * Consolidate RSA, EC, and ML-DSA key generation into existing
+	    scripts via keyalgo argument; remove standalone ECC scripts
+	* Tests:
+	  * New tests: creds_check.test, non_action_rule_flags.test
+	  * Move tests requiring an IMA code signing key to
+	    tests/kernel subdirectory
+	* CI changes:
+	  * Replace Ubuntu xenial with resolute; update node.js to 24
+	  * Build and install ibmtss; disable engine support
+	  * Add checkpatch.pl commit formatting checks
+	* Documentation:
+	  * README: new VERIFYING THE IMA MEASUREMENT LIST section
+	* Misc bug fixes and code cleanup
+
 2024-8-30 Mimi Zohar <zohar@linux.ibm.com>
 	version 1.6.2:
 
